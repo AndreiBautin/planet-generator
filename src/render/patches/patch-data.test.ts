@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { createPlanet } from '@/generation/planet'
 import { parseSeed, type Seed } from '@/generation/seed'
 
-import { groundRadiusAt, patchIndex, samplePatch, vertexCount } from './patch-data'
+import { groundRadiusAt, patchIndex, quarterIndex, samplePatch, vertexCount } from './patch-data'
 import { SEA_RADIUS } from '../water'
 
 const parsed = parseSeed('2257afq')
@@ -109,5 +109,20 @@ describe('patchIndex', () => {
     expect(Math.max(...index)).toBeLessThan(vertexCount(segments))
     expect(index.length % 3).toBe(0)
     expect(patchIndex(segments)).toBe(index)
+  })
+})
+
+describe('quarterIndex', () => {
+  it('splits the patch into four quarters that are, between them, exactly the whole', () => {
+    const triangles = (index: Uint16Array): string[] => {
+      const out: string[] = []
+      for (let t = 0; t < index.length; t += 3) {
+        out.push([index[t], index[t + 1], index[t + 2]].join(','))
+      }
+      return out
+    }
+    const whole = triangles(patchIndex(8)).sort()
+    const parts = [0, 1, 2, 3].flatMap((q) => triangles(quarterIndex(8, q))).sort()
+    expect(parts).toEqual(whole)
   })
 })

@@ -381,7 +381,7 @@ export function featureMaterial(born: number, stone: GroundLayer): THREE.MeshSta
     shader.uniforms.featureNormalMatrix = DETAIL_NORMAL_MATRIX
     shader.uniforms.hazeSun = HAZE_SUN
     shader.vertexShader =
-      'uniform float featureRange;\nuniform float featureNow;\nuniform float featureBorn;\nattribute float stony;\nvarying float vFeatureFade;\nvarying vec3 vFeatureUp;\nvarying vec3 vFeaturePlanet;\nvarying vec3 vFeatureNormal;\nvarying float vFeatureStony;\nvarying float vFeatureHeight;\n' +
+      'uniform float featureRange;\nuniform float featureNow;\nuniform float featureBorn;\nattribute float stony;\nvarying float vFeatureFade;\nvarying float vFeatureSmall;\nvarying vec3 vFeatureUp;\nvarying vec3 vFeaturePlanet;\nvarying vec3 vFeatureNormal;\nvarying float vFeatureStony;\nvarying float vFeatureHeight;\n' +
       shader.vertexShader.replace(
         '#include <begin_vertex>',
         /* glsl */ `#include <begin_vertex>
@@ -399,6 +399,15 @@ export function featureMaterial(born: number, stone: GroundLayer): THREE.MeshSta
           float featureKeep = fract((featureSeed.x + featureSeed.y) * featureSeed.z);
           float featureShown = step(featureKeep, vFeatureFade);
           transformed *= grown * featureShown;
+          // How small it stands on screen: its height over its distance, as
+          // a share of the view's height. A tree a few pixels tall cannot
+          // hold shading detail still while it moves — its dark underside,
+          // light tufts and backlit rim flip pixels frame to frame, which is
+          // the speckle a forest broke into — so below a few percent of the
+          // screen it is drawn as one quiet tone.
+          float featureTall = length((instanceMatrix * vec4(0.0, 1.0, 0.0, 0.0)).xyz);
+          float featureOnScreen = featureTall / max(featureGap, 1e-6) * projectionMatrix[1][1] * 0.5;
+          vFeatureSmall = 1.0 - smoothstep(0.012, 0.035, featureOnScreen);
           vFeatureUp = normalize(normalMatrix * normalize(featureFoot));
           vFeaturePlanet = (instanceMatrix * vec4(transformed, 1.0)).xyz;
           vFeatureNormal = normalize(mat3(instanceMatrix) * objectNormal);
@@ -408,7 +417,7 @@ export function featureMaterial(born: number, stone: GroundLayer): THREE.MeshSta
       )
     shader.fragmentShader =
       NOISE +
-      'uniform sampler2D featureStone;\nuniform sampler2D featureStoneNormal;\nuniform float featureStoneMean;\nuniform mat3 featureNormalMatrix;\nvarying float vFeatureFade;\nvarying vec3 vFeatureUp;\nvarying vec3 vFeaturePlanet;\nvarying vec3 vFeatureNormal;\nvarying float vFeatureStony;\nvarying float vFeatureHeight;\n' +
+      'uniform sampler2D featureStone;\nuniform sampler2D featureStoneNormal;\nuniform float featureStoneMean;\nuniform mat3 featureNormalMatrix;\nvarying float vFeatureFade;\nvarying float vFeatureSmall;\nvarying vec3 vFeatureUp;\nvarying vec3 vFeaturePlanet;\nvarying vec3 vFeatureNormal;\nvarying float vFeatureStony;\nvarying float vFeatureHeight;\n' +
       shader.fragmentShader
         .replace(
           '#include <color_fragment>',
@@ -431,12 +440,12 @@ export function featureMaterial(born: number, stone: GroundLayer): THREE.MeshSta
         } else {
           // Shade from the ground up: the underside of a crown and the foot
           // of a trunk sit in their own shadow.
-          diffuseColor.rgb *= 0.55 + 0.45 * smoothstep(0.0, 0.85, vFeatureHeight);
+          diffuseColor.rgb *= mix(0.55 + 0.45 * smoothstep(0.0, 0.85, vFeatureHeight), 0.8, vFeatureSmall);
           // Clumps of needles and leaves: light and dark tufts across the
           // crown, faded out before they shrink under a pixel and shimmer.
           float tuftSpan = length(fwidth(vFeaturePlanet)) * 90000.0;
           float tufts = detailNoise(vFeaturePlanet * 90000.0) * 0.65 + detailNoise(vFeaturePlanet * 230000.0) * 0.35;
-          diffuseColor.rgb *= mix(1.0, 0.7 + 0.55 * tufts, 1.0 - smoothstep(0.3, 0.9, tuftSpan));
+          diffuseColor.rgb *= mix(1.0, 0.7 + 0.55 * tufts, (1.0 - smoothstep(0.3, 0.9, tuftSpan)) * (1.0 - vFeatureSmall));
         }`,
         )
         .replace(
@@ -452,6 +461,9 @@ export function featureMaterial(born: number, stone: GroundLayer): THREE.MeshSta
           { vec2 s = texture2D(featureStoneNormal, p.xz).xy * 2.0 - 1.0; d += vec3(s.x, 0.0, s.y) * w.y; }
           { vec2 s = texture2D(featureStoneNormal, p.xy).xy * 2.0 - 1.0; d += vec3(s.x, s.y, 0.0) * w.z; }
           normal = normalize(featureNormalMatrix * normalize(n0 + d * 0.6)) * faceDirection;
+        } else {
+          // A small tree's facets all lit alike, as if facing up.
+          normal = normalize(mix(normal, normalize(vFeatureUp), vFeatureSmall * 0.8));
         }`,
         )
         .replace(
@@ -468,7 +480,7 @@ export function featureMaterial(born: number, stone: GroundLayer): THREE.MeshSta
           // its edges rather than going flat and black.
           if (vFeatureStony < 0.5) {
             float backlit = pow(max(dot(-normalize(vViewPosition), directionalLights[0].direction), 0.0), 4.0);
-            reflectedLight.indirectDiffuse += diffuseColor.rgb * vec3(1.0, 1.05, 0.7) * backlit * featureDay * 0.9;
+            reflectedLight.indirectDiffuse += diffuseColor.rgb * vec3(1.0, 1.05, 0.7) * backlit * featureDay * 0.9 * (1.0 - vFeatureSmall);
           }
         }
         #endif`,

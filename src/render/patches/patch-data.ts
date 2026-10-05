@@ -383,3 +383,56 @@ export function patchIndex(segments: number): Uint16Array {
   indices.set(segments, index)
   return index
 }
+
+const quarters = new Map<string, Uint16Array>()
+
+/**
+ * The triangles of one quarter of a patch — the quarter its child `quarter`
+ * (0 to 3, in `childrenOf` order) covers — with the skirt along the patch's
+ * own edges there. A patch can then stand in for one missing child alone,
+ * rather than for all four: drawn whole, one child not yet built hid three
+ * that were, and the ground went coarse far beyond the gap.
+ */
+export function quarterIndex(segments: number, quarter: number): Uint16Array {
+  const name = `${String(segments)}:${String(quarter)}`
+  const cached = quarters.get(name)
+  if (cached !== undefined) return cached
+  const side = segments + 1
+  const half = segments / 2
+  const dx = quarter % 2
+  const dy = Math.floor(quarter / 2)
+  const i0 = dx * half
+  const j0 = dy * half
+  const out: number[] = []
+  for (let j = j0; j < j0 + half; j += 1) {
+    for (let i = i0; i < i0 + half; i += 1) {
+      const a = j * side + i
+      const b = a + 1
+      const c = a + side
+      const d = c + 1
+      out.push(a, b, c, b, d, c)
+    }
+  }
+  // The skirt along whichever of the patch's own edges this quarter touches:
+  // bottom, top, left, right, in `edgeOrder`'s order.
+  const touches = [dy === 0, dy === 1, dx === 0, dx === 1]
+  const from = [i0, i0, j0, j0]
+  let skirt = side * side
+  edgeOrder(segments).forEach((edge, e) => {
+    if (touches[e] === true) {
+      const start = from[e] ?? 0
+      for (let k = start; k < start + half; k += 1) {
+        const e0 = edge[k] ?? 0
+        const e1 = edge[k + 1] ?? 0
+        const s0 = skirt + k
+        const s1 = skirt + k + 1
+        out.push(e0, e1, s0, e1, s1, s0)
+        out.push(e0, s0, e1, e1, s0, s1)
+      }
+    }
+    skirt += side
+  })
+  const index = Uint16Array.from(out)
+  quarters.set(name, index)
+  return index
+}

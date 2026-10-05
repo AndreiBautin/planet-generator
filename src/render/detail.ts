@@ -185,6 +185,11 @@ export const TERRAIN_MORPH = { value: new THREE.Vector2(32, 0.01) }
 const MORPH_DECLARE = /* glsl */ `
 uniform vec2 terrainMorphLod;
 attribute vec4 coarsePosition;
+// How far a patch that has only just come in still looks like its parent,
+// 1 to 0 (terrain.ts): on a phone a finer patch often lands late, while its
+// coarse stand-in is on screen close up, and swapped in at once the ground
+// and the shallows changed in one frame. It starts as the parent and slides.
+attribute float arrival;
 attribute vec3 coarseNormal;
 float terrainMorphAt(vec3 local) {
   float level = coarsePosition.w;
@@ -193,7 +198,7 @@ float terrainMorphAt(vec3 local) {
   float parentSpan = 1.5707963 / exp2(level - 1.0);
   float splits = parentSpan / terrainMorphLod.x / terrainMorphLod.y;
   float away = distance((modelMatrix * vec4(local, 1.0)).xyz, cameraPosition);
-  return smoothstep(0.5 * splits, 0.85 * splits, away);
+  return max(smoothstep(0.5 * splits, 0.85 * splits, away), arrival);
 }
 `
 
@@ -432,18 +437,29 @@ export function withGroundDetail(
         float crownFilter = 1.0 - smoothstep(0.15, 0.45, pixelSpan * 1400.0);
         float crackFilter = 1.0 - smoothstep(0.15, 0.45, pixelSpan * 2400.0);
         float rippleFilter = 1.0 - smoothstep(0.1, 0.35, pixelSpan * 1900.0);
-        float canopy = v_pattern.x * patternFar * crownFilter;
+        // Where trees stand, the floor between them is dark at every
+        // distance. It used to share the crowns' filter and went bright past
+        // a short range, so a forest became dark trees on pale ground — the
+        // most contrast there is, and in motion it broke into speckle.
+        // The canopy weight runs about a third to a half across a wood (it
+        // is the grove field, soft-edged), so it is sharpened here: any real
+        // wood takes the full floor.
+        float woods = smoothstep(0.05, 0.3, v_pattern.x) * patternFar;
+        if (woods * stand > 0.02) {
+          float litterFilter = 1.0 - smoothstep(0.15, 0.45, pixelSpan * 1800.0);
+          float litter = mix(0.5, detailNoise(vDetailPosition * 1800.0), litterFilter) * 0.5 + 0.5;
+          float floorTone = 0.38 + litter * 0.22;
+          detailShade *= mix(1.0, floorTone, woods * stand);
+          diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(1.1, 0.84, 0.6), stand * woods * 0.6);
+        }
+        float canopy = woods * crownFilter * (1.0 - stand);
         if (canopy > 0.02) {
           vec3 crowns = detailCells(vDetailPosition * 1400.0);
           float crown = 1.0 - smoothstep(0.2, 0.75, crowns.x);
           float tone = mix(0.5, 1.12, crown) * (0.82 + crowns.z * 0.36);
           tone *= 0.85 + detailNoise(vDetailPosition * 220.0) * 0.3;
-          float litter = detailNoise(vDetailPosition * 1800.0) * 0.5 + 0.5;
-          float floorTone = 0.38 + litter * 0.22;
-          float shade = mix(tone, floorTone, stand);
-          detailShade *= mix(1.0, shade, canopy);
-          diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(1.1, 0.84, 0.6), stand * canopy * 0.6);
-          detailHeight += (crown - 0.5) * 0.8 * canopy * (1.0 - stand);
+          detailShade *= mix(1.0, tone, canopy);
+          detailHeight += (crown - 0.5) * 0.8 * canopy;
         }
 
         // Sand: ripples the wind has drawn, bent by a slower noise so they
@@ -518,6 +534,17 @@ export function withGroundDetail(
 export function withWaterDetail(material: THREE.Material): THREE.Material {
   material.onBeforeCompile = (shader) => {
     passThrough(shader, { attribute: 'depth', type: 'float' })
+    // The depth under the sea slides between levels as the ground does, so
+    // the shallows and the foam do not jump when a finer patch comes in.
+    shader.uniforms.terrainMorphLod = TERRAIN_MORPH
+    shader.vertexShader = (MORPH_DECLARE + 'attribute float coarseDepth;\n' + shader.vertexShader)
+      .replace(
+        'void main() {',
+        'void main() {\n  float seaDepth = mix(depth, coarseDepth, terrainMorphAt(position));',
+      )
+      .replace('v_depth = depth;', 'v_depth = seaDepth;')
+      .replace('smoothstep(0.0, 0.0004, depth)', 'smoothstep(0.0, 0.0004, seaDepth)')
+      .replace('smoothstep(0.0, 0.004, depth)', 'smoothstep(0.0, 0.004, seaDepth)')
     shader.vertexShader =
       'varying float v_jac;\nvarying float v_heave;\n' +
       shader.vertexShader
