@@ -1,3 +1,5 @@
+import { KINDS, pickKind, type Palette, type PlanetKind, type Rgb } from './kinds'
+import { planetName } from './name'
 import { createNoise3, fbm, ridged, type Noise3 } from './noise'
 import { createRng } from './rng'
 import type { Seed } from './seed'
@@ -5,14 +7,14 @@ import type { Seed } from './seed'
 /**
  * A planet: everything about it that a seed and the dials decide.
  *
- * `surfaceAt` answers "how high, and what colour, is the ground here" for
- * any direction from the centre. The renderer asks it once per vertex; a
- * test can ask it anywhere. Nothing in here knows a mesh exists.
+ * `surfaceAt` answers "how high, what is it, and what colour, is the ground
+ * here" for any direction from the centre. The renderer asks once per
+ * vertex; a test can ask anywhere. Nothing in here knows a mesh exists.
  */
 export interface Dials {
   /** How much of the surface is sea, 0 (dry) to 1 (drowned). */
   readonly water: number
-  /** Cold to hot, -1 to 1. */
+  /** Colder to hotter than the kind's own climate, -1 to 1. */
   readonly temperature: number
   /** Gentle to jagged, 0 to 1. */
   readonly roughness: number
@@ -22,23 +24,34 @@ export const DEFAULT_DIALS: Dials = { water: 0.55, temperature: 0, roughness: 0.
 
 export interface Planet {
   readonly seed: Seed
+  readonly name: string
+  readonly kind: PlanetKind
   readonly dials: Dials
   /** Height above which the ground is dry, in the units `surfaceAt` reports. */
   readonly seaLevel: number
   /** How far the tallest mountains rise above the sea, as a share of the radius. */
   readonly relief: number
+  /** Overall warmth, -1 to 1: the kind's climate moved by the dial. */
+  readonly climate: number
+  readonly molten: boolean
+  readonly palette: Palette
   readonly continents: Noise3
   readonly mountains: Noise3
   readonly detail: Noise3
-  /** A random rotation of the noise field, so two seeds never share a coastline. */
+  readonly moisture: Noise3
+  /** A random shift of the noise field, so two seeds never share a coastline. */
   readonly offset: readonly [number, number, number]
 }
+
+/** What the ground is, which decides its colour and later its material. */
+export type Biome = 'deep' | 'shallow' | 'sea-ice' | 'shore' | 'land' | 'highland' | 'snow'
 
 export interface Surface {
   /** Elevation relative to sea level: negative is sea floor, positive is land. */
   readonly height: number
+  readonly biome: Biome
   /** Linear RGB, each 0 to 1. */
-  readonly colour: readonly [number, number, number]
+  readonly colour: Rgb
 }
 
 /** Clamp a dial to its range; a dial from a link is never trusted. */
@@ -48,18 +61,27 @@ const clamp = (value: number, low: number, high: number): number =>
 export function createPlanet(seed: Seed, dials: Dials = DEFAULT_DIALS): Planet {
   const rng = createRng(seed)
   const shape = rng.fork('shape')
+  const kind = pickKind(rng.fork('kind'))
+  const traits = KINDS[kind]
   const water = clamp(dials.water, 0, 1)
+  const temperature = clamp(dials.temperature, -1, 1)
   const roughness = clamp(dials.roughness, 0, 1)
   return {
     seed,
-    dials: { water, temperature: clamp(dials.temperature, -1, 1), roughness },
+    name: planetName(rng.fork('name')),
+    kind,
+    dials: { water, temperature, roughness },
     // Raising the sea floods the land; the continents' noise sits around 0,
     // so a sea level from -0.25 to 0.25 spans mostly dry to mostly wet.
-    seaLevel: (water - 0.5) * 0.5,
+    seaLevel: (clamp(water + traits.waterShift, 0, 1) - 0.5) * 0.5,
     relief: 0.035 + roughness * 0.045,
+    climate: clamp(traits.climate + temperature * 0.8, -1.2, 1.2),
+    molten: traits.molten,
+    palette: traits.palette,
     continents: createNoise3(rng.fork('continents')),
     mountains: createNoise3(rng.fork('mountains')),
     detail: createNoise3(rng.fork('detail')),
+    moisture: createNoise3(rng.fork('moisture')),
     offset: [shape.range(-100, 100), shape.range(-100, 100), shape.range(-100, 100)],
   }
 }
@@ -83,31 +105,61 @@ export function elevationAt(planet: Planet, x: number, y: number, z: number): nu
   return continent + inland * ranges * (0.25 + roughness * 0.45) + detail
 }
 
-/** Height and colour at a point; the direction need not be unit length. */
+/** Height, biome and colour at a point; the direction need not be unit length. */
 export function surfaceAt(planet: Planet, x: number, y: number, z: number): Surface {
   const length = Math.hypot(x, y, z) || 1
-  const height = elevationAt(planet, x / length, y / length, z / length) - planet.seaLevel
-  return { height, colour: colourFor(height) }
+  const ux = x / length
+  const uy = y / length
+  const uz = z / length
+  const height = elevationAt(planet, ux, uy, uz) - planet.seaLevel
+  const [ox, oy, oz] = planet.offset
+  const wet = fbm(planet.moisture, (ux - oz) * 1.6, (uy + ox) * 1.6, (uz + oy) * 1.6, 4) * 0.5 + 0.5
+  // Colder towards the poles and with altitude; the y axis is the spin axis.
+  // The moisture field also roughens the line: latitude alone cut the ice
+  // edge as a ruler-straight band.
+  const warmth =
+    planet.climate - Math.abs(uy) * 1.15 - Math.max(0, height) * 0.9 + (wet - 0.5) * 0.45
+  const biome = biomeFor(planet, height, warmth)
+  return { height, biome, colour: colourFor(planet.palette, biome, height, wet) }
 }
 
-/**
- * The ground's colour by height alone. Biomes, latitude and planet types
- * replace this ramp; it exists so terrain can be judged by eye first.
- */
-function colourFor(height: number): readonly [number, number, number] {
-  if (height < -0.18) return [0.02, 0.05, 0.16]
-  if (height < 0) return mix([0.02, 0.05, 0.16], [0.06, 0.24, 0.42], (height + 0.18) / 0.18)
-  if (height < 0.02) return [0.76, 0.7, 0.5]
-  if (height < 0.3) return mix([0.18, 0.36, 0.12], [0.33, 0.42, 0.18], height / 0.3)
-  if (height < 0.6) return mix([0.33, 0.42, 0.18], [0.42, 0.36, 0.3], (height - 0.3) / 0.3)
-  return mix([0.42, 0.36, 0.3], [0.95, 0.96, 0.98], Math.min(1, (height - 0.6) / 0.15))
+function biomeFor(planet: Planet, height: number, warmth: number): Biome {
+  if (height < 0) {
+    if (!planet.molten && warmth < -0.45) return 'sea-ice'
+    return height < -0.14 ? 'deep' : 'shallow'
+  }
+  if (warmth < -0.3) return 'snow'
+  if (height < 0.025) return 'shore'
+  return height < 0.42 ? 'land' : 'highland'
 }
 
-function mix(
-  from: readonly [number, number, number],
-  to: readonly [number, number, number],
-  t: number,
-): readonly [number, number, number] {
+function colourFor(palette: Palette, biome: Biome, height: number, wet: number): Rgb {
+  switch (biome) {
+    case 'deep':
+      return mix(palette.deep, palette.shallow, Math.max(0, (height + 0.4) / 0.26) * 0.35)
+    case 'shallow':
+      return mix(palette.deep, palette.shallow, (height + 0.14) / 0.14)
+    case 'sea-ice':
+      // Pack ice cracked by darker leads, so an ice cap is not one flat white.
+      return mix(palette.ice, palette.shallow, 0.08 + (1 - wet) * 0.3)
+    case 'shore':
+      return palette.shore
+    case 'land':
+      return mix(
+        mix(palette.dry, palette.lush, wet),
+        palette.highland,
+        Math.max(0, height - 0.22) / 0.2,
+      )
+    case 'highland':
+      return mix(palette.highland, palette.peak, Math.min(1, (height - 0.42) / 0.3))
+    case 'snow':
+      // Wind-scoured ground shows through where it is dry and high, which is
+      // what gives a frozen world any shape at all.
+      return mix(palette.ice, palette.highland, (1 - wet) * 0.6 + Math.max(0, height - 0.3) * 0.6)
+  }
+}
+
+function mix(from: Rgb, to: Rgb, t: number): Rgb {
   const k = Math.min(1, Math.max(0, t))
   return [
     from[0] + (to[0] - from[0]) * k,

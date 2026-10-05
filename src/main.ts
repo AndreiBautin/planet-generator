@@ -1,5 +1,6 @@
 import { systemClock } from '@/app/clock'
 import { readConfig } from '@/app/config'
+import { KINDS } from '@/generation/kinds'
 import { createPlanet } from '@/generation/planet'
 import { newSeed, parseSeed } from '@/generation/seed'
 import { startScene } from '@/render/scene'
@@ -29,7 +30,8 @@ if (url.searchParams.get('seed') !== seed) {
 const planet = createPlanet(seed)
 
 const label = document.getElementById('seed')
-if (label !== null) label.textContent = `seed ${seed}`
+if (label !== null)
+  label.textContent = `${planet.name} · ${KINDS[planet.kind].label} · seed ${seed}`
 
 startScene(document.body, planet, systemClock)
 logger.info('planet.started', { seed })

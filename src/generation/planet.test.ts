@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest'
 
 import { createNoise3 } from './noise'
+import { PLANET_KINDS, type PlanetKind } from './kinds'
 import { createPlanet, surfaceAt } from './planet'
 import { createRng } from './rng'
-import { parseSeed, type Seed } from './seed'
+import { newSeed, parseSeed, type Seed } from './seed'
 
 const seed = (text: string): Seed => {
   const parsed = parseSeed(text)
@@ -21,8 +22,32 @@ function spherePoints(count: number): [number, number, number][] {
   })
 }
 
+/** The first seed in a run that makes the given kind, for tests about one kind. */
+function seedOfKind(kind: PlanetKind): Seed {
+  for (let at = 0; at < 500; at += 1) {
+    const candidate = newSeed((bytes) => {
+      bytes.set([at % 31, (at >> 5) % 31, 7, 11, 13, 17, 19])
+    })
+    if (createPlanet(candidate).kind === kind) return candidate
+  }
+  throw new Error(`no ${kind} seed in 500`)
+}
+
+const share = (
+  planet: ReturnType<typeof createPlanet>,
+  test: (biome: string, height: number) => boolean,
+) => {
+  const points = spherePoints(2000)
+  return (
+    points.filter(([x, y, z]) => {
+      const surface = surfaceAt(planet, x, y, z)
+      return test(surface.biome, surface.height)
+    }).length / points.length
+  )
+}
+
 const landShare = (water: number): number => {
-  const planet = createPlanet(seed('k3m9xqa'), { water, temperature: 0, roughness: 0.5 })
+  const planet = createPlanet(seedOfKind('temperate'), { water, temperature: 0, roughness: 0.5 })
   const points = spherePoints(2000)
   return points.filter(([x, y, z]) => surfaceAt(planet, x, y, z).height > 0).length / points.length
 }
@@ -81,5 +106,45 @@ describe('a planet', () => {
       roughness: -3,
     })
     expect(planet.dials).toEqual({ water: 1, temperature: -1, roughness: 0 })
+  })
+})
+
+describe('kinds, climates and names', () => {
+  it('makes every kind of world somewhere among a few hundred seeds', () => {
+    for (const kind of PLANET_KINDS) expect(() => seedOfKind(kind)).not.toThrow()
+  })
+
+  it('names a planet the same way every time, in letters a person can say', () => {
+    const planet = createPlanet(seed('k3m9xqa'))
+    expect(createPlanet(seed('k3m9xqa')).name).toBe(planet.name)
+    expect(planet.name).toMatch(/^[A-Z][a-z]{2,14}(-[0-9]{1,2})?$/)
+  })
+
+  /* The temperature dial must do what it says, the way the water dial must. */
+  it('melts the ice as the temperature rises', () => {
+    const base = seedOfKind('temperate')
+    const ice = (temperature: number) =>
+      share(
+        createPlanet(base, { water: 0.55, temperature, roughness: 0.5 }),
+        (biome) => biome === 'snow' || biome === 'sea-ice',
+      )
+    expect(ice(-1)).toBeGreaterThan(ice(0))
+    expect(ice(0)).toBeGreaterThan(ice(1))
+    expect(ice(-1)).toBeGreaterThan(0.4)
+  })
+
+  it('gives a temperate world polar ice and a warm middle', () => {
+    const planet = createPlanet(seedOfKind('temperate'))
+    const polar = surfaceAt(planet, 0, 1, 0).biome
+    expect(['snow', 'sea-ice']).toContain(polar)
+  })
+
+  it('never freezes a molten sea', () => {
+    const planet = createPlanet(seedOfKind('volcanic'), {
+      water: 0.55,
+      temperature: -1,
+      roughness: 0.5,
+    })
+    expect(share(planet, (biome) => biome === 'sea-ice')).toBe(0)
   })
 })
