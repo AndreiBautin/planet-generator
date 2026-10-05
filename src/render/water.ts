@@ -32,7 +32,7 @@ export function waterMaterial(planet: Planet): THREE.Material {
     : new THREE.MeshPhysicalMaterial({
         color: colour,
         transparent: true,
-        opacity: 0.5,
+        opacity: 0.68,
         roughness: 0.18,
         metalness: 0,
         clearcoat: 0.6,

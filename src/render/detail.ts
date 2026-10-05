@@ -44,6 +44,13 @@ export const DETAIL_CLOUD_SUN = { value: new THREE.Vector3(1, 0, 0) }
  * axes live, and Three wants it in view space.
  */
 export const DETAIL_NORMAL_MATRIX = { value: new THREE.Matrix3() }
+/**
+ * The sky's colour at the horizon, linear, set by the scene each frame from
+ * the air around the eye: what the sea reflects at a grazing angle. Without
+ * it the sea had nothing to mirror and went dark towards the horizon, a
+ * black band under a bright sky.
+ */
+export const DETAIL_SKY = { value: new THREE.Color(0, 0, 0) }
 
 export const NOISE = /* glsl */ `
   // A hash that holds up at large coordinates, unlike the sin() kind,
@@ -445,13 +452,15 @@ export function withWaterDetail(material: THREE.Material): THREE.Material {
           /* glsl */ `#include <begin_vertex>
         transformed += waveOffset;`,
         )
-    shader.fragmentShader = 'varying float v_jac;\nvarying float v_heave;\n' + shader.fragmentShader
+    shader.uniforms.seaSky = DETAIL_SKY
+    shader.fragmentShader =
+      'uniform vec3 seaSky;\nvarying float v_jac;\nvarying float v_heave;\n' + shader.fragmentShader
     shader.fragmentShader = shader.fragmentShader
       .replace(
         '#include <color_fragment>',
         /* glsl */ `#include <color_fragment>
         float seaDistance = length(vViewPosition);
-        float seaNear = 1.0 - smoothstep(0.02, 0.3, seaDistance);
+        float seaNear = 1.0 - smoothstep(0.015, 0.12, seaDistance);
         vec3 drift = vec3(detailTime * 0.9, detailTime * 0.6, -detailTime * 0.7) * 0.001;
         // Lighter over the shallows, where the floor shows through, and
         // lighter on a crest than in a trough.
@@ -471,6 +480,19 @@ export function withWaterDetail(material: THREE.Material): THREE.Material {
         diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.92, 0.95, 0.97), white);
         diffuseColor.a = mix(diffuseColor.a, 0.95, white);
         diffuseColor.rgb *= 1.0 - cloudShadow(vDetailPosition) * 0.5;`,
+      )
+      .replace(
+        '#include <emissivemap_fragment>',
+        /* glsl */ `#include <emissivemap_fragment>
+        {
+          // The sky in the water: Schlick's Fresnel on the rippled normal,
+          // so the sea mirrors the air at a grazing angle and shows its own
+          // colour looking down. Opaque where it mirrors, as water is.
+          float facing = clamp(dot(normalize(vViewPosition), normal), 0.0, 1.0);
+          float mirror = 0.02 + 0.98 * pow(1.0 - facing, 5.0);
+          totalEmissiveRadiance += seaSky * mirror * (1.0 - white);
+          diffuseColor.a = mix(diffuseColor.a, 1.0, mirror * 0.85);
+        }`,
       )
       .replace(
         '#include <normal_fragment_maps>',

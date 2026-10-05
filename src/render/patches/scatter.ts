@@ -359,13 +359,22 @@ function colourOf(
       // On a snowfield a rock wears snow on its top and sides.
       if (surface.biome === 'snow')
         return scaled(towards(stone, palette.ice, 0.55 + shade * 0.25), 0.95)
-      return scaled(towards(stone, soil, 0.35 + (1 - surface.moisture) * 0.25), light * 0.9)
+      // Darker than the ground it sits in: weathered stone holds less light
+      // than sand or turf, and a rock paler than its ground read as a
+      // white marker dropped on it.
+      return scaled(towards(stone, soil, 0.5 + (1 - surface.moisture) * 0.25), light * 0.68)
     }
-    case 'spire':
-      // Basalt on a volcanic world; ice everywhere else a spire stands.
-      return molten
-        ? scaled([0.035, 0.03, 0.03], 0.8 + shade * 0.6)
-        : scaled(blend(palette.ice, palette.shallow, 0.15 + pick * 0.25), 0.85 + shade * 0.2)
+    case 'spire': {
+      // Basalt on a volcanic world, ice on a snowfield, and stone the
+      // colour of its ground anywhere else — an ice pillar in a desert
+      // read as a white post.
+      if (molten) return scaled([0.035, 0.03, 0.03], 0.8 + shade * 0.6)
+      if (surface.biome === 'snow' || surface.biome === 'sea-ice')
+        return scaled(blend(palette.ice, palette.shallow, 0.15 + pick * 0.25), 0.85 + shade * 0.2)
+      const soil = fromPalette(surface.colour)
+      const stone = blend(palette.highland, palette.peak, 0.3 + pick * 0.4)
+      return scaled(towards(stone, soil, 0.55), light * 0.62)
+    }
     case 'cone':
       return scaled([0.09, 0.05, 0.04], 0.8 + shade * 0.4)
     case 'floe':

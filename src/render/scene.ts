@@ -1,7 +1,7 @@
 import * as THREE from 'three'
 
 import type { Clock } from '@/app/clock'
-import type { Planet } from '@/generation/planet'
+import { surfaceAt, type Planet } from '@/generation/planet'
 import { createRng } from '@/generation/rng'
 import { starField } from '@/generation/stars'
 
@@ -22,6 +22,7 @@ import {
   DETAIL_CLOUDS,
   DETAIL_NORMAL_MATRIX,
   DETAIL_RANGE,
+  DETAIL_SKY,
   DETAIL_TIME,
   withGroundDetail,
   withLavaDetail,
@@ -94,6 +95,7 @@ export interface SceneOptions {
 interface Shown {
   readonly seed: string
   readonly kind: string
+  readonly world: Planet
   readonly terrain: Terrain
   readonly clouds: THREE.Mesh
   readonly air: THREE.Mesh
@@ -111,6 +113,46 @@ interface Coming {
   readonly keepClouds: boolean
   readonly born: boolean
   readonly resolve: (shown: boolean) => void
+}
+
+/**
+ * The nearest dry, raised ground to a direction that stays land for a while
+ * along the heading, so a dive lands over land and the glide does not run
+ * straight back out to sea over the next coast.
+ */
+function landNear(planet: Planet, under: Vec3, heading: Vec3): Vec3 {
+  const dry = (d: Vec3): boolean => surfaceAt(planet, d[0], d[1], d[2]).height > 0.04
+  const solid = (d: Vec3): boolean =>
+    dry(d) &&
+    [0.04, 0.08, 0.12].every((k) =>
+      dry(unit([d[0] + heading[0] * k, d[1] + heading[1] * k, d[2] + heading[2] * k])),
+    )
+  if (solid(under)) return under
+  // A small island world may have no land that runs on ahead: then the
+  // nearest dry ground at all, rather than the open sea.
+  let nearestDry: Vec3 | undefined = dry(under) ? under : undefined
+  const polar = Math.abs(under[1]) > 0.99
+  const east = unit(polar ? [1, 0, 0] : [under[2], 0, -under[0]])
+  const north: Vec3 = [
+    under[1] * east[2] - under[2] * east[1],
+    under[2] * east[0] - under[0] * east[2],
+    under[0] * east[1] - under[1] * east[0],
+  ]
+  for (let ring = 1; ring <= 40; ring += 1) {
+    const radius = ring * 0.012
+    const steps = 6 + ring * 4
+    for (let step = 0; step < steps; step += 1) {
+      const turn = (step / steps) * Math.PI * 2
+      const candidate = unit([
+        under[0] + (east[0] * Math.cos(turn) + north[0] * Math.sin(turn)) * radius,
+        under[1] + (east[1] * Math.cos(turn) + north[1] * Math.sin(turn)) * radius,
+        under[2] + (east[2] * Math.cos(turn) + north[2] * Math.sin(turn)) * radius,
+      ])
+      if (solid(candidate)) return candidate
+      if (nearestDry === undefined && dry(candidate)) nearestDry = candidate
+    }
+  }
+  return nearestDry ?? under
 }
 
 /** Frames measured before the governor judges the device. */
@@ -329,6 +371,7 @@ export function startScene(
     shown = {
       seed: next.world.seed,
       kind: next.world.kind,
+      world: next.world,
       terrain: next.terrain,
       clouds,
       air,
@@ -458,6 +501,7 @@ export function startScene(
         const k = 1.25 * day
         airColour.setRGB(value.r * k, value.g * k, value.b * k, THREE.SRGBColorSpace)
         fog.color.copy(airColour)
+        DETAIL_SKY.value.copy(airColour)
       }
     }
     const stars: unknown = shown?.sky.material
@@ -542,10 +586,15 @@ export function startScene(
       // Fly pressed before the first frame would read a camera still at the
       // origin and dive from nowhere: place it first.
       if (camera.position.lengthSq() < 1e-9) place(view(), lastTurn)
-      const position = unit(inPlanetFrame(camera.position, lastTurn, 1))
+      const under = unit(inPlanetFrame(camera.position, lastTurn, 1))
       // The screen's up, taken into the planet's frame, is the way ahead.
       const up = new THREE.Vector3(0, 1, 0).applyQuaternion(camera.quaternion)
       const heading = inPlanetFrame(up, lastTurn, 1)
+      // Dive for land: the first thing a glide shows should be ground worth
+      // looking at, not a featureless sea. The nearest raised ground to the
+      // point under the eye, searched in rings out to about thirty degrees;
+      // the point itself if there is none that close.
+      const position = shown === undefined ? under : landNear(shown.world, under, unit(heading))
       return { position, heading }
     },
     orbitOver: (position) => {
