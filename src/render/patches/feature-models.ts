@@ -99,6 +99,32 @@ function merged(parts: readonly THREE.BufferGeometry[]): THREE.BufferGeometry {
   return geometry
 }
 
+/** An ice floe: a thin slab whose rim wanders in and out, its top a shallow dome. */
+function floe(salt: number): THREE.BufferGeometry {
+  const sides = 22
+  const geometry = new THREE.CylinderGeometry(0.5, 0.47, 0.045, sides, 1)
+  const positions = geometry.getAttribute('position')
+  const phase = [salt * 1.7 + 0.3, salt * 2.9 + 1.1, salt * 0.7 + 2.3]
+  for (let at = 0; at < positions.count; at += 1) {
+    const x = positions.getX(at)
+    const y = positions.getY(at)
+    const z = positions.getZ(at)
+    const angle = Math.atan2(z, x)
+    const rim =
+      1 +
+      Math.sin(angle * 2 + (phase[0] ?? 0)) * 0.16 +
+      Math.sin(angle * 3 + (phase[1] ?? 0)) * 0.1 +
+      Math.sin(angle * 7 + (phase[2] ?? 0)) * 0.05 +
+      jitter(Math.cos(angle), 0, Math.sin(angle), salt + 31) * 0.12
+    const out = Math.hypot(x, z)
+    const dome = y > 0 ? (1 - Math.min(1, out * 2)) * 0.02 : 0
+    positions.setXYZ(at, x * rim, y + dome + 0.01, z * rim * 0.8)
+  }
+  positions.needsUpdate = true
+  geometry.computeVertexNormals()
+  return geometry
+}
+
 /** A smooth lump: an icosahedron subdivided and roughened. */
 const lump = (radius: number, detail: number, rough: number, salt: number): THREE.BufferGeometry =>
   roughen(new THREE.IcosahedronGeometry(radius, detail), rough, salt)
@@ -279,23 +305,10 @@ function modelsOf(feature: Feature): THREE.BufferGeometry[] {
         ]),
       ]
     case 'floe':
-      // A flat plate of ice with a broken edge, riding just proud of the sea.
-      return [
-        merged([
-          painted(
-            new THREE.CylinderGeometry(0.5, 0.46, 0.05, 7).scale(1, 1, 0.75).translate(0, 0.01, 0),
-            WHITE,
-            { faceted: true },
-          ),
-          painted(
-            new THREE.CylinderGeometry(0.22, 0.2, 0.04, 5).translate(0.42, 0.005, 0.18),
-            WHITE,
-            {
-              faceted: true,
-            },
-          ),
-        ]),
-      ]
+      // A plate of ice with a broken, irregular edge, riding just proud of
+      // the sea. Three outlines, each wandering in and out round the rim:
+      // a regular polygon read as a field of hexagonal tiles.
+      return [0, 1, 2].map((salt) => painted(floe(salt), WHITE))
   }
 }
 

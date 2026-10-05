@@ -370,7 +370,7 @@ function colourOf(
       // read as a white post.
       if (molten) return scaled([0.035, 0.03, 0.03], 0.8 + shade * 0.6)
       if (surface.biome === 'snow' || surface.biome === 'sea-ice')
-        return scaled(blend(palette.ice, palette.shallow, 0.15 + pick * 0.25), 0.85 + shade * 0.2)
+        return scaled(blend(palette.ice, palette.shallow, 0.4 + pick * 0.3), 0.62 + shade * 0.15)
       const soil = fromPalette(surface.colour)
       const stone = blend(palette.highland, palette.peak, 0.3 + pick * 0.4)
       return scaled(towards(stone, soil, 0.55), light * 0.62)
