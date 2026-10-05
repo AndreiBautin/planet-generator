@@ -126,6 +126,12 @@
       button[aria-pressed='true'] {
         border-color: var(--accent);
       }
+      /* Four buttons at 375 pixels: a label that wraps doubles a button's
+         height, and "New planet" did once Fly became the wider "Land". */
+      .actions button {
+        padding: 0 12px;
+        white-space: nowrap;
+      }
       .primary {
         flex: 1;
         font-weight: 600;

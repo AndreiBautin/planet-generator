@@ -23,6 +23,17 @@ shared. Nothing else would notice. So:
   molten sea never freezes, every kind turns up, cover means cover.
 - **Parsing is total**: a malformed seed, link dial or config value degrades
   rather than throws, and a config typo cannot switch on the wrong mode.
+- **The patch quadtree** (`lod.test.ts`, `patch-data.test.ts`): the leaves
+  tile the sphere exactly once however close the camera is, the ground
+  under the camera splits finest and the far side stays whole, neighbours
+  agree on their shared edge (positions and normals), and the ground a
+  glide follows is the ground the patches draw.
+- **Fine relief leaves shared planets alone** (`relief.test.ts`): it lives
+  on its own fork and the pinned surface heights do not move.
+- **Flight** (`glide.test.ts`, `flight.test.ts`): a glide stays on the
+  sphere, rises before a ridge, never comes below its clearance over bumpy
+  ground, turns the way the finger goes; a dive turned back mid-way rises
+  from where it had got to.
 - **The feel, as pure functions** (`orbit.test.ts`, `birth.test.ts`,
   `quality.test.ts`): a flick coasts the same distance however the frames
   fall, a finger that paused does not fling the planet, the birth lands
@@ -49,6 +60,13 @@ honest about not reaching for either.
   a second), and with the server stopped a link still opens and generates
   its planet. The deploy's smoke test fetches the manifest and the worker
   from the live site.
+- **The terrain streaming, the sky and the fog on screen.** `terrain.ts`
+  and the scene are glue around Three.js and workers; they were checked by
+  flying in a real browser — patches refine with no cracks, the dive and
+  Land work, the desert sky is orange and the night sky dark. The agent's
+  preview pane draws only when it takes a screenshot, so how quickly the
+  ground fills in while flying was not seen at real frame rates, and **a
+  real phone was not tried**.
 - **The birth animation on screen.** The agent's preview pane does not run
   animation frames while hidden, so the animation was not watched; its
   curve is tested, and it is applied in one small function (`pose`).

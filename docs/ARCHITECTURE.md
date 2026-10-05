@@ -8,7 +8,7 @@ Two layers that matter, and two small helpers:
 src/
   generation/   pure: seed + dials → numbers (heights, colours, positions)
   render/       Three.js: turns those numbers into a scene and draws it
-  ui/           the controls (orbit, dials, buttons, share) — drives render
+  ui/           the controls (orbit, glide, dials, buttons, share) — drives render
   app/          the clock and the config: the world, behind small ports
   shared/       the logger
   main.ts       the composition root
@@ -26,7 +26,8 @@ testable in Node without a GPU.
 Rendering is not a domain and is not tested by unit tests; it is checked by
 eye (see [TESTING.md](TESTING.md)). What _is_ tested on that side is the
 logic kept apart from Three.js on purpose: the birth curve, the quality
-tiers and governor, and how a finger moves the camera.
+tiers and governor, the patch quadtree and patch sampling, and how a finger
+moves the camera in orbit and in flight.
 
 ## The rules are lint errors, not prose
 
@@ -46,42 +47,49 @@ reject it.
 
 ## One request, end to end
 
-Opening `https://andreibautin.github.io/planet-generator/?seed=k3m9xqa&w=70`:
+Opening `https://andreibautin.github.io/planet-generator/?seed=k3m9xqa&w=70`
+and pressing Fly:
 
 1. The **service worker** (`scripts/sw.js`, emitted as `sw.js` by the plugin
    in `vite.config.ts` with the build's exact file list) answers from cache
-   if it has one and the network is down; otherwise the page loads normally.
-2. **`src/main.ts`** reads the config (`app/config.ts` → `parseConfig`), and
-   the link with **`app/link.ts` → `parseLink`**: the seed through
-   `generation/seed.ts` → `parseSeed`, the dials as whole percentages. Any of
-   them missing or garbled reads as absent or default; a fresh seed comes
-   from `crypto.getRandomValues`.
-3. **`render/quality.ts` → `pickQuality`** chooses the icosphere detail,
-   cloud texture size and pixel ratio from the screen and core count.
-4. `show` calls **`generation/planet.ts` → `createPlanet`** — cheap: it only
-   picks the kind (`kinds.ts`), name (`name.ts`) and noise functions, each
-   from its own named `fork` of the seed's `rng`. The name goes on screen at
-   once (`ui/hud.ts`).
-5. **`render/builder.ts`** posts the seed and dials to
-   **`render/build.worker.ts`**, which makes the same planet and runs the slow
-   part: **`render/surface-data.ts` → `sampleSurface`** asks `surfaceAt` for
-   height, biome and colour at every vertex, and `bakeClouds` asks
-   `generation/clouds.ts` → `cloudDensityAt` at every texel. The arrays come
-   back transferred, not copied. A request superseded by a newer one is
-   dropped.
-6. **`render/scene.ts` → `show`** turns the arrays into meshes
-   (`planet-mesh.ts`, `water.ts`, `clouds.ts`, `atmosphere.ts`, the starfield),
-   releases the previous planet's GPU memory, and starts the birth animation
-   (`birth.ts`). The frame loop reads the camera from **`ui/controls.ts`**
-   (pointer events → the pure **`ui/orbit.ts`**) and the time from
-   **`app/clock.ts`**, and the governor lowers the pixel ratio if typical
-   frames run slow.
+   if the network is down; otherwise the page loads normally.
+2. **`src/main.ts`** reads the config (`app/config.ts`) and the link
+   (**`app/link.ts` → `parseLink`**): the seed through `generation/seed.ts`,
+   the dials as whole percentages, anything garbled read as its default.
+3. **`render/quality.ts` → `pickQuality`** chooses the patch size, how fine
+   the ground may split, the cloud texture size and the pixel ratio from the
+   screen and core count. **`render/builder.ts`** starts a pool of workers
+   (`render/build.worker.ts`, which runs `render/work.ts`).
+4. `show` calls **`generation/planet.ts` → `createPlanet`** — cheap: kind,
+   name and noise functions, each from its own named `fork` of the seed. The
+   name goes on screen at once (`ui/hud.ts`).
+5. **`render/scene.ts` → `show`** starts a **`render/patches/terrain.ts`**
+   for the planet behind the one on screen and asks a worker for its clouds.
+   Each frame the terrain asks **`patches/lod.ts` → `selectLeaves`** which
+   cube-sphere patches (`patches/cube.ts`) the camera needs, requests the
+   missing ones nearest first, and draws the finest one it has for each.
+   A worker answers with **`patches/patch-data.ts` → `samplePatch`**:
+   `surfaceAt` for height, biome and colour, `generation/relief.ts` for the
+   close-up crags, rock on steep ground, and a skirt to hide cracks — as
+   transferred typed arrays.
+6. When the six whole faces and the clouds are in, the scene swaps the new
+   planet in, releases the old one's GPU memory and starts the birth
+   animation (`render/birth.ts`). The sky is `render/atmosphere.ts`, haze
+   is the scene's fog, both scaled to the camera's height.
+7. **Fly**: `ui/rig.ts` asks the scene where to start (`diveFrom` — the
+   ground under the middle of the view) and starts a glide
+   (**`ui/glide.ts`**), which travels a great circle and keeps above
+   `groundRadiusAt`, the same arithmetic the patches are drawn with.
+   `ui/flight.ts` blends the orbit camera into the glide camera over the
+   dive; gestures (`ui/controls.ts`) steer whichever the finger is on.
 
 ## Where new code goes
 
 - A new rule of the world (terrain, biomes, cloud cover): `generation/`,
   pure, with a test beside it, drawing randomness from a named `fork`.
-- A new visual (a shader, a mesh): `render/`.
+- A new visual (a shader, a mesh): `render/`. Anything slow per vertex
+  goes in `render/patches/patch-data.ts` or `render/work.ts`, where the
+  workers run it.
 - A new control: `ui/`, which calls into `render/`.
 - A new piece of configuration: `app/config.ts`, with a default, a test and
   a line in `.env.example`.

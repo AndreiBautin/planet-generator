@@ -45,7 +45,24 @@ checks nothing. The pre-push hook runs `pnpm verify`; CI runs the same.
   Three does not collect geometry, materials or textures; New planet pressed
   fifty times would otherwise hold fifty planets.
 
+- **Fine relief is added by the renderer, never folded into
+  `surfaceAt`.** Every shared link is pinned by `surfaceAt`'s numbers;
+  `generation/relief.ts` has its own fork and `relief.test.ts` checks the
+  pinned height has not moved.
+- **What a glide flies over is what the patches draw.** Both go through
+  `groundRadiusAt`/`drawnHeight` in `patch-data.ts`; change one and the
+  glide flies through hills or above them.
+- **The sky shader only fills the sky.** Haze over ground is the scene's
+  fog. Laying the shader over everything with the ground taken as a sphere
+  washed low land out white, because real hills stand above that sphere.
+
 ## Traps
+
+- **Every patch geometry wraps the shared index array in its own
+  attribute.** Disposing a geometry frees its index's GPU buffer, so one
+  shared attribute would be freed from under every other patch.
+- **The preview pane draws only while taking a screenshot**, so streaming
+  and animation look slower there than they are. Judge pacing on a device.
 
 - **`BASE_PATH` is set by the deploy** (`/planet-generator/`) and is `/`
   everywhere else. In Git Bash, `BASE_PATH=/x/ pnpm build` is rewritten to a
