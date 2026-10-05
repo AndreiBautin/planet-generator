@@ -340,7 +340,7 @@ export function featureMaterial(born: number, stone: GroundLayer): THREE.MeshSta
     shader.uniforms.featureNormalMatrix = DETAIL_NORMAL_MATRIX
     shader.uniforms.hazeSun = HAZE_SUN
     shader.vertexShader =
-      'uniform float featureRange;\nuniform float featureNow;\nuniform float featureBorn;\nattribute float stony;\nvarying vec3 vFeatureUp;\nvarying vec3 vFeaturePlanet;\nvarying vec3 vFeatureNormal;\nvarying float vFeatureStony;\nvarying float vFeatureHeight;\n' +
+      'uniform float featureRange;\nuniform float featureNow;\nuniform float featureBorn;\nattribute float stony;\nvarying float vFeatureFade;\nvarying vec3 vFeatureUp;\nvarying vec3 vFeaturePlanet;\nvarying vec3 vFeatureNormal;\nvarying float vFeatureStony;\nvarying float vFeatureHeight;\n' +
       shader.vertexShader.replace(
         '#include <begin_vertex>',
         /* glsl */ `#include <begin_vertex>
@@ -348,7 +348,11 @@ export function featureMaterial(born: number, stone: GroundLayer): THREE.MeshSta
           vec3 featureFoot = (instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0)).xyz;
           float featureGap = length((modelViewMatrix * vec4(featureFoot, 1.0)).xyz);
           float grown = smoothstep(0.0, ${GROW_SECONDS.toFixed(2)}, featureNow - featureBorn);
-          transformed *= grown * (1.0 - smoothstep(featureRange * 0.7, featureRange, featureGap));
+          // Out at the edge of the range a feature dissolves into the haze
+          // (a dither in the fragment shader) rather than shrinking: shrunk,
+          // the last ring of trees read as dark specks on the ground.
+          vFeatureFade = 1.0 - smoothstep(featureRange * 0.6, featureRange, featureGap);
+          transformed *= grown * (0.75 + 0.25 * vFeatureFade);
           vFeatureUp = normalize(normalMatrix * normalize(featureFoot));
           vFeaturePlanet = (instanceMatrix * vec4(transformed, 1.0)).xyz;
           vFeatureNormal = normalize(mat3(instanceMatrix) * objectNormal);
@@ -357,11 +361,16 @@ export function featureMaterial(born: number, stone: GroundLayer): THREE.MeshSta
         }`,
       )
     shader.fragmentShader =
-      'uniform sampler2D featureStone;\nuniform sampler2D featureStoneNormal;\nuniform float featureStoneMean;\nuniform mat3 featureNormalMatrix;\nvarying vec3 vFeatureUp;\nvarying vec3 vFeaturePlanet;\nvarying vec3 vFeatureNormal;\nvarying float vFeatureStony;\nvarying float vFeatureHeight;\n' +
+      'uniform sampler2D featureStone;\nuniform sampler2D featureStoneNormal;\nuniform float featureStoneMean;\nuniform mat3 featureNormalMatrix;\nvarying float vFeatureFade;\nvarying vec3 vFeatureUp;\nvarying vec3 vFeaturePlanet;\nvarying vec3 vFeatureNormal;\nvarying float vFeatureStony;\nvarying float vFeatureHeight;\n' +
       shader.fragmentShader
         .replace(
           '#include <color_fragment>',
           /* glsl */ `#include <color_fragment>
+        {
+          vec3 dq = fract(vec3(gl_FragCoord.xyx) * 0.1031);
+          dq += dot(dq, dq.yzx + 33.33);
+          if (fract((dq.x + dq.y) * dq.z) > vFeatureFade) discard;
+        }
         if (vFeatureStony > 0.5) {
           // Stone: the ground's photograph, triplanar in the planet's frame,
           // levelled to its own brightness so the instance colour says what

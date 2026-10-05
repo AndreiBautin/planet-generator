@@ -222,7 +222,11 @@ export function patternAt(planet: Planet, surface: Surface, steep: number): Grou
     return { canopy: 0, sand: low, snow: 0, stone: 1 }
   }
   const growth = featuresAt(planet, surface, steep)
-  const snow = surface.biome === 'snow' ? 1 - cliff * 0.6 : 0
+  // Snow does not hold to a cliff or a wind-scoured ridge: rock shows
+  // through wherever the ground steepens, which is what gives a snowfield
+  // its drawn lines. Read with a lower threshold than bare ground's cliff.
+  const scoured = smooth(0.03, 0.12, steep)
+  const snow = surface.biome === 'snow' ? 1 - scoured * 0.9 : 0
   const beach = surface.biome === 'shore' ? 1 : 0
   const dry =
     planet.kind === 'arid'
@@ -233,6 +237,9 @@ export function patternAt(planet: Planet, surface: Surface, steep: number): Grou
     sand: Math.min(1, Math.max(beach, dry * (1 - high) * (1 - snow) * (1 - cliff))),
     snow,
     // Snow covers the high ground's stone; only a cliff breaks through it.
-    stone: Math.min(1, cliff + high * 0.6 * (1 - snow)),
+    stone: Math.min(
+      1,
+      cliff + high * 0.6 * (1 - snow) + (surface.biome === 'snow' ? scoured * 0.8 : 0),
+    ),
   }
 }

@@ -194,7 +194,13 @@ export function samplePatch(planet: Planet, key: PatchKey, segments: number): Pa
         }
       }
       if (height > 0.03) {
-        const rock = Math.min(1, Math.max(0, (steep - ROCK_FROM) / (ROCK_FULL - ROCK_FROM)))
+        // Snow lets go of rock at a gentler slope than turf does: a wind-
+        // scoured ridge on a snowfield shows its stone, which is the only
+        // thing that draws the shape of a white landscape.
+        const snowy = here?.biome === 'snow'
+        const from = snowy ? 0.03 : ROCK_FROM
+        const full = snowy ? 0.12 : ROCK_FULL
+        const rock = Math.min(1, Math.max(0, (steep - from) / (full - from))) * (snowy ? 0.85 : 1)
         if (rock > 0) {
           colours[out] = mix(colours[out] ?? 0, stone.r, rock)
           colours[out + 1] = mix(colours[out + 1] ?? 0, stone.g, rock)
