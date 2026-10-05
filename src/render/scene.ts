@@ -156,6 +156,9 @@ function landNear(planet: Planet, under: Vec3, heading: Vec3): Vec3 {
   return nearestDry ?? under
 }
 
+/** How far out the stars are laid, before they are scaled to the far plane. */
+const STAR_RADIUS = 60
+
 /** Frames measured before the governor judges the device. */
 const FRAME_WINDOW = 90
 
@@ -496,10 +499,27 @@ export function startScene(
         box.updateProjectionMatrix()
       }
     }
+    // The far plane is the farthest thing that can be seen — the air shell's
+    // far side, at most the eye's distance plus the shell's radius — not a
+    // fixed hundred. Low down the near plane is a few thousandths, and a
+    // hundred-to-one-thousandth span left a phone's depth buffer too coarse
+    // to tell a tree from the ground under it or the sea from the shore, so
+    // they fought and flickered. Now the span is a few hundred to one.
     const near = Math.min(0.1, Math.max(0.0004, above * 0.2))
-    if (Math.abs(near - camera.near) > camera.near * 0.05) {
+    const far = above + 1 + AIR_RADIUS + 0.1
+    if (
+      Math.abs(near - camera.near) > camera.near * 0.05 ||
+      Math.abs(far - camera.far) > camera.far * 0.05
+    ) {
       camera.near = near
+      camera.far = far
       camera.updateProjectionMatrix()
+    }
+    // The stars ride with the eye just inside the far plane, so they are
+    // never clipped and keep their place in the sky.
+    if (shown !== undefined) {
+      shown.sky.position.copy(camera.position)
+      shown.sky.scale.setScalar((camera.far * 0.9) / STAR_RADIUS)
     }
     airAround(above)
   }
@@ -721,7 +741,7 @@ function fieldOfView(aspect: number): number {
 }
 
 function buildSky(world: Planet, pixelRatio: number): THREE.Points {
-  const stars = starField(createRng(world.seed).fork('stars'), 2500, 60)
+  const stars = starField(createRng(world.seed).fork('stars'), 2500, STAR_RADIUS)
   const geometry = new THREE.BufferGeometry()
   geometry.setAttribute('position', new THREE.BufferAttribute(stars.positions, 3))
   geometry.setAttribute('color', new THREE.BufferAttribute(stars.colours, 3))
