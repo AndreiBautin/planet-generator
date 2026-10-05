@@ -3,7 +3,7 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 
 import { FEATURES, type Feature } from '@/generation/features'
 
-import { DETAIL_NORMAL_MATRIX, DETAIL_RANGE, DETAIL_TIME } from '../detail'
+import { DETAIL_NORMAL_MATRIX, DETAIL_RANGE, DETAIL_TIME, NOISE } from '../detail'
 import { HAZE_SUN } from '../haze'
 import type { GroundLayer } from '../textures'
 import { STRIDE, type Scatter } from './scatter'
@@ -99,6 +99,49 @@ function merged(parts: readonly THREE.BufferGeometry[]): THREE.BufferGeometry {
   return geometry
 }
 
+/**
+ * The crown of a conifer as stacked tiers of branches: each tier a cone
+ * whose rim is cut into points (branch tips) and pulled down at the ends,
+ * every tier turned so the points do not line up. A smooth cone read as a
+ * traffic cone; the broken silhouette is what makes it read as a tree.
+ */
+function tiers(
+  count: number,
+  base: number,
+  start: number,
+  spacing: number,
+  salt: number,
+): THREE.BufferGeometry[] {
+  const out: THREE.BufferGeometry[] = []
+  for (let tier = 0; tier < count; tier += 1) {
+    const t = tier / Math.max(1, count - 1)
+    const radius = base * (1 - t * 0.78)
+    const height = spacing * 2.1 * (1 - t * 0.35)
+    const sides = 14
+    const cone = new THREE.ConeGeometry(radius, height, sides, 2, true)
+    const positions = cone.getAttribute('position')
+    const twist = jitter(tier, salt, 0, 3) * 6
+    for (let at = 0; at < positions.count; at += 1) {
+      const x = positions.getX(at)
+      const y = positions.getY(at)
+      const z = positions.getZ(at)
+      const out = Math.hypot(x, z)
+      if (out < 1e-6) continue
+      const angle = Math.atan2(z, x) + twist
+      const rim = out / radius
+      const tip =
+        0.72 + 0.4 * Math.max(0, Math.cos(angle * 7)) + jitter(x, y, z, salt + tier) * 0.25
+      const scale = 1 + (tip - 1) * rim
+      // Branch ends droop below the tier's rim.
+      const droop = rim * rim * radius * 0.25 * tip
+      positions.setXYZ(at, x * scale, y - droop, z * scale)
+    }
+    positions.needsUpdate = true
+    out.push(painted(cone.translate(0, start + tier * spacing + height / 2, 0), WHITE))
+  }
+  return out
+}
+
 /** An ice floe: a thin slab whose rim wanders in and out, its top a shallow dome. */
 function floe(salt: number): THREE.BufferGeometry {
   const sides = 22
@@ -141,37 +184,20 @@ function modelsOf(feature: Feature): THREE.BufferGeometry[] {
   switch (feature) {
     case 'conifer':
       return [
-        // A spruce: three tiers, narrow.
+        // A spruce: five tiers of drooping branches, narrowing upwards.
         merged([
-          painted(new THREE.CylinderGeometry(0.05, 0.07, 0.25, 7).translate(0, 0.125, 0), TRUNK),
-          painted(
-            roughen(new THREE.ConeGeometry(0.34, 0.55, 11, 3), 0.1, 1).translate(0, 0.42, 0),
-            WHITE,
-          ),
-          painted(
-            roughen(new THREE.ConeGeometry(0.25, 0.45, 11, 3), 0.1, 2).translate(0, 0.72, 0),
-            WHITE,
-          ),
+          painted(new THREE.CylinderGeometry(0.04, 0.07, 0.3, 7).translate(0, 0.15, 0), TRUNK),
+          ...tiers(5, 0.36, 0.16, 0.18, 1),
         ]),
-        // A fir: one tall slim cone.
+        // A fir: many tight tiers on a tall slim spire.
         merged([
-          painted(new THREE.CylinderGeometry(0.04, 0.06, 0.2, 7).translate(0, 0.1, 0), TRUNK),
-          painted(
-            roughen(new THREE.ConeGeometry(0.24, 0.9, 11, 5), 0.09, 3).translate(0, 0.55, 0),
-            WHITE,
-          ),
+          painted(new THREE.CylinderGeometry(0.035, 0.06, 0.22, 7).translate(0, 0.11, 0), TRUNK),
+          ...tiers(7, 0.26, 0.12, 0.14, 3),
         ]),
-        // A pine: bare trunk and a squat crown.
+        // A pine: bare trunk, a few ragged tiers high up.
         merged([
-          painted(new THREE.CylinderGeometry(0.05, 0.07, 0.5, 7).translate(0, 0.25, 0), TRUNK),
-          painted(
-            roughen(new THREE.ConeGeometry(0.36, 0.45, 11, 3), 0.1, 4).translate(0, 0.65, 0),
-            WHITE,
-          ),
-          painted(
-            roughen(new THREE.ConeGeometry(0.22, 0.3, 9, 2), 0.1, 5).translate(0.05, 0.85, 0.04),
-            WHITE,
-          ),
+          painted(new THREE.CylinderGeometry(0.045, 0.07, 0.55, 7).translate(0, 0.275, 0), TRUNK),
+          ...tiers(3, 0.34, 0.5, 0.15, 4),
         ]),
       ]
     case 'broadleaf':
@@ -342,6 +368,8 @@ export function featureMaterial(born: number, stone: GroundLayer): THREE.MeshSta
     vertexColors: true,
     roughness: 0.88,
     metalness: 0,
+    // The conifers' tiers are open cones, seen from beneath as often as above.
+    side: THREE.DoubleSide,
   })
   material.onBeforeCompile = (shader) => {
     shader.uniforms.featureRange = DETAIL_RANGE
@@ -379,6 +407,7 @@ export function featureMaterial(born: number, stone: GroundLayer): THREE.MeshSta
         }`,
       )
     shader.fragmentShader =
+      NOISE +
       'uniform sampler2D featureStone;\nuniform sampler2D featureStoneNormal;\nuniform float featureStoneMean;\nuniform mat3 featureNormalMatrix;\nvarying float vFeatureFade;\nvarying vec3 vFeatureUp;\nvarying vec3 vFeaturePlanet;\nvarying vec3 vFeatureNormal;\nvarying float vFeatureStony;\nvarying float vFeatureHeight;\n' +
       shader.fragmentShader
         .replace(
@@ -403,6 +432,11 @@ export function featureMaterial(born: number, stone: GroundLayer): THREE.MeshSta
           // Shade from the ground up: the underside of a crown and the foot
           // of a trunk sit in their own shadow.
           diffuseColor.rgb *= 0.55 + 0.45 * smoothstep(0.0, 0.85, vFeatureHeight);
+          // Clumps of needles and leaves: light and dark tufts across the
+          // crown, faded out before they shrink under a pixel and shimmer.
+          float tuftSpan = length(fwidth(vFeaturePlanet)) * 90000.0;
+          float tufts = detailNoise(vFeaturePlanet * 90000.0) * 0.65 + detailNoise(vFeaturePlanet * 230000.0) * 0.35;
+          diffuseColor.rgb *= mix(1.0, 0.7 + 0.55 * tufts, 1.0 - smoothstep(0.3, 0.9, tuftSpan));
         }`,
         )
         .replace(
@@ -430,6 +464,12 @@ export function featureMaterial(born: number, stone: GroundLayer): THREE.MeshSta
           float featureDay = smoothstep(-0.06, 0.1, dot(normalize(vFeatureUp), directionalLights[0].direction));
           reflectedLight.directDiffuse *= featureDay;
           reflectedLight.directSpecular *= featureDay;
+          // Sun through the leaves: a crown seen against the light glows at
+          // its edges rather than going flat and black.
+          if (vFeatureStony < 0.5) {
+            float backlit = pow(max(dot(-normalize(vViewPosition), directionalLights[0].direction), 0.0), 4.0);
+            reflectedLight.indirectDiffuse += diffuseColor.rgb * vec3(1.0, 1.05, 0.7) * backlit * featureDay * 0.9;
+          }
         }
         #endif`,
         )
