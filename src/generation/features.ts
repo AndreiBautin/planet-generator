@@ -137,7 +137,7 @@ export function featuresAt(planet: Planet, surface: Surface, steep: number): Gro
     // Hardy pines just below the snow line, seracs standing on the steep
     // ground, and stone poking through the drifts.
     const pines = smooth(-0.55, -0.32, surface.warmth) * 0.5 * living
-    return { ...NOTHING, conifer: pines, boulder, spire: cliff * 0.18 + 0.012 }
+    return { ...NOTHING, conifer: pines, boulder: boulder * 0.6, spire: cliff * 0.2 }
   }
   if (surface.biome === 'shore') return { ...NOTHING, boulder: 0.01 }
 

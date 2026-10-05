@@ -99,6 +99,30 @@ checks nothing. The pre-push hook runs `pnpm verify`; CI runs the same.
   the shore and faded before coarse patches) with foam on the crests; a
   molten world's lowland runs with glowing channels and pools, and its
   sea is plates and seams.
+- **The ground wears baked textures, not photographs.** `ground-atlas.ts`
+  bakes six tileable squares — turf, forest litter, sand, stone, snow,
+  basalt — from periodic noise (tested: every edge continues into its
+  opposite, colours stay near mid-grey so the biome colour still shows
+  through), `textures.ts` uploads them once for the page, and
+  `withGroundDetail` lays them on triplanar at two scales blended by the
+  pattern weights, their heights bumping the surface. Asked for as
+  _"photorealistic textures"_; baked because a photograph of Earth's sand
+  would be a lie about which planet this is, and six of them are megabytes
+  a phone would precache.
+- **A glide pitches.** Asked for as _"fly up down diagonal not just side
+  to side"_. `Glide.pitch` (glide.ts): a drag up noses up, down noses
+  down, a diagonal does both; the altitude changes as it flies, as a share
+  of the speed, and the nose eases level on its own. The eye looks where
+  the nose points. The arrow keys and WASD nudge it. Pinch and wheel still
+  set the height directly.
+- **A tile arriving late grows up out of the ground.** Reported as _"stuff
+  is rendering late which makes it feel fake"_. Features are fetched to
+  `PREFETCH` times the range they are shown at, the tiles **ahead** of the
+  camera first (`aheadOf` in lod.ts, which the ground's patches use too),
+  and each tile has a material of its own carrying the moment it arrived,
+  so its features scale up over `GROW_SECONDS` rather than appearing. One
+  material per tile is cheap: the cache key is shared, so it is a few
+  uniforms, not a compile.
 - **Trees are green first and the palette second.** An ochre world's
   "lush" painted orange forests that read as dead ones; the forest also
   stops at real heat however wet the ground is. A pine is snow-laden only

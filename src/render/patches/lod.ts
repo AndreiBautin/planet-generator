@@ -118,6 +118,22 @@ export function selectLeaves(
   return leaves
 }
 
+/**
+ * A distance for ordering requests: how far a point is from the camera,
+ * stretched for points off to the side or behind. Ground ahead is what the
+ * flight is about to reach, so it is asked for first; with no view known it
+ * is the plain distance.
+ */
+export function aheadOf(point: Vec3, camera: Vec3, view?: ViewCone): number {
+  const dx = point[0] - camera[0]
+  const dy = point[1] - camera[1]
+  const dz = point[2] - camera[2]
+  const gap = Math.hypot(dx, dy, dz)
+  if (view === undefined || gap < 1e-9) return gap
+  const cos = (dx * view.forward[0] + dy * view.forward[1] + dz * view.forward[2]) / gap
+  return gap * (1.5 - 0.5 * cos)
+}
+
 /** The patch at a coarser level that contains this one. */
 export function ancestorAt(key: PatchKey, level: number): PatchKey {
   const shift = key.level - level

@@ -76,8 +76,9 @@ describe('featuresAt', () => {
   })
 
   it('stands ice spires and boulders on snow, with only a few pines', () => {
-    const growth = featuresAt(planet, ground({ biome: 'snow', warmth: -0.5 }), 0.15)
+    const growth = featuresAt(planet, ground({ biome: 'snow', warmth: -0.5 }), 0.25)
     expect(growth.spire).toBeGreaterThan(0)
+    expect(featuresAt(planet, ground({ biome: 'snow', warmth: -0.5 }), 0).spire).toBe(0)
     expect(growth.boulder).toBeGreaterThan(0)
     expect(growth.broadleaf).toBe(0)
   })

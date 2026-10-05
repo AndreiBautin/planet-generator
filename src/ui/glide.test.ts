@@ -3,12 +3,15 @@ import { describe, expect, it } from 'vitest'
 import {
   advance,
   MAX_ALTITUDE,
+  MAX_PITCH_DOWN,
+  MAX_PITCH_UP,
   MIN_ALTITUDE,
   pinchGlide,
   poseOf,
   startGlide,
   steer,
   type Ground,
+  type Glide,
   type Vec3,
 } from './glide'
 
@@ -70,12 +73,40 @@ describe('gliding', () => {
     expect(turned.heading[1]).toBeLessThan(0)
   })
 
-  it('climbs and dives within its limits', () => {
-    // Screen y grows downwards: a finger moving up climbs.
-    expect(steer(start, 0, -100_000, 800).altitude).toBe(MAX_ALTITUDE)
-    expect(steer(start, 0, 100_000, 800).altitude).toBe(MIN_ALTITUDE)
+  it('pitches up with a finger moving up, and climbs as it flies', () => {
+    // Screen y grows downwards: a finger moving up noses up.
+    const up = steer(start, 0, -200, 800)
+    expect(up.pitch).toBeGreaterThan(0)
+    expect(steer(start, 0, -100_000, 800).pitch).toBe(MAX_PITCH_UP)
+    expect(steer(start, 0, 100_000, 800).pitch).toBe(-MAX_PITCH_DOWN)
+    let flown = up
+    for (let at = 0; at < 60; at += 1) flown = advance(flown, 1 / 60, flat)
+    expect(flown.altitude).toBeGreaterThan(start.altitude)
+    let dived = steer(start, 0, 200, 800)
+    for (let at = 0; at < 60; at += 1) dived = advance(dived, 1 / 60, flat)
+    expect(dived.altitude).toBeLessThan(start.altitude)
+  })
+
+  it('levels itself again once left alone, and keeps within its ceiling and floor', () => {
+    let flown = steer(start, 0, -100_000, 800)
+    for (let at = 0; at < 60 * 20; at += 1) flown = advance(flown, 1 / 60, flat)
+    expect(Math.abs(flown.pitch)).toBeLessThan(0.01)
+    expect(flown.altitude).toBeLessThanOrEqual(MAX_ALTITUDE)
+    let dived = steer(start, 0, 100_000, 800)
+    for (let at = 0; at < 60 * 20; at += 1) dived = advance(dived, 1 / 60, flat)
+    expect(dived.altitude).toBeGreaterThanOrEqual(MIN_ALTITUDE)
     expect(pinchGlide(start, 2).altitude).toBeLessThan(start.altitude)
     expect(pinchGlide(start, Number.NaN)).toBe(start)
+  })
+
+  it('looks up the sky when pitched up and at the ground when pitched down', () => {
+    const forwardOf = (glide: Glide): Vec3 => {
+      const pose = poseOf(glide)
+      return [pose.look[0] - pose.eye[0], pose.look[1] - pose.eye[1], pose.look[2] - pose.eye[2]]
+    }
+    const level = dot(forwardOf(start), start.position)
+    expect(dot(forwardOf(steer(start, 0, -300, 800)), start.position)).toBeGreaterThan(level)
+    expect(dot(forwardOf(steer(start, 0, 300, 800)), start.position)).toBeLessThan(level)
   })
 
   it('looks ahead and a little down, with up away from the centre', () => {

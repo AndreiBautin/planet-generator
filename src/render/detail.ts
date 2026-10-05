@@ -1,15 +1,19 @@
 import type * as THREE from 'three'
 
+import type { GroundTextures } from './textures'
+
 /**
  * Detail finer than any patch carries, drawn per pixel, so that up close
  * every kind of ground and sea has a texture of its own rather than a
  * smooth wash of one colour.
  *
- * - **Ground**: grain and small bumps everywhere, and four patterns weighted
- *   by what the ground is (`patternAt`): a forest seen from above breaks
- *   into tree crowns, sand into wind ripples, snow into carved ridges with
- *   the odd glint, and stone into cracks. The patterns carry the look beyond
- *   where single trees and rocks stand.
+ * - **Ground**: the baked ground textures (`ground-atlas.ts`) laid on
+ *   triplanar and blended by what the ground is — turf, forest litter, sand,
+ *   stone, snow, basalt — with their heights bumping the surface; grain and
+ *   small bumps on top; and four patterns weighted by `patternAt`: a forest
+ *   seen from above breaks into tree crowns, sand into wind ripples, snow
+ *   into carved ridges with the odd glint, and stone into cracks. The
+ *   patterns carry the look beyond where single trees and rocks stand.
  * - **Sea**: moving ripples, foam where it meets a coast, the odd whitecap,
  *   and lighter water over the shallows.
  * - **Lava**: a crust of plates drifting slowly, split by glowing seams that
@@ -124,10 +128,35 @@ function passThrough(
  */
 export function withGroundDetail(
   material: THREE.MeshStandardMaterial,
+  textures: GroundTextures,
   molten = false,
 ): THREE.MeshStandardMaterial {
   material.onBeforeCompile = (shader) => {
     passThrough(shader, { attribute: 'pattern', type: 'vec4' })
+    shader.uniforms.groundGrass = { value: textures.grass }
+    shader.uniforms.groundLitter = { value: textures.litter }
+    shader.uniforms.groundSand = { value: textures.sand }
+    shader.uniforms.groundStone = { value: textures.stone }
+    shader.uniforms.groundSnow = { value: textures.snow }
+    shader.uniforms.groundBasalt = { value: textures.basalt }
+    shader.fragmentShader =
+      /* glsl */ `
+      uniform sampler2D groundGrass;
+      uniform sampler2D groundLitter;
+      uniform sampler2D groundSand;
+      uniform sampler2D groundStone;
+      uniform sampler2D groundSnow;
+      uniform sampler2D groundBasalt;
+      // A texture laid on from three sides and blended by which way the
+      // ground faces, so a sphere carries it with no stretching anywhere.
+      vec4 groundTri(sampler2D tex, vec3 p, vec3 w) {
+        vec4 c = vec4(0.0);
+        if (w.x > 0.02) c += texture2D(tex, p.yz) * w.x;
+        if (w.y > 0.02) c += texture2D(tex, p.xz) * w.y;
+        if (w.z > 0.02) c += texture2D(tex, p.xy) * w.z;
+        return c;
+      }
+      ` + shader.fragmentShader
     if (molten) {
       shader.fragmentShader = shader.fragmentShader.replace(
         '#include <emissivemap_fragment>',
@@ -164,6 +193,41 @@ export function withGroundDetail(
           (detailNoise(vDetailPosition * 650.0) - 0.5) * detailNear +
           (detailNoise(vDetailPosition * 2600.0) - 0.5) * 0.7 * detailClose;
         float detailShade = 1.0;
+        float stand = 1.0 - smoothstep(detailRange * 0.55, detailRange, detailDistance);
+
+        // The ground's texture: which kinds of ground are here, blended,
+        // laid on triplanar at two scales so neither the repeat nor the
+        // texel shows, and faded where it would only shimmer.
+        {
+          float texFade = 1.0 - smoothstep(0.12, 0.8, detailDistance);
+          if (texFade > 0.01) {
+            vec3 n = normalize(vDetailPosition);
+            vec3 w = pow(abs(n), vec3(6.0));
+            w /= w.x + w.y + w.z;
+            vec3 p = vDetailPosition * 1500.0;
+            vec3 q = vDetailPosition * 260.0 + 17.3;
+            ${
+              molten
+                ? /* glsl */ `vec4 tex = groundTri(groundBasalt, p, w) * 0.65 + groundTri(groundBasalt, q, w) * 0.35;`
+                : /* glsl */ `
+            float wLitter = v_pattern.x * stand;
+            float wSand = v_pattern.y;
+            float wSnow = v_pattern.z;
+            float wStone = v_pattern.w;
+            float wGrass = max(0.0, 1.0 - (wLitter + wSand + wSnow + wStone));
+            float total = wLitter + wSand + wSnow + wStone + wGrass;
+            vec4 tex = vec4(0.0);
+            if (wGrass > 0.02) tex += (groundTri(groundGrass, p, w) * 0.65 + groundTri(groundGrass, q, w) * 0.35) * wGrass;
+            if (wLitter > 0.02) tex += (groundTri(groundLitter, p, w) * 0.65 + groundTri(groundLitter, q, w) * 0.35) * wLitter;
+            if (wSand > 0.02) tex += (groundTri(groundSand, p, w) * 0.65 + groundTri(groundSand, q, w) * 0.35) * wSand;
+            if (wSnow > 0.02) tex += (groundTri(groundSnow, p, w) * 0.65 + groundTri(groundSnow, q, w) * 0.35) * wSnow;
+            if (wStone > 0.02) tex += (groundTri(groundStone, p, w) * 0.65 + groundTri(groundStone, q, w) * 0.35) * wStone;
+            tex /= max(total, 0.001);`
+            }
+            diffuseColor.rgb *= mix(vec3(1.0), tex.rgb * 2.0, texFade);
+            detailHeight += (tex.a - 0.5) * 1.6 * texFade;
+          }
+        }
 
         // Canopy: a forest from above is crowns with dark gaps, no two
         // crowns the same shade, in groves of lighter and darker wood —
@@ -171,7 +235,6 @@ export function withGroundDetail(
         // ground is the forest floor: dark, leaf-littered, mottled.
         float canopy = v_pattern.x * patternFar;
         if (canopy > 0.02) {
-          float stand = 1.0 - smoothstep(detailRange * 0.55, detailRange, detailDistance);
           vec3 crowns = detailCells(vDetailPosition * 1400.0);
           float crown = 1.0 - smoothstep(0.2, 0.75, crowns.x);
           float tone = mix(0.5, 1.12, crown) * (0.82 + crowns.z * 0.36);
@@ -275,8 +338,10 @@ export function withWaterDetail(material: THREE.Material): THREE.Material {
         float foam = shore * smoothstep(0.45, 0.8, churn + shore * 0.35) * (1.0 - smoothstep(0.05, 0.5, seaDistance));
         // The odd whitecap out at sea, close enough to see.
         // Whitecaps where a crest of the swell breaks, and the odd one out at sea.
-        float crest = smoothstep(0.55, 0.95, v_swell + detailNoise(vDetailPosition * 1600.0 + drift * 900.0) * 0.5 - 0.25);
-        float caps = max(crest * 0.55, smoothstep(0.9, 0.98, detailNoise(vDetailPosition * 1100.0 - drift * 1100.0)) * 0.4) * seaNear;
+        float crest =
+          smoothstep(0.78, 1.0, v_swell * 0.5 + 0.5) *
+          smoothstep(0.55, 0.85, detailNoise(vDetailPosition * 1600.0 + drift * 900.0));
+        float caps = max(crest * 0.3, smoothstep(0.9, 0.98, detailNoise(vDetailPosition * 1100.0 - drift * 1100.0)) * 0.4) * seaNear;
         float white = clamp(foam + caps, 0.0, 1.0);
         diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.92, 0.95, 0.97), white);
         diffuseColor.a = mix(diffuseColor.a, 0.95, white);`,

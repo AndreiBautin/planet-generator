@@ -9,8 +9,10 @@
  * thing that knows how ground is drawn.
  *
  * The flight never asks to be flown: it goes forward on its own, a finger
- * only turns it and raises or lowers it. On a phone that is what makes it
- * flyable with one thumb.
+ * only turns it and pitches it — up to climb, down to dive, and a diagonal
+ * does both at once. On a phone that is what makes it flyable with one
+ * thumb. The nose levels itself again once the finger lifts, so a glide
+ * left alone settles back to flying along the ground.
  */
 export type Vec3 = readonly [number, number, number]
 export type Ground = (direction: Vec3) => number
@@ -22,6 +24,8 @@ export interface Glide {
   readonly heading: Vec3
   /** How high above the ground it means to fly. */
   readonly altitude: number
+  /** Nose up (positive) or down, in radians: climbing or diving as it flies. */
+  readonly pitch: number
   /** How far from the centre the eye actually is, easing towards ground + altitude. */
   readonly eye: number
 }
@@ -39,6 +43,14 @@ const SETTLE_RATE = 2.6
 export const LOOK_DOWN = 0.22
 /** A drag the full height of the screen turns this far. */
 const TURN_PER_SCREEN = Math.PI * 0.8
+/** A drag the full height of the screen pitches this far. */
+const PITCH_PER_SCREEN = 1.2
+export const MAX_PITCH_UP = 0.55
+export const MAX_PITCH_DOWN = 0.5
+/** The nose comes back level by e every 1/RATE seconds once left alone. */
+const LEVEL_RATE = 0.7
+/** How much of the speed a full pitch turns into climb or dive. */
+const CLIMB_SHARE = 1.6
 
 const dot = (a: Vec3, b: Vec3): number => a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
 const cross = (a: Vec3, b: Vec3): Vec3 => [
@@ -79,26 +91,30 @@ export function startGlide(position: Vec3, heading: Vec3, ground: Ground): Glide
     position: at,
     heading: flatten(heading, at),
     altitude: START_ALTITUDE,
+    pitch: 0,
     eye: ground(at) + START_ALTITUDE,
   }
 }
 
 /**
  * A finger moved by (dx, dy) on a screen `height` pixels tall: sideways
- * turns, up climbs and down dives — the way the finger moves is the way the
- * eye goes, which needs no explaining on a phone.
+ * turns, up pitches the nose up and down pitches it down — the way the
+ * finger moves is the way the eye goes, which needs no explaining on a
+ * phone. The climb or dive itself happens as it flies (`advance`), so a
+ * pitched glide keeps rising until it is levelled or reaches its ceiling.
  */
 export function steer(glide: Glide, dx: number, dy: number, height: number): Glide {
   const turn = (dx / Math.max(1, height)) * TURN_PER_SCREEN
   // Turning right is a clockwise turn seen from above, a negative angle
   // about the up direction.
   const heading = flatten(rotate(glide.heading, glide.position, -turn), glide.position)
-  const altitude = clamp(
-    glide.altitude * Math.exp(-dy / Math.max(1, height)),
-    MIN_ALTITUDE,
-    MAX_ALTITUDE,
+  // Screen y grows downwards: a finger moving up is a positive pitch.
+  const pitch = clamp(
+    glide.pitch - (dy / Math.max(1, height)) * PITCH_PER_SCREEN,
+    -MAX_PITCH_DOWN,
+    MAX_PITCH_UP,
   )
-  return { ...glide, heading, altitude }
+  return { ...glide, heading, pitch }
 }
 
 /** Two fingers spread by `factor`: spreading comes down closer. */
@@ -130,8 +146,17 @@ export function advance(glide: Glide, seconds: number, ground: Ground): Glide {
   const angle = speedOf(glide) * step
   const position = unit(rotate(glide.position, axis, angle))
   const heading = flatten(rotate(glide.heading, axis, angle), position)
-  const moved = { ...glide, position, heading }
-  const target = groundAhead(moved, ground) + glide.altitude
+  // The pitch is how fast the altitude changes, as a share of the speed, and
+  // it eases back level on its own.
+  const climb = Math.sin(glide.pitch) * speedOf(glide) * CLIMB_SHARE * step
+  const altitude = clamp(
+    glide.altitude * Math.exp(climb / glide.altitude),
+    MIN_ALTITUDE,
+    MAX_ALTITUDE,
+  )
+  const pitch = glide.pitch * Math.exp(-LEVEL_RATE * step)
+  const moved = { ...glide, position, heading, altitude, pitch }
+  const target = groundAhead(moved, ground) + altitude
   const settled = target + (glide.eye - target) * Math.exp(-SETTLE_RATE * step)
   const floor = ground(position) + CLEARANCE
   return { ...moved, eye: Math.max(settled, floor) }
@@ -148,9 +173,9 @@ export interface Pose {
 
 export function poseOf(glide: Glide): Pose {
   const eye = scale(glide.position, glide.eye)
-  const forward = add(
-    scale(glide.heading, Math.cos(LOOK_DOWN)),
-    scale(glide.position, -Math.sin(LOOK_DOWN)),
-  )
+  // The eye looks where the nose points: a little down when level, up at
+  // the sky in a climb, at the ground in a dive.
+  const tilt = LOOK_DOWN - glide.pitch
+  const forward = add(scale(glide.heading, Math.cos(tilt)), scale(glide.position, -Math.sin(tilt)))
   return { eye, look: add(eye, forward), up: glide.position }
 }

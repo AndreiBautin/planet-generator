@@ -45,8 +45,14 @@ shared. Nothing else would notice. So:
   no two are the same size and shade.
 - **Flight** (`glide.test.ts`, `flight.test.ts`): a glide stays on the
   sphere, rises before a ridge, never comes below its clearance over bumpy
-  ground, turns the way the finger goes; a dive turned back mid-way rises
-  from where it had got to.
+  ground, turns the way the finger goes, noses up with a finger moving up
+  and climbs as it flies, levels itself when left alone and keeps within
+  its ceiling and floor, looks up the sky when pitched up; a dive turned
+  back mid-way rises from where it had got to.
+- **The baked ground textures** (`ground-atlas.test.ts`): every kind is a
+  full square with real variation, the seam is no sharper than the
+  sharpest step inside the square (so it tiles), and the colours stay near
+  the middle so the biome's colour shows through.
 - **The feel, as pure functions** (`orbit.test.ts`, `birth.test.ts`,
   `quality.test.ts`): a flick coasts the same distance however the frames
   fall, a finger that paused does not fling the planet, the birth lands

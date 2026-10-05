@@ -5,7 +5,7 @@ import type { Planet } from '@/generation/planet'
 import type { Builder } from '../builder'
 import { SEA_RADIUS } from '../water'
 import { keyOf, parentOf, ROOTS, type PatchKey, type Vec3 } from './cube'
-import { ancestorAt, centreOf, selectLeaves, type LodParams, type ViewCone } from './lod'
+import { aheadOf, ancestorAt, centreOf, selectLeaves, type LodParams, type ViewCone } from './lod'
 import { Flora, type FloraOptions } from './flora'
 import { patchIndex, type PatchData } from './patch-data'
 
@@ -27,7 +27,6 @@ export interface TerrainOptions extends LodParams {
 export interface TerrainMaterials {
   readonly ground: THREE.Material
   readonly water: THREE.Material
-  readonly features: THREE.Material
 }
 
 interface Entry {
@@ -63,7 +62,7 @@ export class Terrain {
     this.materials = materials
     // Features ride with the ground: a child of its group, they turn with the
     // planet and grow with it as it is born.
-    this.flora = new Flora(world, builder, options.flora, materials.features)
+    this.flora = new Flora(world, builder, options.flora)
     this.group.add(this.flora.group)
     // One array of triangles for every patch; each geometry wraps it in an
     // attribute of its own, because disposing a geometry frees its index's
@@ -113,7 +112,7 @@ export class Terrain {
       const next = ancestorAt(leaf, drawn + 1)
       const name = keyOf(next)
       if (this.entries.get(name)?.requested === true || wanted.has(name)) continue
-      wanted.set(name, { key: next, distance: gap(centreOf(next), camera) })
+      wanted.set(name, { key: next, distance: aheadOf(centreOf(next), camera, view) })
     }
     const queue = [...wanted.values()].sort((a, b) => a.distance - b.distance)
     for (const { key } of queue) {
@@ -245,8 +244,6 @@ export class Terrain {
     }
   }
 }
-
-const gap = (a: Vec3, b: Vec3): number => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2])
 
 /**
  * Geometry only: the materials and the index are shared and outlive a patch,

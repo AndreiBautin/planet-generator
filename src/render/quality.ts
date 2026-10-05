@@ -33,6 +33,8 @@ export interface Quality {
   readonly inFlight: number
   /** How far from the camera trees, rocks and floes stand, in planet radii. */
   readonly featureRange: number
+  /** Feature tile requests out at once. */
+  readonly featureInFlight: number
   /** Cloud texture width; its height is half. */
   readonly cloudWidth: number
   readonly pixelRatio: number
@@ -52,6 +54,7 @@ export function pickQuality(device: Device): Quality {
     patchCache: phone ? (modest ? 450 : 600) : 1200,
     inFlight: phone ? 12 : 24,
     featureRange: phone ? (modest ? 0.05 : 0.07) : 0.11,
+    featureInFlight: phone ? 8 : 16,
     cloudWidth: phone ? 512 : 1024,
     pixelRatio: Math.min(device.pixelRatio, modest ? 1.5 : 2),
   }

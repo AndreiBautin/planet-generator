@@ -3,7 +3,7 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 
 import { FEATURES, type Feature } from '@/generation/features'
 
-import { DETAIL_RANGE } from '../detail'
+import { DETAIL_RANGE, DETAIL_TIME } from '../detail'
 import { STRIDE, type Scatter } from './scatter'
 
 /**
@@ -144,26 +144,40 @@ const model = (feature: Feature): THREE.BufferGeometry => {
   return made
 }
 
-export function featureMaterial(): THREE.MeshStandardMaterial {
+/** How long a tile's features take to grow up out of the ground, in seconds. */
+export const GROW_SECONDS = 0.8
+
+/**
+ * The material for one tile's features. One per tile rather than one for
+ * all, because each carries the time its tile arrived: its features grow
+ * up out of the ground over `GROW_SECONDS` rather than appearing, which is
+ * what made a tile arriving late read as a glitch. The program is shared —
+ * the cache key is the same — so a tile costs a few uniforms, not a compile.
+ *
+ * Each instance also shrinks into the ground over the last stretch of the
+ * feature range, so a wood thins out towards the horizon rather than
+ * stopping at a line where the tiles do.
+ */
+export function featureMaterial(born: number): THREE.MeshStandardMaterial {
   const material = new THREE.MeshStandardMaterial({
     vertexColors: true,
     flatShading: true,
     roughness: 0.88,
     metalness: 0,
   })
-  // Each instance shrinks into the ground over the last stretch of the
-  // feature range, so a wood thins out towards the horizon rather than
-  // stopping at a line where the tiles do.
   material.onBeforeCompile = (shader) => {
     shader.uniforms.featureRange = DETAIL_RANGE
+    shader.uniforms.featureNow = DETAIL_TIME
+    shader.uniforms.featureBorn = { value: born }
     shader.vertexShader =
-      'uniform float featureRange;\n' +
+      'uniform float featureRange;\nuniform float featureNow;\nuniform float featureBorn;\n' +
       shader.vertexShader.replace(
         '#include <begin_vertex>',
         /* glsl */ `#include <begin_vertex>
         {
           float featureGap = length((modelViewMatrix * instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0)).xyz);
-          transformed *= 1.0 - smoothstep(featureRange * 0.7, featureRange, featureGap);
+          float grown = smoothstep(0.0, ${GROW_SECONDS.toFixed(2)}, featureNow - featureBorn);
+          transformed *= grown * (1.0 - smoothstep(featureRange * 0.7, featureRange, featureGap));
         }`,
       )
   }

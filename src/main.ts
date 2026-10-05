@@ -113,8 +113,12 @@ window.addEventListener('keydown', (event) => {
   const steps: Record<string, readonly [number, number]> = {
     ArrowLeft: [-0.04, 0],
     ArrowRight: [0.04, 0],
-    ArrowUp: [0, -0.08],
-    ArrowDown: [0, 0.08],
+    ArrowUp: [0, -0.06],
+    ArrowDown: [0, 0.06],
+    a: [-0.04, 0],
+    d: [0.04, 0],
+    w: [0, -0.06],
+    s: [0, 0.06],
   }
   const step = steps[event.key]
   if (step !== undefined) {

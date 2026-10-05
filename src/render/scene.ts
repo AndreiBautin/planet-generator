@@ -18,9 +18,9 @@ import {
 } from './detail'
 import type { Vec3 } from './patches/cube'
 import type { ViewCone } from './patches/lod'
-import { featureMaterial } from './patches/feature-models'
 import { Terrain } from './patches/terrain'
 import { nextPixelRatio, typicalFrame, type Quality } from './quality'
+import { groundTextures } from './textures'
 import { waterMaterial } from './water'
 
 /**
@@ -148,17 +148,17 @@ export function startScene(
         peak: world.relief * 1.1 + 0.005,
         inFlight: quality.inFlight,
         cached: quality.patchCache,
-        flora: { range: quality.featureRange, inFlight: 6, cached: 260 },
+        flora: { range: quality.featureRange, inFlight: quality.featureInFlight, cached: 320 },
       },
       {
         ground: withGroundDetail(
           new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.92, metalness: 0 }),
+          groundTextures(),
           world.molten,
         ),
         water: world.molten
           ? withLavaDetail(waterMaterial(world))
           : withWaterDetail(waterMaterial(world)),
-        features: featureMaterial(),
       },
     )
 
