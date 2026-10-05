@@ -24,6 +24,9 @@ checks nothing. The pre-push hook runs `pnpm verify`; CI runs the same.
 - **The literal-value tests in `rng.test.ts` are the promise.** If they
   fail, a change has moved every shared planet. Updating the snapshot is a
   decision to break old links, not a fix.
+  **Until the first public deploy no link has been shared**, so while the
+  look is being tuned the pinned values in `planet.test.ts` move freely;
+  from the deploy on, they carry the same weight as the generator's.
 - **`generation/` imports nothing but itself and `shared/`.** No Three.js,
   no DOM, no clock — so it runs identically in Node, a worker or a test.
 - **Time comes from a `Clock`** (`app/clock.ts`); animate from elapsed time,

@@ -1,21 +1,21 @@
 import * as THREE from 'three'
 
 import type { Clock } from '@/app/clock'
+import type { Planet } from '@/generation/planet'
+
+import { buildPlanetMesh } from './planet-mesh'
 
 /**
  * The Three.js scene: a renderer filling the window, a camera, a star to
  * light the planet, and a frame loop driven by a Clock. Generation hands
  * this numbers; it never generates anything itself.
  *
- * This is the foundations' placeholder — one sphere in the seed's colour —
- * proving the bundle, the canvas and the seed reach the screen. The
- * planet replaces the sphere.
  */
 export interface Scene {
   readonly dispose: () => void
 }
 
-export function startScene(host: HTMLElement, colour: number, clock: Clock): Scene {
+export function startScene(host: HTMLElement, world: Planet, clock: Clock): Scene {
   const renderer = new THREE.WebGLRenderer({ antialias: true })
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
   renderer.setSize(window.innerWidth, window.innerHeight)
@@ -29,10 +29,10 @@ export function startScene(host: HTMLElement, colour: number, clock: Clock): Sce
   sun.position.set(4, 2, 3)
   scene.add(sun, new THREE.AmbientLight(0x223044, 0.6))
 
-  const planet = new THREE.Mesh(
-    new THREE.IcosahedronGeometry(1, 32),
-    new THREE.MeshStandardMaterial({ color: colour, roughness: 0.85 }),
-  )
+  // Finer on a large screen, lighter on a phone: the triangle count grows
+  // with the square of the detail.
+  const detail = Math.min(window.innerWidth, window.innerHeight) >= 700 ? 96 : 64
+  const planet = buildPlanetMesh(world, detail)
   scene.add(planet)
 
   const resize = (): void => {
