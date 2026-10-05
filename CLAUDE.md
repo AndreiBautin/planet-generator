@@ -240,6 +240,36 @@ checks nothing. The pre-push hook runs `pnpm verify`; CI runs the same.
   from that work should come back as a default-UI feature; a flag or a
   separate page, if at all.
 
+- **The scattered features are off (`featureRange: 0` in `quality.ts`),
+  and the woods are painted on the ground instead.** Trees, rocks and
+  cacti are built in tiles, and on a phone a tile built after the eye
+  reaches it is a wood springing up in plain view. A day went into
+  narrowing that down — one queue most urgent first, trees before
+  ground, cheaper tiles, tiles fading in — and it was still visible, so
+  the call was to set them aside and make what never pops look good.
+  The machinery stays; a range brings them back. With the range at
+  nought `stand` is 0 in the ground shader, so the painted canopy
+  covers every wood at every distance.
+- **The terrain governs its own detail** (`govern` in `terrain.ts`): it
+  measures how many levels behind the drawn ground runs and loosens the
+  detail threshold while patches are late, tightening again once they
+  keep up. A picture a step softer that is all there is a picture; fine
+  ground landing after the eye arrives is ground sharpening under it.
+  `TERRAIN_MORPH` is set from the governed threshold each frame.
+- **Nothing in the ground shader is drawn only within a distance.** The
+  sand ripples, snow ridges, stone cracks and procedural bumps all were,
+  so each appeared ahead of the eye as it flew — and the cracks read as
+  a honeycomb over a desert. Patterns that remain are filtered by
+  `fwidth` so they blur away rather than switch, and the photographs
+  carry the grain.
+- **`?record` in a development build drives time and frames by hand**
+  (`window.recorder.step(ms)`, `nudge`), so a flight renders exactly and
+  can be compared frame to frame. The preview pane draws nothing on its
+  own, and every flicker fix made without this was made blind.
+- **The planet turns at two rates**: once in two minutes from orbit,
+  once in eight in a glide, the angle carried forward at the blended
+  rate so the change never jumps the ground.
+
 ## Traps
 
 - **Every patch geometry wraps the shared index array in its own

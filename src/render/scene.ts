@@ -259,8 +259,15 @@ const GRADE_SHADER = {
     }
   `,
 }
-/** One slow turn every eight minutes: a glide stays in daylight long enough to see the ground it came for. */
-const TURN_MS = 480_000
+/**
+ * The planet turns once every two minutes seen from orbit, which is slow
+ * enough to watch and fast enough to see; and once every eight in a glide,
+ * which stays in daylight long enough to see the ground it came for. The
+ * angle is carried forward at whichever rate the view blends to, so the
+ * change of pace never jumps the ground.
+ */
+const ORBIT_TURN_MS = 120_000
+const GLIDE_TURN_MS = 480_000
 
 export function startScene(
   canvas: HTMLCanvasElement,
@@ -478,6 +485,8 @@ export function startScene(
     }
   }
   let lastTurn = 0
+  let turned = 0
+  let turnedAt = clock.now()
 
   const orbitEye = new THREE.Vector3()
   const surfaceEye = new THREE.Vector3()
@@ -646,9 +655,13 @@ export function startScene(
       }
     }
 
-    // From the clock rather than per frame, so a dropped frame does not
+    // Advanced by the clock, not per frame, so a dropped frame does not
     // slow the planet down.
-    const turn = (now / TURN_MS) * Math.PI * 2
+    const seen = view()
+    const turnMs = ORBIT_TURN_MS + (GLIDE_TURN_MS - ORBIT_TURN_MS) * seen.blend
+    turned += ((now - turnedAt) / turnMs) * Math.PI * 2
+    turnedAt = now
+    const turn = turned
     lastTurn = turn
     DETAIL_TIME.value = now / 1000
     DETAIL_RANGE.value = quality.featureRange
@@ -656,7 +669,7 @@ export function startScene(
     // shadows fall from the sun's side.
     DETAIL_CLOUD_SPIN.value = -0.15 * turn
     DETAIL_CLOUD_SUN.value.set(...inPlanetFrame(sunDirection, turn, 1))
-    place(view(), turn)
+    place(seen, turn)
     if (coming !== undefined) {
       coming.terrain.update(inPlanetFrame(camera.position, turn, 1), viewCone(turn))
       if (coming.terrain.ready && (coming.keepClouds || coming.clouds !== undefined)) {

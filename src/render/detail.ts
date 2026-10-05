@@ -438,7 +438,6 @@ export function withGroundDetail(
         // eye moves: each fades out once its cells shrink below a few
         // pixels, by the screen-space rate the position changes.
         float pixelSpan = length(fwidth(vDetailPosition));
-        float crownFilter = 1.0 - smoothstep(0.15, 0.45, pixelSpan * 1400.0);
         // Where trees stand, the floor between them is dark at every
         // distance. It used to share the crowns' filter and went bright past
         // a short range, so a forest became dark trees on pale ground — the
@@ -460,12 +459,27 @@ export function withGroundDetail(
         // a honeycomb on the ground until the trees appeared on top of it.
         // Its tone matches the floor and the trees, so they arrive into a
         // wood already there rather than onto a pattern.
-        float canopy = woods * (1.0 - stand);
+        // The tone holds at every distance, so a wood is on the globe from
+        // orbit and the same wood up close; only its texture — crowns at
+        // two scales, each filtered away before it could shimmer — comes in
+        // as the eye nears, and the crowns' relief lights it as a surface.
+        // Clumps of crowns at two scales, each filtered away before it could
+        // shimmer: rounded by taking the upper part of a noise, so a wood is
+        // a mass of lit tops over shadowed gaps and never a tiling.
+        float clumpA = mix(0.5, detailNoise(vDetailPosition * 1100.0), 1.0 - smoothstep(0.15, 0.5, pixelSpan * 1100.0));
+        float clumpB = mix(0.5, detailNoise(vDetailPosition * 2600.0), 1.0 - smoothstep(0.15, 0.5, pixelSpan * 2600.0));
+        float crown = smoothstep(0.3, 0.8, clumpA * 0.65 + clumpB * 0.35);
+        float broad = detailNoise(vDetailPosition * 220.0);
+        // The edge of a wood is ragged at clump scale, not the smooth line
+        // of the grove field it grows from.
+        float edge = v_pattern.x + (clumpA - 0.5) * 0.2 + (broad - 0.5) * 0.1;
+        float canopy = smoothstep(0.08, 0.26, edge) * (1.0 - stand);
         if (canopy > 0.02) {
-          float mottle = detailNoise(vDetailPosition * 220.0) * 0.6 + mix(0.5, detailNoise(vDetailPosition * 900.0), crownFilter) * 0.4;
-          float tone = 0.42 + mottle * 0.2;
+          float tone = (0.34 + broad * 0.2) * (0.7 + crown * 0.55);
           detailShade *= mix(1.0, tone, canopy);
-          diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(0.8, 0.95, 0.88), canopy);
+          diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(0.7, 0.95, 0.78), canopy);
+          detailHeight += (crown - 0.5) * 2.0 * canopy;
+          detailRough = mix(detailRough, 0.95, canopy);
         }
 
         // No sand ripples, snow ridges or stone cracks drawn by hand here.

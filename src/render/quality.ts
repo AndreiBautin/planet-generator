@@ -57,7 +57,13 @@ export function pickQuality(device: Device): Quality {
     maxLevel: phone && modest ? 8 : 9,
     patchCache: phone ? (modest ? 450 : 600) : 1200,
     inFlight: phone ? 12 : 24,
-    featureRange: phone ? (modest ? 0.055 : 0.085) : 0.15,
+    // Nought: no trees, rocks or cacti stand on the ground for now. They
+    // are built in tiles, and a tile built after the eye reaches it is a
+    // wood springing up in plain view; after a day of narrowing that down
+    // the call was to set them aside and make what never pops look good.
+    // Woods are painted on the ground instead (detail.ts). The machinery
+    // stays: a range here brings them back.
+    featureRange: 0,
     featureInFlight: phone ? 8 : 16,
     shadowMap: phone ? (modest ? 0 : 1024) : 2048,
     cloudWidth: phone ? 512 : 1024,
