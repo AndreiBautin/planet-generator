@@ -371,17 +371,21 @@ export function featureMaterial(born: number, stone: GroundLayer): THREE.MeshSta
     // The conifers' tiers are open cones, seen from beneath as often as above.
     side: THREE.DoubleSide,
   })
+  // When the tile was last made visible after a while hidden (flora.ts).
+  const shownAt = { value: -1e9 }
+  material.userData.shownAt = shownAt
   material.onBeforeCompile = (shader) => {
     shader.uniforms.featureRange = DETAIL_RANGE
     shader.uniforms.featureNow = DETAIL_TIME
     shader.uniforms.featureBorn = { value: born }
+    shader.uniforms.featureShownAt = shownAt
     shader.uniforms.featureStone = stone.color
     shader.uniforms.featureStoneNormal = stone.normal
     shader.uniforms.featureStoneMean = stone.mean
     shader.uniforms.featureNormalMatrix = DETAIL_NORMAL_MATRIX
     shader.uniforms.hazeSun = HAZE_SUN
     shader.vertexShader =
-      'uniform float featureRange;\nuniform float featureNow;\nuniform float featureBorn;\nattribute float stony;\nvarying float vFeatureFade;\nvarying float vFeatureSmall;\nvarying vec3 vFeatureUp;\nvarying vec3 vFeaturePlanet;\nvarying vec3 vFeatureNormal;\nvarying float vFeatureStony;\nvarying float vFeatureHeight;\n' +
+      'uniform float featureRange;\nuniform float featureNow;\nuniform float featureBorn;\nuniform float featureShownAt;\nattribute float stony;\nvarying float vFeatureFade;\nvarying float vFeatureSmall;\nvarying vec3 vFeatureUp;\nvarying vec3 vFeaturePlanet;\nvarying vec3 vFeatureNormal;\nvarying float vFeatureStony;\nvarying float vFeatureHeight;\n' +
       shader.vertexShader.replace(
         '#include <begin_vertex>',
         /* glsl */ `#include <begin_vertex>
@@ -394,10 +398,19 @@ export function featureMaterial(born: number, stone: GroundLayer): THREE.MeshSta
           // nothing flickers as the eye moves. Shrinking every tree read as
           // dark specks, and a per-pixel dither read as static.
           vFeatureFade = 1.0 - smoothstep(featureRange * 0.55, featureRange, featureGap);
+          // A tile that comes into view inside the range brings its features
+          // in over a moment, each at its own threshold below, rather than
+          // all at once.
+          vFeatureFade *= smoothstep(0.0, 0.6, featureNow - featureShownAt);
           vec3 featureSeed = fract(featureFoot * 7919.17);
           featureSeed += dot(featureSeed, featureSeed.yzx + 19.19);
           float featureKeep = fract((featureSeed.x + featureSeed.y) * featureSeed.z);
-          float featureShown = step(featureKeep, vFeatureFade);
+          // Each grows in over a short stretch of distance from its own
+          // threshold, rather than switching on: switched, every tree and
+          // rock in the band popped into being as the eye crossed its line,
+          // which read as things appearing as you flew over them.
+          float featureStart = featureKeep * 0.85;
+          float featureShown = smoothstep(featureStart, featureStart + 0.15, vFeatureFade);
           transformed *= grown * featureShown;
           // How small it stands on screen: its height over its distance, as
           // a share of the view's height. A tree a few pixels tall cannot

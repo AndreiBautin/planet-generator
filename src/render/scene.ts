@@ -366,7 +366,7 @@ export function startScene(
         flora: {
           range: quality.featureRange,
           inFlight: quality.featureInFlight,
-          cached: 320,
+          cached: 480,
           stone: world.molten ? ground.basalt : ground.stone,
         },
       },

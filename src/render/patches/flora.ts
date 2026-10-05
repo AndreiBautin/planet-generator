@@ -38,6 +38,8 @@ export interface FloraOptions {
 
 interface Tile {
   readonly key: PatchKey
+  /** The last frame it was drawn, to tell coming into view from staying there. */
+  seenAt: number
   node: THREE.Group | undefined
   material: THREE.Material | undefined
   usedAt: number
@@ -67,8 +69,12 @@ export class Flora {
     this.frame += 1
     const wanted = featureTiles(camera, SCATTER_LEVEL, this.options.range * PREFETCH, view)
     const reach = patchAngle(SCATTER_LEVEL) * 0.75
+    // What is drawn is decided by distance alone. Decided by the view as
+    // well, a tile held back at the edge of the view switched on, trees and
+    // all, inside the range as the nose moved: measured, about one in five
+    // tiles came on with its trees already in plain view.
     const shown = new Set(
-      wanted
+      featureTiles(camera, SCATTER_LEVEL, this.options.range)
         .filter((key) => {
           const c = centreOf(key)
           return (
@@ -92,8 +98,17 @@ export class Flora {
     for (const [name, tile] of this.tiles) {
       if (tile.node === undefined) continue
       const visible = shown.has(name)
+      if (visible && tile.seenAt < this.frame - 30) {
+        const shownAt: unknown = tile.material?.userData.shownAt
+        if (typeof shownAt === 'object' && shownAt !== null && 'value' in shownAt) {
+          shownAt.value = DETAIL_TIME.value
+        }
+      }
       tile.node.visible = visible
-      if (visible) tile.usedAt = this.frame
+      if (visible) {
+        tile.usedAt = this.frame
+        tile.seenAt = this.frame
+      }
     }
     this.evict(shown)
   }
@@ -106,7 +121,7 @@ export class Flora {
 
   private request(key: PatchKey): void {
     const name = keyOf(key)
-    const tile: Tile = { key, node: undefined, material: undefined, usedAt: this.frame }
+    const tile: Tile = { key, node: undefined, material: undefined, usedAt: this.frame, seenAt: -1 }
     this.tiles.set(name, tile)
     this.waiting += 1
     void this.builder.features(this.world.seed, this.world.dials, key).then((scatter) => {
