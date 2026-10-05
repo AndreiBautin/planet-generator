@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
 import {
-  shoreLean,
   advance,
   MAX_ALTITUDE,
   MAX_PITCH_DOWN,
@@ -175,24 +174,22 @@ describe('gliding', () => {
   })
 })
 
-describe('the lean towards land', () => {
-  // Heading +x from the +z pole; land only where y is positive.
+describe('steering', () => {
+  // Land only to one side: nothing about the ground may turn the aircraft.
   const land = (d: readonly [number, number, number]): number => (d[1] > 0.02 ? 1.01 : 1)
-  const sea = (): number => 1
 
-  it('leans towards the side with land, and only that side', () => {
-    const glide = startGlide([0, 0, 1], [1, 0, 0], land)
-    const lean = shoreLean(glide, land)
-    expect(lean).not.toBe(0)
-    // Leaning that way and flying on brings the land side closer.
-    let flying = { ...glide, yawRate: 0 }
+  it('never turns on its own, whatever lies to either side', () => {
+    let flying = startGlide([0, 0, 1], [1, 0, 0], land)
     for (let t = 0; t < 40; t += 1) flying = advance(flying, 0.25, land)
-    expect(flying.position[1]).toBeGreaterThan(0)
+    // Still on the great circle it started on: no drift towards the land.
+    expect(Math.abs(flying.position[1])).toBeLessThan(1e-9)
+    expect(flying.roll).toBe(0)
   })
 
-  it('stays straight over open sea with no land either side, and never overrules the stick', () => {
-    const glide = startGlide([0, 0, 1], [1, 0, 0], sea)
-    expect(shoreLean(glide, sea)).toBe(0)
-    expect(shoreLean({ ...glide, yawRate: 0.5 }, land)).toBe(0)
+  it('stops turning soon after the finger lifts', () => {
+    let turned = steer(start, 400, 0, 800)
+    // A second and a half after letting go, the turn is all but over.
+    for (let at = 0; at < 90; at += 1) turned = advance(turned, 1 / 60, flat)
+    expect(Math.abs(turned.yawRate)).toBeLessThan(0.1)
   })
 })

@@ -59,10 +59,14 @@ export const LOOK_DOWN = 0.22
  * a second: with the decay below, about half a turn. It was a quarter, and
  * reported as going all the way across the screen and barely turning.
  */
-const YAW_PER_SCREEN = 5.5
-/** The turn rate dies away by e every 1/RATE seconds once the finger lifts. */
-const YAW_DECAY = 1.6
-export const MAX_YAW_RATE = 2.4
+const YAW_PER_SCREEN = 9
+/**
+ * The turn rate dies away by e every 1/RATE seconds once the finger lifts.
+ * It was 1.6, and a turn went on for two or three seconds after letting go — which
+ * read as the aircraft turning by itself.
+ */
+const YAW_DECAY = 2.6
+export const MAX_YAW_RATE = 3.6
 /** A drag the full height of the screen asks for this much pitch. */
 const PITCH_PER_SCREEN = 1.6
 export const MAX_PITCH_UP = 0.55
@@ -70,7 +74,7 @@ export const MAX_PITCH_DOWN = 0.5
 /** The nose follows the stick by e every 1/RATE seconds. */
 const PITCH_FOLLOW = 4.5
 /** The stick comes back to the middle by e every 1/RATE seconds once left alone. */
-const LEVEL_RATE = 0.7
+const LEVEL_RATE = 1.6
 /** How much of the speed a full pitch turns into climb or dive. */
 const CLIMB_SHARE = 1.6
 /** How fast a full dive gains rush, per second, and how quickly it bleeds away level. */
@@ -171,41 +175,6 @@ function groundAhead(glide: Glide, ground: Ground): number {
   return highest
 }
 
-/** How hard the glide leans towards land when left alone over the sea, in radians a second. */
-const SHORE_PULL = 0.18
-/** Below this turn rate the glide counts as left alone: a finger on the stick is never overruled. */
-const HANDS_OFF = 0.04
-/** Ground a whisker above the lowest drawn level is land; the sea is drawn flat at the bottom. */
-const LAND_ABOVE = 0.0004
-
-/**
- * Which way to lean, left alone over open sea: towards the side with land on
- * it, so a glide over an island world does not run off the island and out to
- * a featureless ocean in a few seconds. Nought over land, nought when the
- * pilot is steering, nought when there is land on neither side or both.
- */
-export function shoreLean(glide: Glide, ground: Ground): number {
-  if (Math.abs(glide.yawRate) > HANDS_OFF) return 0
-  const sea = ground(glide.position)
-  const reach = speedOf(glide) * 4
-  // Land at a heading `turn` radians to the right, within a few seconds'
-  // flight or twice that: the nearest bearing that has some wins.
-  const landAt = (turn: number): boolean => {
-    const heading = rotate(glide.heading, glide.position, -turn)
-    const axis = unit(cross(glide.position, heading))
-    return [1, 2, 3].some((k) => ground(rotate(glide.position, axis, reach * k)) > sea + LAND_ABOVE)
-  }
-  if (landAt(0)) return 0
-  for (const turn of [0.5, 1, 1.6, 2.2, 2.8]) {
-    const right = landAt(turn)
-    const left = landAt(-turn)
-    if (right && !left) return SHORE_PULL
-    if (left && !right) return -SHORE_PULL
-    if (left && right) return 0
-  }
-  return 0
-}
-
 const follow = (value: number, goal: number, rate: number, step: number): number =>
   goal + (value - goal) * Math.exp(-rate * step)
 
@@ -219,13 +188,11 @@ const follow = (value: number, goal: number, rate: number, step: number): number
 export function advance(glide: Glide, seconds: number, ground: Ground): Glide {
   if (!(seconds > 0)) return glide
   const step = Math.min(seconds, 0.25)
-  // Turn first, by the rate, which then dies away on its own — plus the
-  // lean towards land when left alone over the sea, applied to the heading
-  // directly so it never reads as the pilot's own turn and switches itself
-  // off.
-  const lean = shoreLean(glide, ground)
+  // Turn first, by the rate, which then dies away on its own. Nothing
+  // else ever turns it: a lean towards land once did, and from the seat it
+  // was the aircraft turning for no reason.
   const turned = flatten(
-    rotate(glide.heading, glide.position, -(glide.yawRate + lean) * step),
+    rotate(glide.heading, glide.position, -glide.yawRate * step),
     glide.position,
   )
   const yawRate = glide.yawRate * Math.exp(-YAW_DECAY * step)
@@ -245,7 +212,7 @@ export function advance(glide: Glide, seconds: number, ground: Ground): Glide {
   )
   const roll = follow(
     glide.roll,
-    clamp((yawRate + lean) * BANK_PER_YAW, -MAX_ROLL, MAX_ROLL),
+    clamp(yawRate * BANK_PER_YAW, -MAX_ROLL, MAX_ROLL),
     ROLL_FOLLOW,
     step,
   )
