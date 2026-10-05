@@ -5,10 +5,10 @@ import type { Planet } from '@/generation/planet'
 import { createRng } from '@/generation/rng'
 import { starField } from '@/generation/stars'
 
-import { buildAtmosphere } from './atmosphere'
+import { AIR_RADIUS, buildAtmosphere } from './atmosphere'
 import { BORN, birthAt, type Birth } from './birth'
 import type { Builder } from './builder'
-import { CLOUD_OPACITY, cloudsFromTexture } from './clouds'
+import { cloudsFromTexture, cloudsSeenFrom } from './clouds'
 import type { Vec3 } from './patches/cube'
 import { Terrain } from './patches/terrain'
 import { nextPixelRatio, typicalFrame, type Quality } from './quality'
@@ -272,6 +272,36 @@ export function startScene(
       camera.near = near
       camera.updateProjectionMatrix()
     }
+    airAround(above)
+  }
+
+  // The air seen from inside it: far ground fades into a haze the colour of
+  // the horizon, and by day the stars go out. Both scale with height — at
+  // the horizon from a low glide most of a far hill is haze, and from orbit
+  // there is none.
+  const fog = new THREE.FogExp2(0x000000, 0)
+  scene.fog = fog
+  const sunDirection = sun.position.clone().normalize()
+  const airColour = new THREE.Color()
+  const airAround = (above: number): void => {
+    const low = 1 - smooth(0.08, 0.35, above)
+    const day = smooth(-0.15, 0.3, camera.position.clone().normalize().dot(sunDirection))
+    // Seeing as far as the horizon, about √(2h) away, should leave a far hill
+    // about half visible.
+    fog.density = low * (0.85 / Math.sqrt(2 * Math.max(above, 0.002)))
+    const glow: unknown = shown?.air.material
+    if (glow instanceof THREE.ShaderMaterial) {
+      const value: unknown = glow.uniforms.glow?.value
+      if (value instanceof THREE.Color) {
+        // The sky shader writes its colour straight to the screen; read as
+        // sRGB here so the fog meets it at the horizon rather than a shade off.
+        const k = 1.25 * day
+        airColour.setRGB(value.r * k, value.g * k, value.b * k, THREE.SRGBColorSpace)
+        fog.color.copy(airColour)
+      }
+    }
+    const stars: unknown = shown?.sky.material
+    if (stars instanceof THREE.PointsMaterial) stars.opacity = 1 - low * day * 0.92
   }
 
   renderer.setAnimationLoop(() => {
@@ -306,6 +336,7 @@ export function startScene(
       shown.terrain.group.rotation.y = turn
       shown.clouds.rotation.y = turn * 1.15
       pose(shown, stage)
+      cloudsSeenFrom(shown.clouds, camera.position.length(), stage.scale, stage.clouds)
       shown.terrain.update(inPlanetFrame(camera.position, turn, stage.scale))
     }
     renderer.render(scene, camera)
@@ -337,6 +368,12 @@ export function startScene(
       renderer.dispose()
     },
   }
+}
+
+/** 0 below `from`, 1 above `to`, eased between. */
+function smooth(from: number, to: number, value: number): number {
+  const t = Math.min(1, Math.max(0, (value - from) / (to - from)))
+  return t * t * (3 - 2 * t)
 }
 
 const unit = (v: Vec3): Vec3 => {
@@ -374,12 +411,12 @@ function pose(planet: Shown, stage: Birth): void {
   planet.terrain.group.scale.setScalar(stage.scale)
   planet.clouds.scale.setScalar(stage.scale)
   planet.air.scale.setScalar(stage.scale)
-  const clouds: unknown = planet.clouds.material
-  if (clouds instanceof THREE.MeshStandardMaterial) clouds.opacity = CLOUD_OPACITY * stage.clouds
   const air: unknown = planet.air.material
   if (air instanceof THREE.ShaderMaterial) {
-    const strength = air.uniforms.strength
+    const { strength, outer, inner } = air.uniforms
     if (strength !== undefined) strength.value = stage.air
+    if (outer !== undefined) outer.value = AIR_RADIUS * stage.scale
+    if (inner !== undefined) inner.value = stage.scale
   }
 }
 
@@ -409,6 +446,9 @@ function buildSky(world: Planet, pixelRatio: number): THREE.Points {
       sizeAttenuation: false,
       vertexColors: true,
       toneMapped: false,
+      // Stars are far beyond the air and must not take the haze's colour.
+      fog: false,
+      transparent: true,
     }),
   )
 }
