@@ -45,8 +45,11 @@ self.addEventListener('fetch', (event) => {
   if (request.mode === 'navigate') {
     // Any ?seed= is the same page: the planet is made on the device, so the
     // cached shell serves every link.
+    // Past the browser's own cache too: GitHub Pages lets a page be kept for
+    // ten minutes, so a deploy reached a phone up to ten minutes late and
+    // the last build was what got looked at.
     event.respondWith(
-      fetch(request).catch(() =>
+      fetch(request.url, { cache: 'no-cache', credentials: 'same-origin' }).catch(() =>
         caches.match('index.html', { ignoreVary: true }).then((page) => page ?? Response.error()),
       ),
     )

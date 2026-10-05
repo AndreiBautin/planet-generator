@@ -20,6 +20,8 @@ import { shareLink } from '@/ui/share'
  * one that owns the state — which planet, at which dials.
  */
 const { config, warnings } = readConfig()
+const buildLabel = document.getElementById('build')
+if (buildLabel !== null) buildLabel.textContent = `build ${config.build}`
 setLogLevel(config.logLevel)
 for (const warning of warnings) logger.warn('config.invalid', { warning })
 

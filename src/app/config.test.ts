@@ -10,7 +10,13 @@ describe('configuration', () => {
 
   it('takes a known level', () => {
     expect(parseConfig({ VITE_LOG_LEVEL: 'error' }, false)).toEqual({
-      config: { logLevel: 'error', serviceWorker: true, assetBase: '/', developer: false },
+      config: {
+        logLevel: 'error',
+        serviceWorker: true,
+        assetBase: '/',
+        developer: false,
+        build: 'dev',
+      },
       warnings: [],
     })
   })
@@ -36,5 +42,11 @@ describe('configuration', () => {
     const result = parseConfig({ VITE_LOG_LEVEL: 'verbose' }, false)
     expect(result.config.logLevel).toBe('warn')
     expect(result.warnings).toHaveLength(1)
+  })
+
+  it('shows the commit a build was made from, short, and never anything else', () => {
+    expect(parseConfig({ VITE_BUILD: '07d421a9f3c2' }, false).config.build).toBe('07d421a')
+    expect(parseConfig({ VITE_BUILD: '<script>' }, false).config.build).toBe('dev')
+    expect(parseConfig({}, false).config.build).toBe('dev')
   })
 })

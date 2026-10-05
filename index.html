@@ -73,6 +73,13 @@
         color: var(--dim);
         letter-spacing: 0.06em;
       }
+      /* Which build is running: small, out of the way, there to be read when asked. */
+      .title .build {
+        margin-top: 0.15rem;
+        font-family: ui-monospace, 'Cascadia Mono', Menlo, monospace;
+        font-size: 0.65rem;
+        opacity: 0.45;
+      }
       .title .seed {
         font-family: ui-monospace, 'Cascadia Mono', Menlo, monospace;
         color: var(--ink);
@@ -248,6 +255,7 @@
     <header class="title">
       <h1 id="name">&nbsp;</h1>
       <p><span id="kind"></span> · seed <span class="seed" id="seed"></span></p>
+      <p class="build" id="build"></p>
     </header>
 
     <div class="dock">

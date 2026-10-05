@@ -53,6 +53,8 @@ jobs:
           # this one value.
           BASE_PATH: /${{ github.event.repository.name }}/
           VITE_LOG_LEVEL: warn
+          # Shown on screen, so a phone can say which build it is running.
+          VITE_BUILD: ${{ github.sha }}
         run: pnpm build
       - uses: actions/configure-pages@v6
       - uses: actions/upload-pages-artifact@v5

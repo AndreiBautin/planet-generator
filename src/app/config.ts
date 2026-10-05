@@ -19,6 +19,8 @@ export interface Config {
   readonly assetBase: string
   /** A development build: the tools that are never shipped, such as the frame recorder, may run. */
   readonly developer: boolean
+  /** The commit this build was made from, shortened; `dev` when there is none. */
+  readonly build: string
 }
 
 export interface ConfigResult {
@@ -31,6 +33,7 @@ export const DEFAULT_CONFIG: Config = {
   serviceWorker: true,
   assetBase: '/',
   developer: false,
+  build: 'dev',
 }
 
 export function parseConfig(env: Readonly<Record<string, unknown>>, dev: boolean): ConfigResult {
@@ -57,6 +60,10 @@ export function parseConfig(env: Readonly<Record<string, unknown>>, dev: boolean
       serviceWorker: !dev && DEFAULT_CONFIG.serviceWorker,
       assetBase,
       developer: dev,
+      build:
+        typeof env.VITE_BUILD === 'string' && /^[0-9a-f]{7,40}$/.test(env.VITE_BUILD)
+          ? env.VITE_BUILD.slice(0, 7)
+          : DEFAULT_CONFIG.build,
     },
     warnings,
   }
