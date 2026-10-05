@@ -1,0 +1,96 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deploy at a time, and never cancel one midway — a half-published
+# site is worse than an out-of-date one.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  # The deploy is gated on the same verification CI runs. A pipeline that
+  # can publish a commit which failed its own tests is decorative.
+  verify:
+    name: Verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm verify
+
+  build:
+    name: Build
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Build
+        env:
+          # A project page is served from /<repo>/. The asset paths, the
+          # manifest's scope and the service worker's scope all follow from
+          # this one value.
+          BASE_PATH: /${{ github.event.repository.name }}/
+          VITE_LOG_LEVEL: warn
+        run: pnpm build
+      - uses: actions/configure-pages@v6
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: dist
+
+  deploy:
+    name: Deploy to Pages
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v5
+
+      # A green deploy step means an upload succeeded. A green smoke test
+      # means the site answered with the app, its manifest and its worker.
+      - name: Smoke-test the live site
+        run: |
+          set -euo pipefail
+          url="${{ steps.deployment.outputs.page_url }}"
+          echo "Fetching $url"
+          for attempt in 1 2 3 4 5 6; do
+            if body=$(curl --fail --silent --show-error --location "$url"); then
+              break
+            fi
+            echo "Attempt $attempt failed; Pages may still be propagating."
+            sleep 10
+          done
+          echo "$body" | grep -q 'id="name"' \
+            || { echo "The response did not contain the app shell."; exit 1; }
+          echo "$body" | grep -q 'manifest.webmanifest' \
+            || { echo "The response did not link the web manifest."; exit 1; }
+          curl --fail --silent --show-error "${url}manifest.webmanifest" | grep -q '"display": "standalone"' \
+            || { echo "The manifest did not answer as an installable app."; exit 1; }
+          curl --fail --silent --show-error "${url}sw.js" | grep -q 'PRECACHE' \
+            || { echo "The service worker did not answer."; exit 1; }
+          echo "Live site responded with the app shell, a manifest and a service worker."

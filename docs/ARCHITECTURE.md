@@ -8,7 +8,7 @@ Two layers that matter, and two small helpers:
 src/
   generation/   pure: seed + dials → numbers (heights, colours, positions)
   render/       Three.js: turns those numbers into a scene and draws it
-  ui/           the controls (dials, buttons) — drives render
+  ui/           the controls (orbit, dials, buttons, share) — drives render
   app/          the clock and the config: the world, behind small ports
   shared/       the logger
   main.ts       the composition root
@@ -24,7 +24,9 @@ same on every device and in every release. Isolating it is what makes that
 testable in Node without a GPU.
 
 Rendering is not a domain and is not tested by unit tests; it is checked by
-eye (see [TESTING.md](TESTING.md)).
+eye (see [TESTING.md](TESTING.md)). What _is_ tested on that side is the
+logic kept apart from Three.js on purpose: the birth curve, the quality
+tiers and governor, and how a finger moves the camera.
 
 ## The rules are lint errors, not prose
 
@@ -44,25 +46,36 @@ reject it.
 
 ## One request, end to end
 
-Opening `http://localhost:5185/?seed=k3m9xqa`:
+Opening `https://andreibautin.github.io/planet-generator/?seed=k3m9xqa&w=70`:
 
-1. **`src/main.ts`** reads the config (`app/config.ts` → `parseConfig`) and
-   sets the log level.
-2. It reads `seed` from the URL with **`generation/seed.ts` → `parseSeed`**.
-   A missing or malformed seed reads as absent, and `newSeed` makes one from
-   `crypto.getRandomValues`; the URL is rewritten with `replaceState` so the
-   address bar is always a shareable link.
-3. **`generation/rng.ts` → `createRng(seed)`** hashes the seed (cyrb128) into
-   an sfc32 generator. `fork('placeholder')` derives an independent stream,
-   so adding a new feature later never reshapes what already existed.
-4. The colour drawn from that stream is handed to
-   **`render/scene.ts` → `startScene`**, which builds the renderer, camera,
-   light and mesh, and runs the frame loop from **`app/clock.ts`'s
-   `systemClock`**.
-
-When terrain arrives, step 4 becomes: generation builds a height and colour
-field for the sphere from the forked streams; render uploads it as geometry
-and shaders. The seam does not move.
+1. The **service worker** (`scripts/sw.js`, emitted as `sw.js` by the plugin
+   in `vite.config.ts` with the build's exact file list) answers from cache
+   if it has one and the network is down; otherwise the page loads normally.
+2. **`src/main.ts`** reads the config (`app/config.ts` → `parseConfig`), and
+   the link with **`app/link.ts` → `parseLink`**: the seed through
+   `generation/seed.ts` → `parseSeed`, the dials as whole percentages. Any of
+   them missing or garbled reads as absent or default; a fresh seed comes
+   from `crypto.getRandomValues`.
+3. **`render/quality.ts` → `pickQuality`** chooses the icosphere detail,
+   cloud texture size and pixel ratio from the screen and core count.
+4. `show` calls **`generation/planet.ts` → `createPlanet`** — cheap: it only
+   picks the kind (`kinds.ts`), name (`name.ts`) and noise functions, each
+   from its own named `fork` of the seed's `rng`. The name goes on screen at
+   once (`ui/hud.ts`).
+5. **`render/builder.ts`** posts the seed and dials to
+   **`render/build.worker.ts`**, which makes the same planet and runs the slow
+   part: **`render/surface-data.ts` → `sampleSurface`** asks `surfaceAt` for
+   height, biome and colour at every vertex, and `bakeClouds` asks
+   `generation/clouds.ts` → `cloudDensityAt` at every texel. The arrays come
+   back transferred, not copied. A request superseded by a newer one is
+   dropped.
+6. **`render/scene.ts` → `show`** turns the arrays into meshes
+   (`planet-mesh.ts`, `water.ts`, `clouds.ts`, `atmosphere.ts`, the starfield),
+   releases the previous planet's GPU memory, and starts the birth animation
+   (`birth.ts`). The frame loop reads the camera from **`ui/controls.ts`**
+   (pointer events → the pure **`ui/orbit.ts`**) and the time from
+   **`app/clock.ts`**, and the governor lowers the pixel ratio if typical
+   frames run slow.
 
 ## Where new code goes
 

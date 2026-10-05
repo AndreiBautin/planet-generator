@@ -106,3 +106,12 @@ window.addEventListener('popstate', () => {
 
 window.history.replaceState(null, '', linkFor(seed, dials))
 void show(true)
+
+// Installed and offline: the worker caches the app on first visit. Resolved
+// against the page, so it registers under whatever path the app is served
+// from (the root locally, /planet-generator/ on Pages).
+if (config.serviceWorker && 'serviceWorker' in navigator) {
+  navigator.serviceWorker.register(new URL('sw.js', document.baseURI)).catch(() => {
+    logger.warn('service-worker.failed')
+  })
+}

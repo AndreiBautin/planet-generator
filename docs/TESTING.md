@@ -17,8 +17,16 @@ shared. Nothing else would notice. So:
   changed consistently — but the actual numbers.
 - **Forks are independent** of each other and of draws from the parent, so
   adding a feature cannot reshape existing terrain.
-- **Parsing is total**: a malformed seed or config value degrades rather
-  than throws, and a config typo cannot switch on the wrong mode.
+- **The planet's shape** (`planet.test.ts`, `clouds.test.ts`): pinned
+  heights for known seeds, and the properties a reader would notice if they
+  broke — the water dial floods land, poles are icy on a temperate world, a
+  molten sea never freezes, every kind turns up, cover means cover.
+- **Parsing is total**: a malformed seed, link dial or config value degrades
+  rather than throws, and a config typo cannot switch on the wrong mode.
+- **The feel, as pure functions** (`orbit.test.ts`, `birth.test.ts`,
+  `quality.test.ts`): a flick coasts the same distance however the frames
+  fall, a finger that paused does not fling the planet, the birth lands
+  exactly on the finished planet, the governor never steps back up.
 
 Generation tests run in Node — no DOM, no WebGL — which also keeps the layer
 honest about not reaching for either.
@@ -32,6 +40,17 @@ honest about not reaching for either.
 - **Three.js itself**, and that a mesh was added to a scene: that is testing
   the library, or asserting the code calls what the test expected it to call.
 - **Frame timing and performance.** Measured in the browser with real
-  hardware when it matters, not in a unit test.
+  hardware when it matters, not in a unit test. The governor's _rule_ is
+  tested; whether a given phone needs it is not.
+- **The service worker and the worker.** Both are thin glue around browser
+  APIs that do not exist in Node. They were checked in a real browser
+  against a production build: the worker builds the planet off the main
+  thread (a New planet press returns in about a millisecond rather than half
+  a second), and with the server stopped a link still opens and generates
+  its planet. The deploy's smoke test fetches the manifest and the worker
+  from the live site.
+- **The birth animation on screen.** The agent's preview pane does not run
+  animation frames while hidden, so the animation was not watched; its
+  curve is tested, and it is applied in one small function (`pose`).
 - **A coverage percentage.** Coverage is reported (`pnpm test:coverage`) but
   not gated; a target produces tests written to raise a number.
