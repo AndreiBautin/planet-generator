@@ -1,0 +1,25 @@
+#!/bin/sh
+#
+# Runs the full verification gate before anything leaves this machine.
+# CI runs the same checks after the push; catching a failure here means
+# the broken commit never exists on the remote.
+#
+# Bypass for a genuine emergency:   git push --no-verify
+# (CI will still catch it.)
+
+set -e
+
+printf '\n[pre-push] Running pnpm verify — typecheck, lint, format, tests, build.\n'
+printf '[pre-push] Bypass with --no-verify if you must.\n\n'
+
+if ! command -v pnpm >/dev/null 2>&1; then
+  printf '[pre-push] pnpm not found on PATH; skipping verification.\n'
+  exit 0
+fi
+
+if ! pnpm verify; then
+  printf '\n[pre-push] BLOCKED — verification failed. Fix the above, or push with --no-verify.\n\n'
+  exit 1
+fi
+
+printf '\n[pre-push] All checks passed. Pushing.\n\n'

@@ -1,0 +1,36 @@
+{
+  "compilerOptions": {
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.app.tsbuildinfo",
+    "target": "ES2022",
+    "useDefineForClassFields": true,
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "skipLibCheck": true,
+
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "verbatimModuleSyntax": true,
+    "moduleDetection": "force",
+    "noEmit": true,
+
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "erasableSyntaxOnly": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUncheckedSideEffectImports": true,
+    "noImplicitOverride": true,
+
+    /* `noUncheckedIndexedAccess` because generation indexes into vertex,
+       height and noise arrays constantly, and an out-of-range read there
+       is a NaN that silently becomes a black triangle rather than an error.
+       `exactOptionalPropertyTypes` keeps "this dial was not set" distinct
+       from "this dial was set to undefined" in parsed parameters. */
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+
+    "paths": { "@/*": ["./src/*"] },
+    "types": ["vite/client"]
+  },
+  "include": ["src"]
+}

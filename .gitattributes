@@ -1,0 +1,14 @@
+# Every text file is LF in the repository and the working tree on every
+# platform. Without it a Windows checkout gets CRLF, Prettier fails
+# locally, and CI on Linux passes anyway — a formatting gate only one
+# operating system can satisfy.
+* text=auto eol=lf
+
+*.png    binary
+*.jpg    binary
+*.ico    binary
+*.woff2  binary
+pnpm-lock.yaml linguist-generated=true
+
+# start-app.bat is run by cmd.exe, which is happiest with CRLF.
+*.bat text eol=crlf
