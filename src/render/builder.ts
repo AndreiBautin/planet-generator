@@ -5,6 +5,7 @@ import { logger } from '@/shared/logger'
 import type { WorkRequest, WorkResult } from './build-protocol'
 import type { PatchKey } from './patches/cube'
 import type { PatchData } from './patches/patch-data'
+import type { Scatter } from './patches/scatter'
 import { answer } from './work'
 
 /**
@@ -20,6 +21,7 @@ import { answer } from './work'
 export interface Builder {
   readonly clouds: (seed: Seed, dials: Dials, width: number) => Promise<Uint8Array>
   readonly patch: (seed: Seed, dials: Dials, key: PatchKey, segments: number) => Promise<PatchData>
+  readonly features: (seed: Seed, dials: Dials, key: PatchKey) => Promise<Scatter>
 }
 
 interface Lane {
@@ -73,14 +75,21 @@ export function createBuilder(cores: number): Builder {
     clouds: async (seed, dials, width) => {
       next += 1
       const result = await run({ id: next, kind: 'clouds', seed, dials, width })
-      if (result.kind !== 'clouds') throw new Error('builder answered clouds with a patch')
+      if (result.kind !== 'clouds') throw new Error('builder answered clouds with something else')
       return result.texture
     },
     patch: async (seed, dials, key, segments) => {
       next += 1
       const result = await run({ id: next, kind: 'patch', seed, dials, key, segments })
-      if (result.kind !== 'patch') throw new Error('builder answered a patch with clouds')
+      if (result.kind !== 'patch') throw new Error('builder answered a patch with something else')
       return result.patch
+    },
+    features: async (seed, dials, key) => {
+      next += 1
+      const result = await run({ id: next, kind: 'features', seed, dials, key })
+      if (result.kind !== 'features')
+        throw new Error('builder answered features with something else')
+      return result.features
     },
   }
 }

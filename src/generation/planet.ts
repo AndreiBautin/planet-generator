@@ -56,6 +56,10 @@ export interface Surface {
   readonly biome: Biome
   /** Linear RGB, each 0 to 1. */
   readonly colour: Rgb
+  /** How wet the ground is, 0 to 1: the field the biomes' colours already read. */
+  readonly moisture: number
+  /** How warm, around −1 to 1: climate less latitude and height. */
+  readonly warmth: number
 }
 
 /** Clamp a dial to its range; a dial from a link is never trusted. */
@@ -127,7 +131,13 @@ export function surfaceAt(planet: Planet, x: number, y: number, z: number): Surf
   const warmth =
     planet.climate - Math.abs(uy) * 1.15 - Math.max(0, height) * 0.9 + (wet - 0.5) * 0.45
   const biome = biomeFor(planet, height, warmth)
-  return { height, biome, colour: colourFor(planet.palette, biome, height, wet) }
+  return {
+    height,
+    biome,
+    colour: colourFor(planet.palette, biome, height, wet),
+    moisture: wet,
+    warmth,
+  }
 }
 
 function biomeFor(planet: Planet, height: number, warmth: number): Biome {

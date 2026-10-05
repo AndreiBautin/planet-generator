@@ -31,6 +31,8 @@ export interface Quality {
   readonly patchCache: number
   /** Patch requests out at once: more fills the view faster and uses more of the workers. */
   readonly inFlight: number
+  /** How far from the camera trees, rocks and floes stand, in planet radii. */
+  readonly featureRange: number
   /** Cloud texture width; its height is half. */
   readonly cloudWidth: number
   readonly pixelRatio: number
@@ -49,6 +51,7 @@ export function pickQuality(device: Device): Quality {
     maxLevel: phone ? 8 : 9,
     patchCache: phone ? (modest ? 450 : 600) : 1200,
     inFlight: phone ? 12 : 24,
+    featureRange: phone ? (modest ? 0.05 : 0.07) : 0.11,
     cloudWidth: phone ? 512 : 1024,
     pixelRatio: Math.min(device.pixelRatio, modest ? 1.5 : 2),
   }

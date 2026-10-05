@@ -1,5 +1,6 @@
-import { surfaceAt, type Planet } from '@/generation/planet'
+import { surfaceAt, type Planet, type Surface } from '@/generation/planet'
 import { fineReliefAt, fineReliefWeight } from '@/generation/relief'
+import { patternAt } from '@/generation/features'
 
 import { fromPalette } from '../colour'
 import { liftOf } from '../surface-data'
@@ -32,6 +33,12 @@ export interface PatchData {
   readonly colours: Float32Array
   /** Whether any of the patch lies under the sea, so it needs water drawn over it. */
   readonly hasSea: boolean
+  /**
+   * How the ground reads close up, four weights a vertex — canopy, sand,
+   * snow, stone (see `patternAt`) — which the ground shader draws as tree
+   * crowns, wind ripples, carved ridges and cracks.
+   */
+  readonly pattern: Float32Array
 }
 
 /** Vertices in a patch: the grid, then four edges' worth of skirt. */
@@ -88,6 +95,8 @@ export function samplePatch(planet: Planet, key: PatchKey, segments: number): Pa
   const normals = new Float32Array(vertexCount(segments) * 3)
   const colours = new Float32Array(vertexCount(segments) * 3)
   const heights = new Float32Array(side * side)
+  const surfaces: Surface[] = []
+  const pattern = new Float32Array(vertexCount(segments) * 4)
   let hasSea = false
 
   for (let j = -1; j <= segments + 1; j += 1) {
@@ -107,6 +116,7 @@ export function samplePatch(planet: Planet, key: PatchKey, segments: number): Pa
       positions[out + 1] = y * radius
       positions[out + 2] = z * radius
       heights[j * side + i] = surface.height
+      surfaces[j * side + i] = surface
       // A little light and shade from the same fine noise, so a plain of
       // one biome is not one flat colour.
       const shade = surface.height > 0 ? 0.9 + fine * 0.15 : 1
@@ -143,13 +153,21 @@ export function samplePatch(planet: Planet, key: PatchKey, segments: number): Pa
       // cliff, and a slope the same colour as the plain beneath it reads as
       // a painted bump rather than a hillside.
       const height = heights[j * side + i] ?? 0
+      const px = positions[out] ?? 0
+      const py = positions[out + 1] ?? 0
+      const pz = positions[out + 2] ?? 0
+      const radial = Math.hypot(px, py, pz) || 1
+      const steep = 1 - (nx * px + ny * py + nz * pz) / length / radial
+      const here = surfaces[j * side + i]
+      if (here !== undefined) {
+        const look = patternAt(planet, here, steep)
+        const at = (j * side + i) * 4
+        pattern[at] = look.canopy
+        pattern[at + 1] = look.sand
+        pattern[at + 2] = look.snow
+        pattern[at + 3] = look.stone
+      }
       if (height > 0.03) {
-        const px = positions[out] ?? 0
-        const py = positions[out + 1] ?? 0
-        const pz = positions[out + 2] ?? 0
-        const radial = Math.hypot(px, py, pz) || 1
-        const upright = (nx * px + ny * py + nz * pz) / length / radial
-        const steep = 1 - upright
         const rock = Math.min(1, Math.max(0, (steep - ROCK_FROM) / (ROCK_FULL - ROCK_FROM)))
         if (rock > 0) {
           colours[out] = mix(colours[out] ?? 0, stone.r, rock)
@@ -172,11 +190,12 @@ export function samplePatch(planet: Planet, key: PatchKey, segments: number): Pa
         normals[skirt * 3 + axis] = normals[vertex * 3 + axis] ?? 0
         colours[skirt * 3 + axis] = colours[vertex * 3 + axis] ?? 0
       }
+      for (let k = 0; k < 4; k += 1) pattern[skirt * 4 + k] = pattern[vertex * 4 + k] ?? 0
       skirt += 1
     }
   }
 
-  return { positions, normals, colours, hasSea }
+  return { positions, normals, colours, hasSea, pattern }
 }
 
 const mix = (from: number, to: number, t: number): number => from + (to - from) * t

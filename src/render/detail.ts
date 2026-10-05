@@ -1,25 +1,30 @@
 import type * as THREE from 'three'
 
 /**
- * Detail finer than any patch carries, drawn per pixel: grain and small
- * bumps on the ground, and moving ripples on the water, near the camera.
+ * Detail finer than any patch carries, drawn per pixel, so that up close
+ * every kind of ground and sea has a texture of its own rather than a
+ * smooth wash of one colour.
  *
- * The mesh is only as fine as the patches can be made in time — a vertex
- * every few hundredths of a degree at best — so close up, land between
- * vertices was a smooth gradient of one colour, and a dive from orbit
- * ended in plastic. A noise sampled per pixel in the planet's own frame
- * costs no patches at all, sits still on the ground as the planet turns,
- * and fades out with distance, where it would only shimmer.
+ * - **Ground**: grain and small bumps everywhere, and four patterns weighted
+ *   by what the ground is (`patternAt`): a forest seen from above breaks
+ *   into tree crowns, sand into wind ripples, snow into carved ridges with
+ *   the odd glint, and stone into cracks. The patterns carry the look beyond
+ *   where single trees and rocks stand.
+ * - **Sea**: moving ripples, foam where it meets a coast, the odd whitecap,
+ *   and lighter water over the shallows.
+ * - **Lava**: a crust of plates drifting slowly, split by glowing seams that
+ *   pulse.
  *
- * Added to Three's own materials through `onBeforeCompile`, so the lighting,
- * the fog and the shadows of the standard material all still apply.
+ * All sampled in the planet's own frame, so it sits still on the ground as
+ * the planet turns, and faded out with distance, where it would only
+ * shimmer. Added to Three's own materials through `onBeforeCompile`, so the
+ * lighting and the fog of the standard material still apply.
  */
 
-/** Seconds, for the water's ripples; the scene advances it from the clock. */
+/** Seconds, for the water and the lava; the scene advances it from the clock. */
 export const DETAIL_TIME = { value: 0 }
 
 const NOISE = /* glsl */ `
-  varying vec3 vDetailPosition;
   // A hash that holds up at large coordinates, unlike the sin() kind,
   // which degrades on mobile GPUs well before a few thousand.
   float detailHash(vec3 p) {
@@ -42,6 +47,34 @@ const NOISE = /* glsl */ `
         u.y),
       u.z);
   }
+  // Cells: the distance to the nearest and second-nearest seed point, and an
+  // id for the nearest. Crowns, cracks and lava plates are all cells.
+  vec3 detailCells(vec3 p) {
+    vec3 i = floor(p);
+    vec3 f = fract(p);
+    float f1 = 8.0;
+    float f2 = 8.0;
+    float id = 0.0;
+    for (int z = -1; z <= 1; z++) {
+      for (int y = -1; y <= 1; y++) {
+        for (int x = -1; x <= 1; x++) {
+          vec3 g = vec3(float(x), float(y), float(z));
+          vec3 cell = i + g;
+          vec3 o = vec3(detailHash(cell), detailHash(cell + 17.13), detailHash(cell + 41.7));
+          vec3 r = g + o - f;
+          float d = dot(r, r);
+          if (d < f1) {
+            f2 = f1;
+            f1 = d;
+            id = detailHash(cell + 7.7);
+          } else if (d < f2) {
+            f2 = d;
+          }
+        }
+      }
+    }
+    return vec3(sqrt(f1), sqrt(f2), id);
+  }
   // Tilt a normal by a height's change across the pixel — Three's own bump
   // mapping, under another name so it cannot collide with a bump map's.
   vec3 detailBump(vec3 position, vec3 normal, vec2 slope, float facing) {
@@ -55,37 +88,93 @@ const NOISE = /* glsl */ `
   }
 `
 
-const VARYING = /* glsl */ `
-  varying vec3 vDetailPosition;
-`
-
-/** Pass the planet-frame position through, for noise that stays on the ground. */
-function passPosition(shader: THREE.WebGLProgramParametersWithUniforms): void {
-  shader.vertexShader = VARYING + shader.vertexShader
-  shader.vertexShader = shader.vertexShader.replace(
-    '#include <begin_vertex>',
-    '#include <begin_vertex>\n  vDetailPosition = position;',
-  )
-  shader.fragmentShader = NOISE + shader.fragmentShader
+/** Pass the planet-frame position (and any extra attribute) through to the fragment shader. */
+function passThrough(
+  shader: THREE.WebGLProgramParametersWithUniforms,
+  extra: { readonly attribute: string; readonly type: string } | undefined,
+): void {
+  const declare =
+    extra === undefined
+      ? ''
+      : `attribute ${extra.type} ${extra.attribute};\nvarying ${extra.type} v_${extra.attribute};\n`
+  const assign = extra === undefined ? '' : `\n  v_${extra.attribute} = ${extra.attribute};`
+  shader.vertexShader =
+    `varying vec3 vDetailPosition;\n${declare}` +
+    shader.vertexShader.replace(
+      '#include <begin_vertex>',
+      `#include <begin_vertex>\n  vDetailPosition = position;${assign}`,
+    )
+  const varying = extra === undefined ? '' : `varying ${extra.type} v_${extra.attribute};\n`
+  shader.fragmentShader =
+    `uniform float detailTime;\nvarying vec3 vDetailPosition;\n${varying}` +
+    NOISE +
+    shader.fragmentShader
+  shader.uniforms.detailTime = DETAIL_TIME
 }
 
-/** Grain in the ground's colour and small bumps in its light, near the camera. */
+/** The ground: grain and bumps, and the pattern of whatever the ground is. */
 export function withGroundDetail(material: THREE.MeshStandardMaterial): THREE.MeshStandardMaterial {
   material.onBeforeCompile = (shader) => {
-    passPosition(shader)
+    passThrough(shader, { attribute: 'pattern', type: 'vec4' })
     shader.fragmentShader = shader.fragmentShader
       .replace(
         '#include <color_fragment>',
         /* glsl */ `#include <color_fragment>
         float detailDistance = length(vViewPosition);
-        // Two scales: one a few metres across, seen from a low glide, and
-        // one finer, seen only right above the ground.
+        // Two scales of grain: one seen from a low glide, one only right
+        // above the ground.
         float detailNear = 1.0 - smoothstep(0.03, 0.4, detailDistance);
         float detailClose = 1.0 - smoothstep(0.008, 0.07, detailDistance);
+        float patternFar = 1.0 - smoothstep(0.12, 0.7, detailDistance);
         float detailHeight =
           (detailNoise(vDetailPosition * 650.0) - 0.5) * detailNear +
           (detailNoise(vDetailPosition * 2600.0) - 0.5) * 0.7 * detailClose;
-        diffuseColor.rgb *= 1.0 + detailHeight * 0.45;`,
+        float detailShade = 1.0;
+
+        // Canopy: a forest from above is crowns with dark gaps, no two
+        // crowns the same shade, in groves of lighter and darker wood.
+        float canopy = v_pattern.x * patternFar;
+        if (canopy > 0.02) {
+          vec3 crowns = detailCells(vDetailPosition * 1400.0);
+          float crown = 1.0 - smoothstep(0.2, 0.75, crowns.x);
+          float tone = mix(0.5, 1.12, crown) * (0.82 + crowns.z * 0.36);
+          tone *= 0.85 + detailNoise(vDetailPosition * 220.0) * 0.3;
+          detailShade *= mix(1.0, tone, canopy);
+          detailHeight += (crown - 0.5) * 0.8 * canopy;
+        }
+
+        // Sand: ripples the wind has drawn, bent by a slower noise so they
+        // are never ruled lines.
+        float sand = v_pattern.y * detailNear;
+        if (sand > 0.02) {
+          float bend = detailNoise(vDetailPosition * 400.0) * 6.0;
+          float ripple = sin(dot(vDetailPosition, vec3(1900.0, 600.0, 1300.0)) + bend);
+          detailShade *= 1.0 + ripple * 0.06 * sand;
+          detailHeight += ripple * 0.35 * sand;
+        }
+
+        // Snow: ridges carved along the wind, and a glint here and there
+        // right at your feet.
+        float snow = v_pattern.z * patternFar;
+        if (snow > 0.02) {
+          float ridge = detailNoise(vDetailPosition * vec3(500.0, 1500.0, 500.0));
+          detailHeight += (ridge - 0.5) * 0.9 * snow;
+          detailShade *= 1.0 + (ridge - 0.5) * 0.1 * snow;
+          float glint = step(0.986, detailHash(floor(vDetailPosition * 9000.0)));
+          detailShade += glint * 0.5 * snow * detailClose;
+        }
+
+        // Stone: cracked into blocks, each a slightly different grey.
+        float stone = v_pattern.w * patternFar;
+        if (stone > 0.02) {
+          vec3 blocks = detailCells(vDetailPosition * 900.0);
+          float crack = 1.0 - smoothstep(0.0, 0.07, blocks.y - blocks.x);
+          detailShade *= 1.0 - crack * 0.45 * stone;
+          detailShade *= 1.0 + (blocks.z - 0.5) * 0.24 * stone;
+          detailHeight -= crack * 0.6 * stone;
+        }
+
+        diffuseColor.rgb *= detailShade * (1.0 + detailHeight * 0.3);`,
       )
       .replace(
         '#include <normal_fragment_maps>',
@@ -101,22 +190,38 @@ export function withGroundDetail(material: THREE.MeshStandardMaterial): THREE.Me
   return material
 }
 
-/** Ripples moving across the water's surface, near the camera; the colour is left alone. */
+/** The sea: ripples, foam at the coast, whitecaps, lighter shallows. */
 export function withWaterDetail(material: THREE.Material): THREE.Material {
   material.onBeforeCompile = (shader) => {
-    shader.uniforms.detailTime = DETAIL_TIME
-    passPosition(shader)
-    shader.fragmentShader =
-      'uniform float detailTime;\n' +
-      shader.fragmentShader.replace(
+    passThrough(shader, { attribute: 'depth', type: 'float' })
+    shader.fragmentShader = shader.fragmentShader
+      .replace(
+        '#include <color_fragment>',
+        /* glsl */ `#include <color_fragment>
+        float seaDistance = length(vViewPosition);
+        float seaNear = 1.0 - smoothstep(0.02, 0.3, seaDistance);
+        vec3 drift = vec3(detailTime * 0.9, detailTime * 0.6, -detailTime * 0.7) * 0.001;
+        // Lighter over the shallows, where the floor shows through.
+        float shallows = 1.0 - smoothstep(0.0, 0.004, v_depth);
+        diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * 1.7, shallows * 0.45);
+        // Foam where the sea meets the land, broken and moving.
+        float shore = 1.0 - smoothstep(0.0, 0.0009, v_depth);
+        float churn = detailNoise(vDetailPosition * 1500.0 + drift * 1500.0);
+        float foam = shore * smoothstep(0.45, 0.8, churn + shore * 0.35) * (1.0 - smoothstep(0.05, 0.5, seaDistance));
+        // The odd whitecap out at sea, close enough to see.
+        float caps = smoothstep(0.9, 0.98, detailNoise(vDetailPosition * 1100.0 - drift * 1100.0)) * seaNear * 0.4;
+        float white = clamp(foam + caps, 0.0, 1.0);
+        diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.92, 0.95, 0.97), white);
+        diffuseColor.a = mix(diffuseColor.a, 0.95, white);`,
+      )
+      .replace(
         '#include <normal_fragment_maps>',
         /* glsl */ `#include <normal_fragment_maps>
         {
-          float rippleNear = 1.0 - smoothstep(0.02, 0.3, length(vViewPosition));
-          vec3 drift = vec3(detailTime * 0.9, detailTime * 0.6, -detailTime * 0.7);
+          vec3 swell = vec3(detailTime * 0.9, detailTime * 0.6, -detailTime * 0.7);
           float ripple =
-            (detailNoise(vDetailPosition * 900.0 + drift) +
-              detailNoise(vDetailPosition * 2200.0 - drift * 1.7) * 0.6) * rippleNear;
+            (detailNoise(vDetailPosition * 900.0 + swell) +
+              detailNoise(vDetailPosition * 2200.0 - swell * 1.7) * 0.6) * seaNear;
           normal = detailBump(
             -vViewPosition,
             normal,
@@ -126,5 +231,33 @@ export function withWaterDetail(material: THREE.Material): THREE.Material {
       )
   }
   material.customProgramCacheKey = () => 'planet-water-detail'
+  return material
+}
+
+/** Lava: a drifting crust of plates split by glowing, pulsing seams. */
+export function withLavaDetail(material: THREE.Material): THREE.Material {
+  material.onBeforeCompile = (shader) => {
+    passThrough(shader, undefined)
+    shader.fragmentShader = shader.fragmentShader.replace(
+      '#include <emissivemap_fragment>',
+      /* glsl */ `#include <emissivemap_fragment>
+      {
+        float lavaDistance = length(vViewPosition);
+        float far = smoothstep(0.3, 1.5, lavaDistance);
+        vec3 flow = vec3(detailTime * 0.0006, detailTime * 0.0004, -detailTime * 0.0005);
+        vec3 plates = detailCells((vDetailPosition + flow) * 70.0);
+        float seam = 1.0 - smoothstep(0.0, 0.12, plates.y - plates.x);
+        if (far < 0.99) {
+          vec3 chips = detailCells((vDetailPosition + flow * 3.0) * 700.0);
+          float fine = 1.0 - smoothstep(0.0, 0.1, chips.y - chips.x);
+          seam = max(seam, fine * (1.0 - far));
+        }
+        float pulse = 0.85 + 0.15 * sin(detailTime * 1.3 + plates.z * 6.28);
+        totalEmissiveRadiance *= mix(0.12 + plates.z * 0.15, 2.2 * pulse, seam);
+        diffuseColor.rgb *= mix(0.4, 1.0, seam);
+      }`,
+    )
+  }
+  material.customProgramCacheKey = () => 'planet-lava-detail'
   return material
 }

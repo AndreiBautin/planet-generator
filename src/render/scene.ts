@@ -9,9 +9,10 @@ import { AIR_RADIUS, buildAtmosphere } from './atmosphere'
 import { BORN, birthAt, type Birth } from './birth'
 import type { Builder } from './builder'
 import { cloudsFromTexture, cloudsSeenFrom } from './clouds'
-import { DETAIL_TIME, withGroundDetail, withWaterDetail } from './detail'
+import { DETAIL_TIME, withGroundDetail, withLavaDetail, withWaterDetail } from './detail'
 import type { Vec3 } from './patches/cube'
 import type { ViewCone } from './patches/lod'
+import { featureMaterial } from './patches/feature-models'
 import { Terrain } from './patches/terrain'
 import { nextPixelRatio, typicalFrame, type Quality } from './quality'
 import { waterMaterial } from './water'
@@ -141,12 +142,16 @@ export function startScene(
         peak: world.relief * 1.1 + 0.005,
         inFlight: quality.inFlight,
         cached: quality.patchCache,
+        flora: { range: quality.featureRange, inFlight: 6, cached: 260 },
       },
       {
         ground: withGroundDetail(
           new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.92, metalness: 0 }),
         ),
-        water: world.molten ? waterMaterial(world) : withWaterDetail(waterMaterial(world)),
+        water: world.molten
+          ? withLavaDetail(waterMaterial(world))
+          : withWaterDetail(waterMaterial(world)),
+        features: featureMaterial(),
       },
     )
 

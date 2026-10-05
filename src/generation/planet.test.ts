@@ -77,7 +77,14 @@ describe('a planet', () => {
 
   it('reads a point off the sphere as the point on it, whatever its length', () => {
     const planet = createPlanet(seed('k3m9xqa'))
-    expect(surfaceAt(planet, 0.2, 0.5, -0.8)).toEqual(surfaceAt(planet, 2, 5, -8))
+    const short = surfaceAt(planet, 0.2, 0.5, -0.8)
+    const long = surfaceAt(planet, 2, 5, -8)
+    // The two directions normalise to the same point within a rounding, so
+    // the readings agree to well past anything that could be seen.
+    expect(long.biome).toBe(short.biome)
+    for (const field of ['height', 'moisture', 'warmth'] as const) {
+      expect(long[field]).toBeCloseTo(short[field], 12)
+    }
   })
 
   /* The water dial must do what it says, or the control is decoration. */

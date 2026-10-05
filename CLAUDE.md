@@ -63,6 +63,23 @@ checks nothing. The pre-push hook runs `pnpm verify`; CI runs the same.
 - **Refine a step at a time.** The terrain asks for one level below what it
   is drawing, not for the leaf; asking for the leaf left the whole faces up
   until the finest ground arrived.
+- **Features stand on a fixed grid, not on the patches.** Trees, scrub,
+  cacti, rocks, boulders, spires and floes come from `featuresAt` and
+  `scatterPatch` (`generation/features.ts`, `render/patches/scatter.ts`):
+  one candidate per grid cell of `CELL` on each cube face, decided by a hash
+  of the cell, so a feature is the same one whatever patch carries it and a
+  parent tile is exactly the union of its children (tested). They stream in
+  their own level-7 tiles near the camera (`flora.ts`, owned by `Terrain`
+  so they turn with the planet), because the ground's finest patches only
+  reach a flight's height away and a forest that existed only underneath
+  is no forest. Past the feature range the ground shader carries the look:
+  `patternAt` writes canopy, sand, snow and stone per vertex and
+  `withGroundDetail` draws crowns, ripples, wind ridges and cracks from it.
+  The sea gets a depth attribute for shallows and shore foam, and a molten
+  sea its own plates-and-seams shader.
+- **Trees are green first and the palette second.** An ochre world's
+  "lush" painted orange forests that read as dead ones; the forest also
+  stops at real heat however wet the ground is.
 - **The sky shader only fills the sky.** Haze over ground is the scene's
   fog. Laying the shader over everything with the ground taken as a sphere
   washed low land out white, because real hills stand above that sphere.

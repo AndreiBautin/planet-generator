@@ -124,3 +124,32 @@ export function ancestorAt(key: PatchKey, level: number): PatchKey {
   if (shift <= 0) return key
   return { face: key.face, level, x: key.x >> shift, y: key.y >> shift }
 }
+
+/**
+ * The tiles of features to stand near the camera: patches at `level`
+ * within `range` of it, and in view when the view is known. Found by walking
+ * the quadtree down from the faces and leaving any patch wholly out of range
+ * — so far from the ground the answer is nothing, at no cost.
+ */
+export function featureTiles(
+  camera: Vec3,
+  level: number,
+  range: number,
+  view?: ViewCone,
+): readonly PatchKey[] {
+  const tiles: PatchKey[] = []
+  const visit = (key: PatchKey): void => {
+    const centre = centreOf(key)
+    const gap = Math.hypot(camera[0] - centre[0], camera[1] - centre[1], camera[2] - centre[2])
+    const reach = patchAngle(key.level) * 0.75
+    if (gap - reach > range) return
+    if (view !== undefined && key.level >= UNSEEN_LEVEL && unseen(key, camera, view)) return
+    if (key.level === level) {
+      tiles.push(key)
+      return
+    }
+    for (const child of childrenOf(key)) visit(child)
+  }
+  for (const root of ROOTS) visit(root)
+  return tiles
+}

@@ -31,6 +31,13 @@ shared. Nothing else would notice. So:
   glide follows is the ground the patches draw.
 - **Fine relief leaves shared planets alone** (`relief.test.ts`): it lives
   on its own fork and the pinned surface heights do not move.
+- **Features and surface patterns** (`features.test.ts`,
+  `scatter.test.ts`): forests where it is wet and mild, pines where it is
+  cool or high, no forest in real heat, cacti in dry heat, rock on cliffs,
+  floes on a frozen sea, stacks only off a coast; a scatter is
+  deterministic, nothing stands on coarse patches, a parent tile holds
+  exactly its children's features, every feature stands on the ground the
+  patches draw (a floe on the sea), and no two are the same size and shade.
 - **Flight** (`glide.test.ts`, `flight.test.ts`): a glide stays on the
   sphere, rises before a ridge, never comes below its clearance over bumpy
   ground, turns the way the finger goes; a dive turned back mid-way rises
@@ -64,7 +71,9 @@ honest about not reaching for either.
 - **The terrain streaming, the sky and the fog on screen.** `terrain.ts`
   and the scene are glue around Three.js and workers; they were checked by
   flying in a real browser — patches refine with no cracks, the dive and
-  Land work, the desert sky is orange and the night sky dark. The agent's
+  Land work, the desert sky is orange and the night sky dark. Features and the
+  ground patterns were judged the same way, on temperate, desert, ocean,
+  frozen and volcanic seeds. The agent's
   preview pane draws only when it takes a screenshot, so how quickly the
   ground fills in while flying was not seen at real frame rates, and **a
   real phone was not tried**.

@@ -6,6 +6,7 @@ import type { Builder } from '../builder'
 import { SEA_RADIUS } from '../water'
 import { keyOf, parentOf, ROOTS, type PatchKey, type Vec3 } from './cube'
 import { ancestorAt, centreOf, selectLeaves, type LodParams, type ViewCone } from './lod'
+import { Flora, type FloraOptions } from './flora'
 import { patchIndex, type PatchData } from './patch-data'
 
 /**
@@ -15,6 +16,8 @@ import { patchIndex, type PatchData } from './patch-data'
  * so there is always a planet to draw, however coarse.
  */
 export interface TerrainOptions extends LodParams {
+  /** The features standing on the ground near the camera. */
+  readonly flora: FloraOptions
   /** Requests out at once; more is faster to fill and slower to change its mind. */
   readonly inFlight: number
   /** Patches kept after they stop being drawn, for flying back over them. */
@@ -24,6 +27,7 @@ export interface TerrainOptions extends LodParams {
 export interface TerrainMaterials {
   readonly ground: THREE.Material
   readonly water: THREE.Material
+  readonly features: THREE.Material
 }
 
 interface Entry {
@@ -45,6 +49,7 @@ export class Terrain {
   private readonly builder: Builder
   private readonly options: TerrainOptions
   private readonly materials: TerrainMaterials
+  private readonly flora: Flora
 
   constructor(
     world: Planet,
@@ -56,6 +61,10 @@ export class Terrain {
     this.builder = builder
     this.options = options
     this.materials = materials
+    // Features ride with the ground: a child of its group, they turn with the
+    // planet and grow with it as it is born.
+    this.flora = new Flora(world, builder, options.flora, materials.features)
+    this.group.add(this.flora.group)
     // One array of triangles for every patch; each geometry wraps it in an
     // attribute of its own, because disposing a geometry frees its index's
     // GPU buffer and a shared attribute would be freed from under the rest.
@@ -80,6 +89,7 @@ export class Terrain {
   update(camera: Vec3, view?: ViewCone): void {
     if (this.disposed) return
     this.frame += 1
+    this.flora.update(camera, view)
     const leaves = selectLeaves(camera, this.options, view)
     const shown = new Set<string>()
 
@@ -150,6 +160,7 @@ export class Terrain {
     this.entries.clear()
     this.materials.ground.dispose()
     this.materials.water.dispose()
+    this.flora.dispose()
   }
 
   private request(key: PatchKey): void {
@@ -178,6 +189,7 @@ export class Terrain {
     ground.setAttribute('position', new THREE.BufferAttribute(patch.positions, 3))
     ground.setAttribute('normal', new THREE.BufferAttribute(patch.normals, 3))
     ground.setAttribute('color', new THREE.BufferAttribute(patch.colours, 3))
+    ground.setAttribute('pattern', new THREE.BufferAttribute(patch.pattern, 4))
     ground.setIndex(new THREE.BufferAttribute(this.index, 1))
     ground.computeBoundingSphere()
     node.add(new THREE.Mesh(ground, this.materials.ground))
@@ -188,11 +200,15 @@ export class Terrain {
       const count = patch.positions.length / 3
       const positions = new Float32Array(count * 3)
       const normals = new Float32Array(count * 3)
+      // How deep the floor lies under the sea here: foam where it is nought,
+      // lighter water where it is little.
+      const depth = new Float32Array(count)
       for (let vertex = 0; vertex < count; vertex += 1) {
         const x = patch.positions[vertex * 3] ?? 0
         const y = patch.positions[vertex * 3 + 1] ?? 0
         const z = patch.positions[vertex * 3 + 2] ?? 1
         const length = Math.hypot(x, y, z) || 1
+        depth[vertex] = SEA_RADIUS - length
         normals[vertex * 3] = x / length
         normals[vertex * 3 + 1] = y / length
         normals[vertex * 3 + 2] = z / length
@@ -203,6 +219,7 @@ export class Terrain {
       const water = new THREE.BufferGeometry()
       water.setAttribute('position', new THREE.BufferAttribute(positions, 3))
       water.setAttribute('normal', new THREE.BufferAttribute(normals, 3))
+      water.setAttribute('depth', new THREE.BufferAttribute(depth, 1))
       water.setIndex(new THREE.BufferAttribute(this.index, 1))
       water.computeBoundingSphere()
       const sea = new THREE.Mesh(water, this.materials.water)
@@ -231,9 +248,17 @@ export class Terrain {
 
 const gap = (a: Vec3, b: Vec3): number => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2])
 
-/** Geometry only: the materials and the index are shared and outlive a patch. */
+/**
+ * Geometry only: the materials and the index are shared and outlive a patch,
+ * and so are the plant models — an instanced mesh frees its own instances
+ * and leaves its model for the next patch.
+ */
 function free(node: THREE.Group): void {
   node.traverse((child) => {
+    if (child instanceof THREE.InstancedMesh) {
+      child.dispose()
+      return
+    }
     if (child instanceof THREE.Mesh) {
       const geometry: unknown = child.geometry
       if (geometry instanceof THREE.BufferGeometry) geometry.dispose()
