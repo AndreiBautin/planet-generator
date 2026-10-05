@@ -7,7 +7,25 @@ import type { Planet } from '@/generation/planet'
  * arrays, so they run in a worker and cross back without a copy.
  */
 
-export { liftOf } from '@/generation/ground'
+/** How far above the sea's surface the lowest land sits. */
+const LAND_CLEARANCE = 0.003
+
+/**
+ * The radius a surface height is drawn at, above 1. Land rises with the
+ * relief and stands just clear of the water, so the coast does not flicker
+ * where the two surfaces meet; the sea floor sinks more gently, so the
+ * water over it is shallow at the coast.
+ *
+ * The step up to that clearance is a ramp across the shore rather than a
+ * jump at height zero. A jump drew a one-cell cliff at every coast, which
+ * from orbit was invisible and from low down was a staircase following the
+ * grid.
+ */
+export function liftOf(height: number, relief: number): number {
+  const base = height > 0 ? height * relief * 0.7 : height * relief * 0.35
+  const t = Math.min(1, Math.max(0, (height + 0.01) / 0.03))
+  return base + LAND_CLEARANCE * t * t * (3 - 2 * t)
+}
 
 /**
  * Cloud opacity as a texture the width given and half as tall, one byte a

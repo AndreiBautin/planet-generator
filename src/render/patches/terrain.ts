@@ -5,16 +5,7 @@ import type { Planet } from '@/generation/planet'
 import type { Builder } from '../builder'
 import { SEA_RADIUS } from '../water'
 import { keyOf, parentOf, ROOTS, type PatchKey, type Vec3 } from './cube'
-import {
-  aheadOf,
-  ancestorAt,
-  centreOf,
-  insideHole,
-  selectLeaves,
-  type Hole,
-  type LodParams,
-  type ViewCone,
-} from './lod'
+import { aheadOf, ancestorAt, centreOf, selectLeaves, type LodParams, type ViewCone } from './lod'
 import { Flora, type FloraOptions } from './flora'
 import { patchIndex, type PatchData } from './patch-data'
 
@@ -94,10 +85,10 @@ export class Terrain {
    * Choose and draw the patches for a camera at this point in the planet's
    * own frame, looking along `view` when it is known.
    */
-  update(camera: Vec3, view?: ViewCone, hole?: Hole): void {
+  update(camera: Vec3, view?: ViewCone): void {
     if (this.disposed) return
     this.frame += 1
-    this.flora.update(camera, view, hole)
+    this.flora.update(camera, view)
     const leaves = selectLeaves(camera, this.options, view)
     const shown = new Set<string>()
 
@@ -130,8 +121,6 @@ export class Terrain {
     }
 
     for (const leaf of leaves) {
-      // Nothing is drawn where a landing's blocks stand.
-      if (hole !== undefined && insideHole(leaf, hole)) continue
       // The finest patch already in that covers this leaf.
       let key: PatchKey | undefined = leaf
       while (key !== undefined) {
@@ -162,11 +151,6 @@ export class Terrain {
       if (entry.node !== undefined) entry.node.visible = shown.has(name)
     }
     this.evict(shown)
-  }
-
-  /** Leave the felled placements out of the features. */
-  setFelled(ids: readonly string[]): void {
-    this.flora.setFelled(ids)
   }
 
   dispose(): void {

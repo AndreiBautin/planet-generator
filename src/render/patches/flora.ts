@@ -7,7 +7,7 @@ import { DETAIL_TIME } from '../detail'
 import type { GroundLayer } from '../textures'
 import { keyOf, patchAngle, type PatchKey, type Vec3 } from './cube'
 import { featureMaterial, featuresFor } from './feature-models'
-import { aheadOf, centreOf, featureTiles, insideHole, type Hole, type ViewCone } from './lod'
+import { aheadOf, centreOf, featureTiles, type ViewCone } from './lod'
 import { SCATTER_LEVEL } from './scatter'
 
 /**
@@ -55,7 +55,6 @@ export class Flora {
   private waiting = 0
   private frame = 0
   private disposed = false
-  private felled: readonly string[] = []
 
   constructor(world: Planet, builder: Builder, options: FloraOptions) {
     this.world = world
@@ -63,12 +62,10 @@ export class Flora {
     this.options = options
   }
 
-  update(camera: Vec3, view?: ViewCone, hole?: Hole): void {
+  update(camera: Vec3, view?: ViewCone): void {
     if (this.disposed) return
     this.frame += 1
-    const wanted = featureTiles(camera, SCATTER_LEVEL, this.options.range * PREFETCH, view).filter(
-      (key) => hole === undefined || !insideHole(key, hole),
-    )
+    const wanted = featureTiles(camera, SCATTER_LEVEL, this.options.range * PREFETCH, view)
     const reach = patchAngle(SCATTER_LEVEL) * 0.75
     const shown = new Set(
       wanted
@@ -107,35 +104,22 @@ export class Flora {
     this.tiles.clear()
   }
 
-  /** The placements felled on this world: every tile is built again without them. */
-  setFelled(ids: readonly string[]): void {
-    if (ids === this.felled) return
-    this.felled = ids
-    for (const tile of this.tiles.values()) {
-      if (tile.node !== undefined) this.group.remove(tile.node)
-      free(tile)
-    }
-    this.tiles.clear()
-  }
-
   private request(key: PatchKey): void {
     const name = keyOf(key)
     const tile: Tile = { key, node: undefined, material: undefined, usedAt: this.frame }
     this.tiles.set(name, tile)
     this.waiting += 1
-    void this.builder
-      .features(this.world.seed, this.world.dials, key, this.felled)
-      .then((scatter) => {
-        this.waiting -= 1
-        if (this.disposed || this.tiles.get(name) !== tile) return
-        const node = new THREE.Group()
-        const material = featureMaterial(DETAIL_TIME.value, this.options.stone)
-        for (const mesh of featuresFor(scatter, material)) node.add(mesh)
-        node.visible = false
-        tile.node = node
-        tile.material = material
-        this.group.add(node)
-      })
+    void this.builder.features(this.world.seed, this.world.dials, key).then((scatter) => {
+      this.waiting -= 1
+      if (this.disposed || this.tiles.get(name) !== tile) return
+      const node = new THREE.Group()
+      const material = featureMaterial(DETAIL_TIME.value, this.options.stone)
+      for (const mesh of featuresFor(scatter, material)) node.add(mesh)
+      node.visible = false
+      tile.node = node
+      tile.material = material
+      this.group.add(node)
+    })
   }
 
   private evict(shown: ReadonlySet<string>): void {

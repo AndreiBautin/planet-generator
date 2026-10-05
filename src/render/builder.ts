@@ -1,8 +1,5 @@
-import type { ChunkMesh } from '@/generation/chunk'
-import type { Vec3 } from '@/generation/cube'
 import type { Dials } from '@/generation/planet'
 import type { Seed } from '@/generation/seed'
-import type { Block } from '@/generation/voxel'
 import { logger } from '@/shared/logger'
 
 import type { WorkRequest, WorkResult } from './build-protocol'
@@ -24,25 +21,7 @@ import { answer } from './work'
 export interface Builder {
   readonly clouds: (seed: Seed, dials: Dials, width: number) => Promise<Uint8Array>
   readonly patch: (seed: Seed, dials: Dials, key: PatchKey, segments: number) => Promise<PatchData>
-  readonly features: (
-    seed: Seed,
-    dials: Dials,
-    key: PatchKey,
-    felled: readonly string[],
-  ) => Promise<Scatter>
-  /** A chunk of the landing at `origin`: its mesh and its blocks. */
-  readonly chunk: (
-    seed: Seed,
-    dials: Dials,
-    origin: Vec3,
-    cx: number,
-    cz: number,
-    edits: readonly (readonly [number, Block])[],
-  ) => Promise<{
-    readonly mesh: ChunkMesh
-    readonly blocks: Uint8Array
-    readonly roots: readonly (readonly [number, number, number, string])[]
-  }>
+  readonly features: (seed: Seed, dials: Dials, key: PatchKey) => Promise<Scatter>
 }
 
 interface Lane {
@@ -105,15 +84,9 @@ export function createBuilder(cores: number): Builder {
       if (result.kind !== 'patch') throw new Error('builder answered a patch with something else')
       return result.patch
     },
-    chunk: async (seed, dials, origin, cx, cz, edits) => {
+    features: async (seed, dials, key) => {
       next += 1
-      const result = await run({ id: next, kind: 'chunk', seed, dials, origin, cx, cz, edits })
-      if (result.kind !== 'chunk') throw new Error('builder answered a chunk with something else')
-      return { mesh: result.mesh, blocks: result.blocks, roots: result.roots }
-    },
-    features: async (seed, dials, key, felled) => {
-      next += 1
-      const result = await run({ id: next, kind: 'features', seed, dials, key, felled })
+      const result = await run({ id: next, kind: 'features', seed, dials, key })
       if (result.kind !== 'features')
         throw new Error('builder answered features with something else')
       return result.features

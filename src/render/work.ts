@@ -1,8 +1,4 @@
-import { CHUNK, chunkBlocks, meshChunk } from '@/generation/chunk'
 import { createPlanet, type Planet } from '@/generation/planet'
-import { cacheOf } from '@/generation/cache'
-import { surveyPlanet } from '@/generation/landmarks'
-import { blockKey, columnKey, landingAt, type Landing } from '@/generation/voxel'
 
 import type { WorkRequest, WorkResult } from './build-protocol'
 import { samplePatch } from './patches/patch-data'
@@ -33,37 +29,6 @@ function planetFor(request: WorkRequest): Planet {
   return planet
 }
 
-/**
- * The landing is kept for the last point asked about: a landing streams in
- * as a hundred chunk requests, and stamping its features takes longer than
- * most of the chunks.
- */
-let held: { readonly name: string; readonly landing: Landing } | undefined
-
-/** Where each planet's cache is; surveyed once per planet, which is a tenth of a second. */
-const caches = new WeakMap<Planet, readonly [number, number, number]>()
-function cacheFor(planet: Planet): readonly [number, number, number] {
-  const known = caches.get(planet)
-  if (known !== undefined) return known
-  const direction = cacheOf(planet, surveyPlanet(planet)).direction
-  caches.set(planet, direction)
-  return direction
-}
-
-function landingFor(planet: Planet, origin: readonly [number, number, number]): Landing {
-  const name = `${planet.seed}|${origin.map((n) => n.toFixed(9)).join(',')}`
-  if (held?.name === name) return held.landing
-  const landing = landingAt(planet, origin, cacheFor(planet))
-  held = { name, landing }
-  return landing
-}
-
-/** The linear colours of a planet's palette, the way the chunk mesher wants them. */
-function linear([r, g, b]: readonly [number, number, number]): readonly [number, number, number] {
-  const one = (c: number): number => (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4)
-  return [one(r), one(g), one(b)]
-}
-
 export function answer(request: WorkRequest): WorkResult {
   const planet = planetFor(request)
   switch (request.kind) {
@@ -76,33 +41,7 @@ export function answer(request: WorkRequest): WorkResult {
         patch: samplePatch(planet, request.key, request.segments),
       }
     case 'features':
-      return {
-        id: request.id,
-        kind: 'features',
-        features: scatterPatch(planet, request.key, new Set(request.felled)),
-      }
-    case 'chunk': {
-      const landing = landingFor(planet, request.origin)
-      const blocks = chunkBlocks(landing, request.cx, request.cz, new Map(request.edits), blockKey)
-      const roots: (readonly [number, number, number, string])[] = []
-      for (let x = 0; x < CHUNK; x += 1) {
-        for (let z = 0; z < CHUNK; z += 1) {
-          const wx = request.cx * CHUNK + x
-          const wz = request.cz * CHUNK + z
-          const root = landing.roots.get(columnKey(wx, wz))
-          if (root !== undefined) roots.push([wx, wz, root.row, root.id])
-        }
-      }
-      const mesh = meshChunk(blocks, {
-        lush: linear(planet.palette.lush),
-        dry: linear(planet.palette.dry),
-        highland: linear(planet.palette.highland),
-        peak: linear(planet.palette.peak),
-        ice: linear(planet.palette.ice),
-        shallow: linear(planet.palette.shallow),
-      })
-      return { id: request.id, kind: 'chunk', mesh, blocks, roots }
-    }
+      return { id: request.id, kind: 'features', features: scatterPatch(planet, request.key) }
   }
 }
 
@@ -120,18 +59,5 @@ export function transferables(result: WorkResult): Transferable[] {
       ]
     case 'features':
       return Object.values(result.features).map((features) => features.buffer)
-    case 'chunk':
-      return [
-        result.mesh.positions.buffer,
-        result.mesh.normals.buffer,
-        result.mesh.colours.buffer,
-        result.mesh.tiles.buffer,
-        result.mesh.uvs.buffer,
-        result.mesh.index.buffer,
-        result.mesh.fluid.positions.buffer,
-        result.mesh.fluid.normals.buffer,
-        result.mesh.fluid.index.buffer,
-        result.blocks.buffer,
-      ]
   }
 }

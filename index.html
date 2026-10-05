@@ -132,76 +132,6 @@
         padding: 0 12px;
         white-space: nowrap;
       }
-      /* Walking: a big round Jump under the right thumb, above the actions. */
-      .jump {
-        position: fixed;
-        right: var(--gutter);
-        bottom: calc(max(16px, env(safe-area-inset-bottom)) + 84px);
-        width: 72px;
-        height: 72px;
-        border-radius: 50%;
-        font-size: 15px;
-        touch-action: none;
-        user-select: none;
-        -webkit-user-select: none;
-      }
-      .jump[hidden] {
-        display: none;
-      }
-      .place {
-        position: fixed;
-        right: calc(var(--gutter) + 84px);
-        bottom: calc(max(16px, env(safe-area-inset-bottom)) + 84px);
-        width: 64px;
-        height: 64px;
-        border-radius: 50%;
-        font-size: 14px;
-        touch-action: none;
-        user-select: none;
-        -webkit-user-select: none;
-      }
-      .place[hidden] {
-        display: none;
-      }
-      /* What is in the hold, as a row above the actions: tap one to hold it. */
-      .hotbar {
-        position: fixed;
-        left: var(--gutter);
-        bottom: calc(max(16px, env(safe-area-inset-bottom)) + 84px);
-        display: flex;
-        gap: 6px;
-        max-width: calc(100% - 180px);
-        overflow-x: auto;
-        scrollbar-width: none;
-      }
-      .hotbar[hidden] {
-        display: none;
-      }
-      .hotbar button {
-        font-size: 12px;
-        padding: 0 10px;
-        white-space: nowrap;
-        text-transform: capitalize;
-      }
-      .walking .crosshair {
-        display: block;
-      }
-      .crosshair {
-        display: none;
-        position: fixed;
-        left: 50%;
-        top: 50%;
-        width: 14px;
-        height: 14px;
-        margin: -7px 0 0 -7px;
-        border: 1.5px solid rgba(255, 255, 255, 0.75);
-        border-radius: 50%;
-        pointer-events: none;
-        mix-blend-mode: difference;
-      }
-      .walking canvas {
-        cursor: crosshair;
-      }
       .primary {
         flex: 1;
         font-weight: 600;
@@ -222,60 +152,6 @@
       }
       .dials[hidden] {
         display: none;
-      }
-      .ship {
-        max-height: 50vh;
-        overflow-y: auto;
-        font-size: 13px;
-      }
-      .ship-line {
-        margin: 0 0 8px;
-        color: var(--ink);
-        font-weight: 600;
-      }
-      .ship-heading {
-        margin: 10px 0 6px;
-        color: var(--dim);
-        letter-spacing: 0.06em;
-        font-size: 12px;
-        text-transform: uppercase;
-      }
-      .ship-modules,
-      .ship-worlds {
-        display: grid;
-        gap: 6px;
-      }
-      .ship-row {
-        display: grid;
-        grid-template-columns: 1fr auto;
-        gap: 8px;
-        align-items: center;
-        padding: 6px 8px;
-        border-radius: 10px;
-        border: 1px solid var(--edge);
-        color: var(--dim);
-      }
-      .ship-row b {
-        color: var(--ink);
-        font-weight: 600;
-        display: block;
-      }
-      .ship-row small {
-        display: block;
-        font-size: 11px;
-      }
-      .ship-row button {
-        height: 34px;
-        font-size: 12px;
-        padding: 0 10px;
-      }
-      .ship-row.fitted {
-        border-color: rgba(124, 196, 255, 0.5);
-      }
-      .ship-log {
-        margin: 10px 0 4px;
-        color: var(--dim);
-        font-size: 12px;
       }
       .dial {
         display: grid;
@@ -330,33 +206,6 @@
       }
       .flying .hint {
         animation: hint 6s ease forwards;
-      }
-      /* The scope's word, under the hint, while a scope is fitted. */
-      .scope {
-        position: fixed;
-        right: max(16px, env(safe-area-inset-right));
-        top: calc(max(16px, env(safe-area-inset-top)) + 84px);
-        margin: 0;
-        padding: 6px 12px;
-        border-radius: 12px;
-        background: var(--glass);
-        border: 1px solid var(--edge);
-        font-size: 13px;
-        pointer-events: none;
-      }
-      .ship-clue {
-        margin: 0 0 10px;
-        font-size: 13px;
-        line-height: 1.4;
-      }
-      .dials-locked {
-        margin: 4px 0 0;
-        font-size: 12px;
-        line-height: 1.4;
-        color: var(--dim);
-      }
-      .dial input:disabled {
-        opacity: 0.4;
       }
       @keyframes hint {
         0%,
@@ -415,36 +264,17 @@
           Roughness
           <input id="dial-roughness" type="range" min="0" max="100" step="1" />
         </label>
-        <p class="dials-locked" id="dials-locked" hidden></p>
-      </section>
-      <section class="dials ship" id="ship" hidden aria-label="Ship">
-        <p class="ship-line"><span id="ship-fuel"></span> · <span id="ship-hold"></span></p>
-        <div class="ship-modules" id="ship-modules"></div>
-        <p class="ship-heading">The cache</p>
-        <p class="ship-clue" id="ship-clue"></p>
-        <p class="ship-heading">Next world</p>
-        <div class="ship-worlds" id="ship-worlds"></div>
-        <p class="ship-log" id="ship-log"></p>
       </section>
       <nav class="actions" aria-label="Planet">
-        <button type="button" id="ship-toggle" aria-pressed="false" aria-controls="ship">
-          Ship
-        </button>
         <button type="button" id="tune" aria-pressed="false" aria-controls="dials">Tune</button>
         <button type="button" id="new" class="primary">New planet</button>
         <button type="button" id="fly" aria-pressed="false">Fly</button>
-        <button type="button" id="orbit" hidden>Orbit</button>
         <button type="button" id="share">Share</button>
       </nav>
     </div>
 
-    <button type="button" id="jump" class="jump" hidden aria-label="Jump">Jump</button>
-    <button type="button" id="place" class="place" hidden aria-label="Place a block">Place</button>
-    <nav class="hotbar" id="hotbar" hidden aria-label="Hold"></nav>
-    <div class="crosshair" aria-hidden="true"></div>
     <p class="hint" id="hint">Drag to steer and climb · pinch to change height</p>
     <p class="toast" id="toast" role="status" aria-live="polite"></p>
-    <p class="scope" id="scope" hidden></p>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

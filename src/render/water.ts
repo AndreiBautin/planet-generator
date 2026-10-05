@@ -12,7 +12,7 @@ import { fromPalette } from './colour'
  *
  * A molten sea is not water: it is opaque, rough and lit from within.
  */
-export { SEA_RADIUS } from '@/generation/ground'
+export const SEA_RADIUS = 1.0015
 
 export function waterMaterial(planet: Planet): THREE.Material {
   // Tinted towards the deep colour: tinted with the shallow one, the whole

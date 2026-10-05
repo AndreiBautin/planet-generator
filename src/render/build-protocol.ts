@@ -1,7 +1,4 @@
-import type { ChunkMesh } from '@/generation/chunk'
-import type { Vec3 } from '@/generation/cube'
 import type { Dials } from '@/generation/planet'
-import type { Block } from '@/generation/voxel'
 import type { Seed } from '@/generation/seed'
 
 import type { PatchKey } from './patches/cube'
@@ -23,32 +20,9 @@ interface Planned {
 export type WorkRequest =
   | (Planned & { readonly kind: 'clouds'; readonly width: number })
   | (Planned & { readonly kind: 'patch'; readonly key: PatchKey; readonly segments: number })
-  | (Planned & {
-      readonly kind: 'features'
-      readonly key: PatchKey
-      /** Placements felled on this world, by id, left out of the tile. */
-      readonly felled: readonly string[]
-    })
-  | (Planned & {
-      readonly kind: 'chunk'
-      /** The landing point, a unit direction. */
-      readonly origin: Vec3
-      readonly cx: number
-      readonly cz: number
-      /** Blocks changed by hand on this world, as [key, block] pairs (see voxel.ts `blockKey`). */
-      readonly edits: readonly (readonly [number, Block])[]
-    })
+  | (Planned & { readonly kind: 'features'; readonly key: PatchKey })
 
 export type WorkResult =
   | { readonly id: number; readonly kind: 'clouds'; readonly texture: Uint8Array }
   | { readonly id: number; readonly kind: 'patch'; readonly patch: PatchData }
   | { readonly id: number; readonly kind: 'features'; readonly features: Scatter }
-  | {
-      readonly id: number
-      readonly kind: 'chunk'
-      readonly mesh: ChunkMesh
-      /** The chunk's blocks with their halo, for walking on and digging. */
-      readonly blocks: Uint8Array
-      /** The features rooted in the chunk's columns: x, z, the root's row, the placement id. */
-      readonly roots: readonly (readonly [number, number, number, string])[]
-    }

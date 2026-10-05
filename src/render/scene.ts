@@ -22,27 +22,10 @@ import {
   withWaterDetail,
 } from './detail'
 import type { Vec3 } from './patches/cube'
-import { LandingView } from './voxel/landing-view'
 import type { ViewCone } from './patches/lod'
 import { Terrain } from './patches/terrain'
 import { nextPixelRatio, typicalFrame, type Quality } from './quality'
 import { groundTextures } from './textures'
-import { groundRadiusAt } from '@/generation/ground'
-import {
-  AREA,
-  BLOCK,
-  BASE_ROW,
-  blockKey,
-  frameAt,
-  type Block,
-  type Frame,
-} from '@/generation/voxel'
-import { buildPlotMarks, releaseMarks, type PlotMarks } from './marks'
-import { castBlocks } from '@/generation/raycast'
-import type { Ship } from '@/generation/expedition'
-import { buildShip, releaseShip, SHIP_LENGTH } from './ship'
-import { directionOn, faceUvOf, type Face } from '@/generation/cube'
-import type { Hole } from './patches/lod'
 import { waterMaterial } from './water'
 
 /**
@@ -65,39 +48,9 @@ export interface Scene {
    * the picture the person was looking at.
    */
   readonly diveFrom: () => { readonly position: Vec3; readonly heading: Vec3 }
-  /** The landing plot under the camera: its frame and its name, for the save. */
-  readonly plotUnder: () => Plot | undefined
-  /**
-   * Cut the ground of a plot into blocks and stream it in, with the saved
-   * edits laid over: the row to stand on, and what is at any block.
-   */
-  readonly landOn: (plot: Plot, edits: readonly (readonly [number, Block])[]) => Landed
-  /** Dig the block looked at, within reach: what it was and where, or nothing. */
-  readonly breakBlock: () => Dug | undefined
-  /** Set a block against the face looked at, within reach, if it would not stand in the surveyor. */
-  readonly placeBlock: (block: Block) => number | undefined
-  /** Every block changed by hand on the current landing. */
-  readonly changes: () => readonly (readonly [number, Block])[]
-  /** The ship to draw ahead of the eye in a glide, rebuilt when its modules change. */
-  readonly setShip: (ship: Ship) => void
-  /** How far the surveyor digs and builds from, in blocks. */
-  readonly setReach: (blocks: number) => void
-  /** Let the landing go, and draw the planet's own ground there again. */
-  readonly takeOff: () => void
   /** The orbit angles that look straight down on a point of the planet, as it is turned now. */
   readonly orbitOver: (position: Vec3) => { readonly yaw: number; readonly pitch: number }
   readonly dispose: () => void
-  /** The placements felled on this world, left out of the glide's features. */
-  readonly setFelled: (ids: readonly string[]) => void
-  /** The marks left on this world's plots, drawn from the air. */
-  readonly setMarks: (plots: readonly Omit<PlotMarks, 'base'>[]) => void
-}
-
-/** A dug block: what it was, its key, and the placement it was the root of, if any. */
-export interface Dug {
-  readonly block: Block
-  readonly key: number
-  readonly felled: string | undefined
 }
 
 /**
@@ -120,15 +73,6 @@ export interface CameraView {
     | undefined
   /** 0 is all orbit, 1 all glide. */
   readonly blend: number
-  /** The surveyor's eye on a landing, in the landing's own frame; absent unless walking. */
-  readonly walk:
-    | {
-        readonly eye: readonly [number, number, number]
-        readonly forward: readonly [number, number, number]
-        readonly x: number
-        readonly z: number
-      }
-    | undefined
 }
 
 export interface SceneOptions {
@@ -138,56 +82,12 @@ export interface SceneOptions {
   readonly reducedMotion: boolean
   /** Where `public/` is served from, for the ground's photographs. */
   readonly assetBase: string
-  /** Told the view every frame, for readings that follow the eye. */
-  readonly onView?: (view: CameraView) => void
-}
-
-/**
- * Landings snap to a grid of plots on each cube face, a little under an
- * area apart, so landing near the same place again gives the same frame
- * and the same blocks — which is what lets the edits there be saved.
- */
-export interface Plot {
-  readonly name: string
-  readonly frame: Frame
-}
-const PLOT = (AREA * BLOCK * 0.85) / (Math.PI / 4)
-
-/** The frame of a plot from its name, the way `plotUnder` names them; nothing for a name that is not one. */
-export function plotFrameOf(name: string): Frame | undefined {
-  const parts = name.split('/').map(Number)
-  const [face, iu, iv] = parts
-  if (parts.length !== 3 || face === undefined || iu === undefined || iv === undefined)
-    return undefined
-  if (
-    !Number.isInteger(face) ||
-    face < 0 ||
-    face > 5 ||
-    !Number.isFinite(iu) ||
-    !Number.isFinite(iv)
-  )
-    return undefined
-  return frameAt(directionOn(face as Face, iu * PLOT, iv * PLOT))
-}
-/** How far the surveyor can dig or build, in blocks, until a drill is fitted. */
-const BASE_REACH = 6
-/** The surveyor's body, as the walker has it, for not building into it. */
-const EYE_HEIGHT = 1.6
-const BODY_HEIGHT = 1.75
-
-/** A landing on screen, for the rig to stand a surveyor on. */
-export interface Landed {
-  readonly frame: Frame
-  readonly startY: number
-  readonly stuff: (x: number, y: number, z: number) => 'air' | 'solid' | 'liquid'
-  readonly ready: (x: number, z: number) => boolean
 }
 
 /** What belongs to one planet and goes when the next is shown. */
 interface Shown {
   readonly seed: string
   readonly kind: string
-  readonly world: Planet
   readonly terrain: Terrain
   readonly clouds: THREE.Mesh
   readonly air: THREE.Mesh
@@ -209,8 +109,8 @@ interface Coming {
 
 /** Frames measured before the governor judges the device. */
 const FRAME_WINDOW = 90
-/** One slow turn every twelve minutes: a day on the ground is long enough to build something in. */
-const TURN_MS = 720_000
+/** One slow turn every two minutes. */
+const TURN_MS = 120_000
 
 export function startScene(
   canvas: HTMLCanvasElement,
@@ -260,118 +160,6 @@ export function startScene(
   const rain = new Rain()
   scene.add(rain.object)
   const rainEye = new THREE.Vector3()
-  // The landing's blocks, while the surveyor is down; a hole in the ground
-  // under them, so the planet's own surface does not poke through.
-  let landing: { readonly view: LandingView; readonly hole: Hole } | undefined
-  const walkEye = new THREE.Vector3()
-  const walkLook = new THREE.Vector3()
-  const walkUp = new THREE.Vector3()
-  const walkForward = new THREE.Vector3()
-  const walkQuat = new THREE.Quaternion()
-  let lastView: CameraView | undefined
-  let reach = BASE_REACH
-  // The airship, drawn a little ahead of and below the eye while gliding.
-  let shipModel: THREE.Group | undefined
-  // The world's felled placements and the marks on its plots, kept here so
-  // a world shown again (a dial moved) gets them back without being asked.
-  let felled: readonly string[] = []
-  let markPlots: readonly Omit<PlotMarks, 'base'>[] = []
-  let marks: THREE.Group | undefined
-  let walkedPlot: string | undefined
-  // A puff of dust where the surveyor lands, in the landing's own frame,
-  // gone in a couple of seconds.
-  let dust: { readonly points: THREE.Points; readonly bornAt: number } | undefined
-  const DUST_MS = 1800
-  const DUST_COUNT = 90
-  const dustAt = (group: THREE.Object3D, x: number, y: number, z: number): void => {
-    clearDust()
-    const positions = new Float32Array(DUST_COUNT * 3)
-    const spread = new Float32Array(DUST_COUNT * 3)
-    for (let i = 0; i < DUST_COUNT; i += 1) {
-      const turn = (i / DUST_COUNT) * Math.PI * 2 + ((i * 7919) % 13) / 13
-      const speed = 2 + (((i * 104729) % 17) / 17) * 4
-      spread[i * 3] = Math.cos(turn) * speed
-      spread[i * 3 + 1] = 1 + (((i * 15485863) % 11) / 11) * 2.5
-      spread[i * 3 + 2] = Math.sin(turn) * speed
-      positions[i * 3] = x
-      positions[i * 3 + 1] = y
-      positions[i * 3 + 2] = z
-    }
-    const geometry = new THREE.BufferGeometry()
-    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3))
-    geometry.setAttribute('spread', new THREE.BufferAttribute(spread, 3))
-    geometry.userData['origin'] = [x, y, z]
-    const points = new THREE.Points(
-      geometry,
-      new THREE.PointsMaterial({
-        color: 0xc9b89a,
-        size: 0.5,
-        transparent: true,
-        opacity: 0.7,
-        depthWrite: false,
-      }),
-    )
-    group.add(points)
-    dust = { points, bornAt: clock.now() }
-  }
-  const clearDust = (): void => {
-    if (dust === undefined) return
-    dust.points.removeFromParent()
-    dust.points.geometry.dispose()
-    if (dust.points.material instanceof THREE.Material) dust.points.material.dispose()
-    dust = undefined
-  }
-  const settleDust = (now: number): void => {
-    if (dust === undefined) return
-    const t = (now - dust.bornAt) / DUST_MS
-    if (t >= 1) {
-      clearDust()
-      return
-    }
-    const geometry = dust.points.geometry
-    const position = geometry.getAttribute('position')
-    const spread = geometry.getAttribute('spread')
-    const origin = geometry.userData['origin'] as readonly [number, number, number]
-    // Out fast and slowing, up and then settling, like dust does.
-    const out = 1 - (1 - t) * (1 - t)
-    const lift = Math.sin(t * Math.PI)
-    for (let i = 0; i < DUST_COUNT; i += 1) {
-      position.setXYZ(
-        i,
-        origin[0] + spread.getX(i) * out,
-        origin[1] + spread.getY(i) * lift,
-        origin[2] + spread.getZ(i) * out,
-      )
-    }
-    position.needsUpdate = true
-    const material = dust.points.material
-    if (material instanceof THREE.PointsMaterial) material.opacity = 0.7 * (1 - t)
-  }
-  const rebuildMarks = (): void => {
-    if (marks !== undefined) {
-      marks.removeFromParent()
-      releaseMarks(marks)
-      marks = undefined
-    }
-    if (shown === undefined) return
-    marks = new THREE.Group()
-    for (const plot of markPlots) {
-      const group = buildPlotMarks(
-        { ...plot, base: groundRadiusAt(shown.world, plot.frame.origin) },
-        shown.world,
-      )
-      if (group === undefined) continue
-      group.visible = plot.name !== walkedPlot
-      marks.add(group)
-    }
-    shown.terrain.group.add(marks)
-  }
-  const shipForward = new THREE.Vector3()
-  // The last heading the ship flew, for a look straight down, which has no level part.
-  const shipHeading = new THREE.Vector3(1, 0, 0)
-  const shipUp = new THREE.Vector3()
-  const shipRight = new THREE.Vector3()
-  const shipBasis = new THREE.Matrix4()
 
   const { quality, builder } = options
   let shown: Shown | undefined
@@ -454,10 +242,6 @@ export function startScene(
       sky = buildSky(next.world, pixelRatio)
     }
     if (previous !== undefined) {
-      if (landing !== undefined) {
-        landing.view.dispose()
-        landing = undefined
-      }
       scene.remove(previous.terrain.group)
       previous.terrain.dispose()
       if (!keep) {
@@ -473,15 +257,12 @@ export function startScene(
     shown = {
       seed: next.world.seed,
       kind: next.world.kind,
-      world: next.world,
       terrain: next.terrain,
       clouds,
       air,
       sky,
       bornAt: animate ? clock.now() : keep ? previous.bornAt : undefined,
     }
-    shown.terrain.setFelled(felled)
-    rebuildMarks()
     pose(shown, animate ? birthAt(0) : stageOf(shown))
     next.resolve(true)
   }
@@ -531,21 +312,7 @@ export function startScene(
       distance * Math.cos(pitch) * Math.cos(yaw),
     )
     const t = view.surface === undefined ? 0 : Math.min(1, Math.max(0, view.blend))
-    if (view.walk !== undefined && landing !== undefined) {
-      // On the ground: the eye in the landing's frame, taken out through
-      // the landing group's own matrix (which the terrain group turns).
-      const { eye, forward } = view.walk
-      landing.view.group.updateMatrixWorld()
-      landing.view.group.getWorldQuaternion(walkQuat)
-      walkEye.set(eye[0], eye[1], eye[2])
-      landing.view.group.localToWorld(walkEye)
-      walkForward.set(forward[0], forward[1], forward[2]).applyQuaternion(walkQuat).normalize()
-      walkUp.set(0, 1, 0).applyQuaternion(walkQuat).normalize()
-      camera.position.copy(walkEye)
-      camera.up.copy(walkUp)
-      walkLook.copy(walkEye).addScaledVector(walkForward, 0.01)
-      camera.lookAt(walkLook)
-    } else if (view.surface === undefined || t === 0) {
+    if (view.surface === undefined || t === 0) {
       camera.position.copy(orbitEye)
       camera.up.copy(ROOM_UP)
       camera.lookAt(ORIGIN)
@@ -559,37 +326,7 @@ export function startScene(
       camera.up.copy(up)
       camera.lookAt(target)
     }
-    if (shipModel !== undefined) {
-      // In the glide the ship leads the eye: ahead and below, turned the
-      // way the glide looks and rolled with its bank. Gone when walking
-      // (it is parked somewhere behind the camera's back) and in orbit.
-      const gliding = view.surface !== undefined && view.walk === undefined && t > 0.6
-      shipModel.visible = gliding
-      if (gliding) {
-        // Level with the ground, keeping a third of the look's pitch: a
-        // glide looks down at the land, and a hull that followed the look
-        // outright read as a dive. A look straight down has no level part
-        // at all — the hull sat on the eye, fins across the whole screen —
-        // so the last heading stands in.
-        shipForward.copy(target).sub(camera.position).normalize()
-        const dive = shipForward.dot(up)
-        shipForward.addScaledVector(up, -dive)
-        if (shipForward.lengthSq() < 1e-6) shipForward.copy(shipHeading)
-        shipForward.normalize()
-        shipHeading.copy(shipForward)
-        shipForward.addScaledVector(up, dive * 0.35).normalize()
-        shipUp.copy(up)
-        shipRight.crossVectors(shipUp, shipForward).normalize()
-        shipUp.crossVectors(shipForward, shipRight).normalize()
-        shipBasis.makeBasis(shipRight, shipUp, shipForward)
-        shipModel.quaternion.setFromRotationMatrix(shipBasis)
-        shipModel.position
-          .copy(camera.position)
-          .addScaledVector(shipForward, SHIP_LENGTH * 3.4)
-          .addScaledVector(shipUp, -SHIP_LENGTH * 1.05)
-      }
-    }
-    const wanted = view.surface === undefined || view.walk !== undefined ? 0 : view.surface.rush * t
+    const wanted = view.surface === undefined ? 0 : view.surface.rush * t
     if (Math.abs(wanted - rush) > 0.002) {
       rush = wanted
       frame()
@@ -601,7 +338,7 @@ export function startScene(
     if (renderer.shadowMap.enabled) {
       // Shadows only low down, where a tree is big enough to throw one:
       // from orbit the pass would cost a frame and show nothing.
-      const low = (t > 0 && above < 0.2) || view.walk !== undefined
+      const low = t > 0 && above < 0.2
       sun.castShadow = low
       if (low) {
         shadowGround.copy(camera.position).normalize()
@@ -618,23 +355,9 @@ export function startScene(
         box.updateProjectionMatrix()
       }
     }
-    // Walking, the near plane is a hand's breadth and the far plane the
-    // horizon, or the blocks in front of the eye are cut away and the
-    // depth buffer is spent on a planet the blocks hide anyway.
-    // With the ship drawn a few lengths ahead, the near plane must stay
-    // inside it: at height the usual rule pushes it past the hull and the
-    // ship is cut away whole.
-    const near =
-      view.walk !== undefined
-        ? BLOCK * 0.15
-        : Math.min(
-            shipModel?.visible === true ? SHIP_LENGTH * 1.5 : 0.1,
-            Math.max(0.0004, above * 0.2),
-          )
-    const far = view.walk !== undefined ? 3 : 100
-    if (Math.abs(near - camera.near) > camera.near * 0.05 || far !== camera.far) {
+    const near = Math.min(0.1, Math.max(0.0004, above * 0.2))
+    if (Math.abs(near - camera.near) > camera.near * 0.05) {
       camera.near = near
-      camera.far = far
       camera.updateProjectionMatrix()
     }
     airAround(above)
@@ -687,16 +410,12 @@ export function startScene(
     const turn = (now / TURN_MS) * Math.PI * 2
     lastTurn = turn
     DETAIL_TIME.value = now / 1000
-    settleDust(now)
     DETAIL_RANGE.value = quality.featureRange
     // The clouds drift ahead of the ground by a sixth of its turn, and their
     // shadows fall from the sun's side.
     DETAIL_CLOUD_SPIN.value = -0.15 * turn
     DETAIL_CLOUD_SUN.value.set(...inPlanetFrame(sunDirection, turn, 1))
-    const current = view()
-    lastView = current
-    options.onView?.(current)
-    place(current, turn)
+    place(view(), turn)
     if (coming !== undefined) {
       coming.terrain.update(inPlanetFrame(camera.position, turn, 1), viewCone(turn))
       if (coming.terrain.ready && (coming.keepClouds || coming.clouds !== undefined)) {
@@ -717,13 +436,7 @@ export function startScene(
       modelView.copy(camera.matrixWorld).invert().multiply(shown.terrain.group.matrixWorld)
       DETAIL_NORMAL_MATRIX.value.getNormalMatrix(modelView)
       cloudsSeenFrom(shown.clouds, camera.position.length(), stage.scale, stage.clouds)
-      shown.terrain.update(
-        inPlanetFrame(camera.position, turn, stage.scale),
-        viewCone(turn),
-        landing?.hole,
-      )
-      const walk = current.walk
-      if (landing !== undefined && walk !== undefined) landing.view.update(walk.x, walk.z)
+      shown.terrain.update(inPlanetFrame(camera.position, turn, stage.scale), viewCone(turn))
       rain.update(rainEye.copy(camera.position), rainOver(shown.clouds, turn))
     }
     renderer.render(scene, camera)
@@ -749,119 +462,6 @@ export function startScene(
 
   return {
     show,
-    plotUnder: () => {
-      if (shown === undefined) return undefined
-      const under = unit(inPlanetFrame(camera.position, lastTurn, 1))
-      const { face, u, v } = faceUvOf(under)
-      const iu = Math.round(u / PLOT)
-      const iv = Math.round(v / PLOT)
-      return {
-        name: `${String(face)}/${String(iu)}/${String(iv)}`,
-        frame: plotFrameOf(`${String(face)}/${String(iu)}/${String(iv)}`) ?? frameAt(under),
-      }
-    },
-    landOn: (plot, edits) => {
-      if (shown === undefined) throw new Error('no planet to land on')
-      const world = shown.world
-      const { frame } = plot
-      if (landing !== undefined) {
-        landing.view.group.removeFromParent()
-        landing.view.dispose()
-      }
-      const base = groundRadiusAt(world, frame.origin)
-      const view = new LandingView(
-        world,
-        frame,
-        base,
-        builder,
-        ground,
-        { reach: quality.chunkReach, inFlight: quality.inFlight },
-        new Map(edits),
-      )
-      shown.terrain.group.add(view.group)
-      landing = { view, hole: { centre: frame.origin, radius: (AREA / 2) * BLOCK * 0.92 } }
-      walkedPlot = plot.name
-      for (const group of marks?.children ?? []) group.visible = group.name !== plot.name
-      dustAt(view.group, AREA / 2, BASE_ROW + 0.5, AREA / 2)
-      const startY = BASE_ROW + 2
-      return {
-        frame,
-        startY,
-        stuff: (x, y, z) => view.stuffAt(x, y, z),
-        ready: (x, z) => view.ready(x, z),
-      }
-    },
-    breakBlock: () => {
-      const walk = lastView?.walk
-      if (landing === undefined || walk === undefined) return undefined
-      const view = landing.view
-      const hit = castBlocks(
-        walk.eye,
-        walk.forward,
-        reach,
-        (x, y, z) => view.stuffAt(x, y, z) === 'solid',
-      )
-      if (hit === undefined) return undefined
-      const was = view.blockAt(hit.x, hit.y, hit.z)
-      const root = view.rootAt(hit.x, hit.y, hit.z)
-      view.setBlock(hit.x, hit.y, hit.z, 'air')
-      return { block: was, key: blockKey(hit.x, hit.y, hit.z), felled: root }
-    },
-    placeBlock: (block) => {
-      const walk = lastView?.walk
-      if (landing === undefined || walk === undefined) return undefined
-      const view = landing.view
-      const hit = castBlocks(
-        walk.eye,
-        walk.forward,
-        reach,
-        (x, y, z) => view.stuffAt(x, y, z) === 'solid',
-      )
-      if (hit === undefined) return undefined
-      const [x, y, z] = hit.before
-      // Not into the surveyor's own body.
-      const feetY = walk.eye[1] - EYE_HEIGHT
-      if (
-        Math.abs(x + 0.5 - walk.x) < 0.3 + 0.5 &&
-        Math.abs(z + 0.5 - walk.z) < 0.3 + 0.5 &&
-        y + 1 > feetY &&
-        y < feetY + BODY_HEIGHT
-      ) {
-        return undefined
-      }
-      view.setBlock(x, y, z, block)
-      return blockKey(x, y, z)
-    },
-    changes: () => landing?.view.changes() ?? [],
-    setShip: (next) => {
-      if (shipModel !== undefined) {
-        scene.remove(shipModel)
-        releaseShip(shipModel)
-      }
-      shipModel = buildShip(next)
-      shipModel.visible = false
-      scene.add(shipModel)
-    },
-    setReach: (blocks) => {
-      reach = blocks
-    },
-    setFelled: (ids) => {
-      felled = ids
-      shown?.terrain.setFelled(ids)
-    },
-    setMarks: (plots) => {
-      markPlots = plots
-      rebuildMarks()
-    },
-    takeOff: () => {
-      if (landing === undefined) return
-      landing.view.group.removeFromParent()
-      landing.view.dispose()
-      landing = undefined
-      walkedPlot = undefined
-      clearDust()
-      for (const group of marks?.children ?? []) group.visible = true
-    },
     diveFrom: () => {
       const position = unit(inPlanetFrame(camera.position, lastTurn, 1))
       // The screen's up, taken into the planet's frame, is the way ahead.
@@ -874,9 +474,6 @@ export function startScene(
       return { yaw: Math.atan2(x, z), pitch: Math.asin(Math.max(-1, Math.min(1, y))) }
     },
     dispose: () => {
-      if (shipModel !== undefined) releaseShip(shipModel)
-      if (marks !== undefined) releaseMarks(marks)
-      landing?.view.dispose()
       rain.dispose()
       renderer.setAnimationLoop(null)
       window.removeEventListener('resize', resize)

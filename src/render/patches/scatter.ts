@@ -1,11 +1,19 @@
-import { FEATURES, type Feature } from '@/generation/features'
-import type { Planet, Surface } from '@/generation/planet'
-import { CELL, featureWord, placementsIn } from '@/generation/placement'
+import {
+  FEATURES,
+  featuresAt,
+  floorAt,
+  NOTHING,
+  type Feature,
+  type Growth,
+} from '@/generation/features'
+import { groupingsAt } from '@/generation/grouping'
+import { surfaceAt, type Planet, type Surface } from '@/generation/planet'
 import { hashSeed } from '@/generation/rng'
 
 import { fromPalette } from '../colour'
 import { SEA_RADIUS } from '../water'
-import { patchUv, type PatchKey } from './cube'
+import { directionOn, patchUv, type PatchKey } from './cube'
+import { groundRadiusAt } from './patch-data'
 
 /**
  * The features that make up a patch of ground: trees, scrub, grass, cacti,
@@ -32,23 +40,65 @@ import { patchUv, type PatchKey } from './cube'
  * sea.
  */
 export const SCATTER_LEVEL = 7
-export { CELL }
+/** Grid spacing on a face, in face coordinates (−1 to 1 across the face). */
+export const CELL = 0.0009
 /** Floats per feature: position (3), size, turn, colour (3). */
 export const STRIDE = 8
 
 export type Scatter = Readonly<Partial<Record<Feature, Float32Array>>>
 
+/** Hash a cell to a number in [0, 1), from a seed word, the cell and a salt. */
+function cellHash(seedWord: number, face: number, i: number, j: number, salt: number): number {
+  let h = seedWord ^ Math.imul(face + 1, 0x9e3779b1)
+  h = Math.imul(h ^ i, 0x85ebca6b)
+  h = Math.imul(h ^ (h >>> 13) ^ j, 0xc2b2ae35)
+  h = Math.imul(h ^ (h >>> 16) ^ salt, 0x27d4eb2f)
+  h ^= h >>> 15
+  return (h >>> 0) / 4294967296
+}
+
 const clamp01 = (value: number): number => Math.min(1, Math.max(0, value))
 
-export function scatterPatch(
-  planet: Planet,
-  key: PatchKey,
-  felled: ReadonlySet<string> = new Set(),
-): Scatter {
+type Grouping = 'grove' | 'outcrop' | 'pavement' | 'none'
+
+/** How each kind groups: the noise its density follows. */
+const GROUPING: Readonly<Record<Feature, Grouping>> = {
+  broadleaf: 'grove',
+  conifer: 'grove',
+  shrub: 'grove',
+  grass: 'grove',
+  cactus: 'outcrop',
+  rock: 'outcrop',
+  boulder: 'outcrop',
+  spire: 'pavement',
+  cone: 'none',
+  floe: 'none',
+}
+
+interface Groupings {
+  readonly grove: number
+  readonly outcrop: number
+  readonly pavement: number
+  readonly none: number
+}
+
+/** Pick one feature from a layer by a roll, each weighted by its grouping. */
+function pick(growth: Growth, groups: Groupings, roll: number): Feature | undefined {
+  let under = 0
+  for (const candidate of FEATURES) {
+    const chance = growth[candidate]
+    if (chance === 0) continue
+    under += chance * groups[GROUPING[candidate]]
+    if (roll < under) return candidate
+  }
+  return undefined
+}
+
+export function scatterPatch(planet: Planet, key: PatchKey): Scatter {
   if (key.level < SCATTER_LEVEL) return {}
   const [u0, v0] = patchUv(key, 0, 0)
   const [u1, v1] = patchUv(key, 1, 1)
-  const word = featureWord(planet)
+  const word = hashSeed(`${planet.seed}/features`)[0]
   const found: Record<Feature, number[]> = {
     broadleaf: [],
     conifer: [],
@@ -93,9 +143,63 @@ export function scatterPatch(
   // the edge two patches share belongs to exactly one of them.
   for (let j = Math.ceil(v0 / CELL); j * CELL < v1; j += 1) {
     for (let i = Math.ceil(u0 / CELL); i * CELL < u1; i += 1) {
-      for (const placed of placementsIn(planet, key.face, i, j, word)) {
-        if (felled.has(placed.id)) continue
-        place(placed.feature, placed.direction, placed.ground, placed.surface, placed.rolls)
+      const u = (i + 0.1 + cellHash(word, key.face, i, j, 1) * 0.8) * CELL
+      const v = (j + 0.1 + cellHash(word, key.face, i, j, 2) * 0.8) * CELL
+      const direction = directionOn(key.face, u, v)
+      const [x, y, z] = direction
+      const surface = surfaceAt(planet, x, y, z)
+      const atSea = surface.height < 0
+      // Open water carries nothing: skip the slope sampling there.
+      if (atSea && featuresAt(planet, surface, 0) === NOTHING) continue
+
+      const here = groundRadiusAt(planet, direction)
+      let steep = 0
+      if (!atSea) {
+        // Slope from two neighbours a fraction of a cell away.
+        const eastward = groundRadiusAt(planet, directionOn(key.face, u + CELL * 0.3, v))
+        const northward = groundRadiusAt(planet, directionOn(key.face, u, v + CELL * 0.3))
+        const run = CELL * 0.3 * 0.785
+        const rise = Math.hypot(eastward - here, northward - here) / run
+        steep = 1 - 1 / Math.sqrt(1 + rise * rise)
+      }
+
+      // The groupings the ground is painted by too (grouping.ts): a grove
+      // is broad with clearings, an outcrop tighter and sharper-edged, a
+      // pavement a patch of ground that is all columns or none.
+      const grouping = groupingsAt(planet, x, y, z)
+      const groups: Groupings = {
+        grove: grouping.grove * 1.4,
+        outcrop: grouping.outcrop * 1.6,
+        // Only lava cools into pavements; an ice serac stands with the rock.
+        pavement: planet.molten ? 0.08 + grouping.pavement * 2.1 : grouping.outcrop * 1.6,
+        none: 1,
+      }
+
+      const standing = pick(
+        featuresAt(planet, surface, steep),
+        groups,
+        cellHash(word, key.face, i, j, 3),
+      )
+      if (standing !== undefined) {
+        place(standing, direction, here, surface, [
+          cellHash(word, key.face, i, j, 4),
+          cellHash(word, key.face, i, j, 5),
+          cellHash(word, key.face, i, j, 6),
+        ])
+      }
+      if (atSea) continue
+
+      const cover = pick(floorAt(planet, surface, steep), groups, cellHash(word, key.face, i, j, 7))
+      if (cover !== undefined) {
+        // The floor's own spot in the cell, so it is not under the trunk.
+        const fu = (i + 0.1 + cellHash(word, key.face, i, j, 8) * 0.8) * CELL
+        const fv = (j + 0.1 + cellHash(word, key.face, i, j, 9) * 0.8) * CELL
+        const at = directionOn(key.face, fu, fv)
+        place(cover, at, groundRadiusAt(planet, at), surface, [
+          cellHash(word, key.face, i, j, 10),
+          cellHash(word, key.face, i, j, 11),
+          cellHash(word, key.face, i, j, 12),
+        ])
       }
     }
   }
