@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  shoreLean,
   advance,
   MAX_ALTITUDE,
   MAX_PITCH_DOWN,
@@ -171,5 +172,27 @@ describe('gliding', () => {
   it('does nothing for a step of no time', () => {
     expect(advance(start, 0, flat)).toBe(start)
     expect(advance(start, Number.NaN, flat)).toBe(start)
+  })
+})
+
+describe('the lean towards land', () => {
+  // Heading +x from the +z pole; land only where y is positive.
+  const land = (d: readonly [number, number, number]): number => (d[1] > 0.02 ? 1.01 : 1)
+  const sea = (): number => 1
+
+  it('leans towards the side with land, and only that side', () => {
+    const glide = startGlide([0, 0, 1], [1, 0, 0], land)
+    const lean = shoreLean(glide, land)
+    expect(lean).not.toBe(0)
+    // Leaning that way and flying on brings the land side closer.
+    let flying = { ...glide, yawRate: 0 }
+    for (let t = 0; t < 40; t += 1) flying = advance(flying, 0.25, land)
+    expect(flying.position[1]).toBeGreaterThan(0)
+  })
+
+  it('stays straight over open sea with no land either side, and never overrules the stick', () => {
+    const glide = startGlide([0, 0, 1], [1, 0, 0], sea)
+    expect(shoreLean(glide, sea)).toBe(0)
+    expect(shoreLean({ ...glide, yawRate: 0.5 }, land)).toBe(0)
   })
 })

@@ -159,7 +159,16 @@ const CLOUD_SHADOW = /* glsl */ `
     float s = sin(detailCloudSpin);
     d = vec3(d.x * c + d.z * s, d.y, -d.x * s + d.z * c);
     vec2 uv = vec2(atan(d.z, -d.x) / 6.2831853 + 0.5, 1.0 - acos(clamp(d.y, -1.0, 1.0)) / 3.1415927);
-    return texture2D(detailClouds, uv).r;
+    // Five taps and a soft threshold: the cloud map is a few hundred texels
+    // round the whole planet, and read once its bilinear cells showed on
+    // the sea as rows of dark blocks.
+    vec2 o = vec2(0.0018, 0.0018);
+    float c0 = texture2D(detailClouds, uv).r * 0.4
+      + texture2D(detailClouds, uv + vec2(o.x, 0.0)).r * 0.15
+      + texture2D(detailClouds, uv - vec2(o.x, 0.0)).r * 0.15
+      + texture2D(detailClouds, uv + vec2(0.0, o.y)).r * 0.15
+      + texture2D(detailClouds, uv - vec2(0.0, o.y)).r * 0.15;
+    return smoothstep(0.15, 0.85, c0);
   }
 `
 

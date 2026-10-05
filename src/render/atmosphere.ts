@@ -99,6 +99,13 @@ export function buildAtmosphere(planet: Planet, sun: THREE.Vector3): THREE.Mesh 
         // the end, by the post pass, like every other material's.
         vec3 sky = colour * a * 1.3;
         gl_FragColor = vec4(pow(sky, vec3(2.2)), 1.0);
+        // Tone mapped and encoded like every built-in material: a no-op when
+        // the post pass renders into its own target and encodes at the end,
+        // and the whole conversion when the frame goes straight to the
+        // screen (a modest phone). Without it the sky there stayed linear
+        // and came out a dark, over-saturated blue.
+        #include <tonemapping_fragment>
+        #include <colorspace_fragment>
       }
     `,
     side: THREE.BackSide,

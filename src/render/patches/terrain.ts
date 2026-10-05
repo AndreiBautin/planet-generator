@@ -205,12 +205,28 @@ export class Terrain {
       // How deep the floor lies under the sea here: foam where it is nought,
       // lighter water where it is little.
       const depth = new Float32Array(count)
+      // The skirt's vertices sit under the edge's, lowered: read as their own
+      // depth they made every patch boundary a line of deeper, darker water.
+      // A skirt vertex shares its edge vertex's direction, so it takes that
+      // vertex's depth.
+      const side = Math.round(-2 + Math.sqrt(4 + count))
+      const grid = side * side
+      const edgeDepth = new Map<string, number>()
+      const keyOf = (x: number, y: number, z: number): string => {
+        const l = Math.hypot(x, y, z) || 1
+        return `${(x / l).toFixed(6)},${(y / l).toFixed(6)},${(z / l).toFixed(6)}`
+      }
       for (let vertex = 0; vertex < count; vertex += 1) {
         const x = patch.positions[vertex * 3] ?? 0
         const y = patch.positions[vertex * 3 + 1] ?? 0
         const z = patch.positions[vertex * 3 + 2] ?? 1
         const length = Math.hypot(x, y, z) || 1
-        depth[vertex] = SEA_RADIUS - length
+        if (vertex < grid) {
+          depth[vertex] = SEA_RADIUS - length
+          edgeDepth.set(keyOf(x, y, z), depth[vertex] ?? 0)
+        } else {
+          depth[vertex] = edgeDepth.get(keyOf(x, y, z)) ?? SEA_RADIUS - length
+        }
         normals[vertex * 3] = x / length
         normals[vertex * 3 + 1] = y / length
         normals[vertex * 3 + 2] = z / length

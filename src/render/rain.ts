@@ -80,7 +80,9 @@ export class Rain {
       fragmentShader: /* glsl */ `
         varying float vFade;
         void main() {
-          gl_FragColor = vec4(0.75, 0.8, 0.88, vFade * 0.45);
+          gl_FragColor = vec4(0.52, 0.6, 0.74, vFade * 0.45);
+          #include <tonemapping_fragment>
+          #include <colorspace_fragment>
         }
       `,
     })
