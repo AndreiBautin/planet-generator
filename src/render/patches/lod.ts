@@ -79,9 +79,15 @@ function unseen(key: PatchKey, camera: Vec3, view: ViewCone): boolean {
   const gap = Math.hypot(dx, dy, dz) || 1
   const cos = (dx * view.forward[0] + dy * view.forward[1] + dz * view.forward[2]) / gap
   const off = Math.acos(Math.max(-1, Math.min(1, cos)))
-  // How wide the patch looks from here: close up, a patch beside the camera
-  // can fill half the view while its centre is outside it.
-  const looks = Math.atan((patchAngle(key.level) * 0.75) / gap)
+  // How wide the patch looks from here: the angle a ball round it fills,
+  // and all of the view when the eye is inside that ball. It was the arc
+  // tangent of radius over distance, which tops out at forty-five degrees
+  // where the truth is ninety: a big patch whose centre had slipped behind
+  // the eye was culled with every child of it straight ahead, and the
+  // forest and the ground's detail vanished in one frame.
+  const radius = patchAngle(key.level) * 0.75 + 0.02
+  if (gap <= radius) return false
+  const looks = Math.asin(radius / gap)
   return off > view.halfAngle + looks + 0.15
 }
 

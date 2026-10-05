@@ -147,5 +147,36 @@ describe('selectLeaves', () => {
       expect(ahead.length).toBeLessThan(all.length)
       for (const tile of ahead) expect(centreOf(tile)[0]).toBeGreaterThan(-0.03)
     })
+
+    it('keeps every tile in view, wherever the camera is: a parent behind the eye cannot hide its children ahead', () => {
+      // Flying low along the ground, the camera crosses from one big patch
+      // into the next. Culling a whole patch by where its centre lies hid
+      // every tile in it that was right in front of the eye — the forest and
+      // the ground's detail vanished in a single frame.
+      const range = 0.12
+      const half = 0.6
+      const unit = (v: Vec3): Vec3 => scale(v, 1 / Math.hypot(...v))
+      for (let step = 0; step < 40; step += 1) {
+        const along = -0.3 + step * 0.015
+        const under = unit([along, 0.2, 1])
+        const eye = scale(under, 1.016)
+        const ahead = unit([1, 0, -along])
+        const forward = unit([
+          ahead[0] - under[0] * 0.2,
+          ahead[1] - under[1] * 0.2,
+          ahead[2] - under[2] * 0.2,
+        ])
+        const view: ViewCone = { forward, halfAngle: half }
+        const found = new Set(featureTiles(eye, 7, range, view).map(keyOf))
+        for (const tile of featureTiles(eye, 7, range)) {
+          const c = centreOf(tile)
+          const d: Vec3 = [c[0] - eye[0], c[1] - eye[1], c[2] - eye[2]]
+          const gap = Math.hypot(...d)
+          const off = Math.acos((d[0] * forward[0] + d[1] * forward[1] + d[2] * forward[2]) / gap)
+          // Squarely in view: its centre well inside the cone.
+          if (off < half * 0.8) expect(found.has(keyOf(tile))).toBe(true)
+        }
+      }
+    })
   })
 })
