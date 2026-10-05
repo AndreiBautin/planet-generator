@@ -1,12 +1,10 @@
-import { surfaceAt, type Planet, type Surface } from '@/generation/planet'
+import type { Planet, Surface } from '@/generation/planet'
 import { groupingsAt } from '@/generation/grouping'
 import { fbm } from '@/generation/noise'
-import { fineReliefAt, reliefWeightAt } from '@/generation/relief'
 import { floorAt, patternAt } from '@/generation/features'
 
 import { fromPalette } from '../colour'
-import { liftOf } from '../surface-data'
-import { SEA_RADIUS } from '../water'
+import { drawnHeight, groundRadiusAt, liftOf } from '@/generation/ground'
 import { directionOn, patchAngle, patchUv, type PatchKey } from './cube'
 
 /**
@@ -44,47 +42,11 @@ export interface PatchData {
 }
 
 /** Vertices in a patch: the grid, then four edges' worth of skirt. */
-/** How far fine relief lifts the ground, in surface-height units. */
-const FINE_RELIEF = 0.11
 /** Steepness (one minus the cosine of the slope) where rock starts and where it is all rock. */
 const ROCK_FROM = 0.06
 const ROCK_FULL = 0.22
 
-/** The height the ground is drawn at, before it is lifted to a radius. */
-function drawnHeight(
-  planet: Planet,
-  x: number,
-  y: number,
-  z: number,
-): {
-  readonly surface: ReturnType<typeof surfaceAt>
-  readonly fine: number
-  readonly drawn: number
-} {
-  const surface = surfaceAt(planet, x, y, z)
-  const fine = fineReliefAt(planet, x, y, z, surface)
-  return {
-    surface,
-    fine,
-    drawn: surface.height + fine * reliefWeightAt(planet, surface) * FINE_RELIEF,
-  }
-}
-
-/**
- * How far from the centre the drawn ground is in a direction, and never
- * below the sea: what something flying low must stay above. The same
- * arithmetic the patches are built with, so the two cannot disagree about
- * where the ground is.
- */
-export function groundRadiusAt(
-  planet: Planet,
-  direction: readonly [number, number, number],
-): number {
-  const [x, y, z] = direction
-  const length = Math.hypot(x, y, z) || 1
-  const { drawn } = drawnHeight(planet, x / length, y / length, z / length)
-  return Math.max(SEA_RADIUS, 1 + liftOf(drawn, planet.relief))
-}
+export { groundRadiusAt }
 
 export const vertexCount = (segments: number): number => (segments + 1) ** 2 + 4 * (segments + 1)
 

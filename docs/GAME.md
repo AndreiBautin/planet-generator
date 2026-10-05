@@ -39,7 +39,7 @@ it can be. Checked when live.
 
 ### A — The ground
 
-- [ ] **A1 Sampler.** `generation/voxel.ts`: the block at (x, y, z) of a
+- [x] **A1 Sampler.** `generation/voxel.ts`: the block at (x, y, z) of a
       landing area, from the planet's own height, biome, moisture and
       features — grass over earth over stone, sand on beaches, snow on the
       heights, basalt and lava on a molten world, water below sea level,

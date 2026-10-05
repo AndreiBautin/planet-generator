@@ -229,6 +229,31 @@ checks nothing. The pre-push hook runs `pnpm verify`; CI runs the same.
   fog. Laying the shader over everything with the ground taken as a sphere
   washed low land out white, because real hills stand above that sphere.
 
+## The game, and the ground as blocks
+
+[docs/GAME.md](docs/GAME.md) is the design and the backlog. The first
+piece is in:
+
+- **Where the ground is has one home: `generation/ground.ts`.** `liftOf`,
+  `drawnHeight`, `floorRadiusAt` and `groundRadiusAt` moved there from the
+  renderer, and `SEA_RADIUS` with them (the render modules re-export, so
+  nothing else moved). The patches, the glide, the features and the voxel
+  landing all ask it, so none can disagree about where the ground is.
+- **Where the features stand has one home too: `generation/placement.ts`.**
+  The grid, the hash and the choice of what is in a cell came out of the
+  renderer's scatterer, which now only sizes and colours what placement
+  decided. `generation/cube.ts` is the cube-sphere (moved from
+  `render/patches/`, re-exported there), with `faceUvOf` as the inverse of
+  `directionOn`.
+- **A landing is pure** (`generation/voxel.ts`, tested): a tangent frame at
+  the landing point, a column's layers from its surface — grass over earth
+  over stone, sand, snow, basalt, water or lava below sea level — and the
+  features stamped into the air as block trees, stone and floes from the
+  same placements the flyover drew. `BLOCK` is 0.0002 radii, so a tree is
+  five or six blocks. **An area straddling a cube edge misses the strip over
+  the edge**: features are read off the landing point's face only. Twelve
+  edges on a planet; accepted until it is seen.
+
 ## Traps
 
 - **Every patch geometry wraps the shared index array in its own
