@@ -319,6 +319,30 @@ export function withGroundDetail(
           }
         }
 
+        // Meadow: open grass is never one green. Drier, yellower stretches
+        // and lusher, darker hollows drift across it at two scales, so a
+        // hillside reads as ground rather than as paint. Only green ground
+        // takes it, and it fades out from orbit where it would be mottle.
+        ${
+          molten
+            ? ''
+            : /* glsl */ `{
+          vec3 base = diffuseColor.rgb;
+          float greenness = clamp((base.g - base.b) * 3.0, 0.0, 1.0) * (1.0 - smoothstep(1.0, 1.15, base.r / max(base.g, 0.001)));
+          float grassy = max(0.0, 1.0 - (v_pattern.x + v_pattern.y + v_pattern.z + v_pattern.w));
+          float meadow = greenness * grassy * (1.0 - smoothstep(0.6, 2.0, detailDistance));
+          if (meadow > 0.02) {
+            float fineFilter = 1.0 - smoothstep(0.2, 0.5, length(fwidth(vDetailPosition)) * 240.0);
+            float drift = detailNoise(vDetailPosition * 55.0) * 0.7 + (detailNoise(vDetailPosition * 240.0 + 5.1) - 0.5) * 0.3 * fineFilter + 0.15;
+            float dry = smoothstep(0.48, 0.72, drift);
+            float lush = 1.0 - smoothstep(0.28, 0.5, drift);
+            vec3 tint = mix(vec3(1.0), vec3(1.22, 1.02, 0.5), dry * 0.75);
+            tint = mix(tint, vec3(0.55, 0.78, 0.62), lush * 0.75);
+            diffuseColor.rgb *= mix(vec3(1.0), tint, meadow);
+          }
+        }`
+        }
+
         // Canopy: a forest from above is crowns with dark gaps, no two
         // crowns the same shade, in groves of lighter and darker wood —
         // beyond where the trees themselves stand. Within that range the
