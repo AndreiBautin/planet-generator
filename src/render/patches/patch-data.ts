@@ -3,6 +3,7 @@ import { fineReliefAt, fineReliefWeight } from '@/generation/relief'
 
 import { fromPalette } from '../colour'
 import { liftOf } from '../surface-data'
+import { SEA_RADIUS } from '../water'
 import { directionOn, patchAngle, patchUv, type PatchKey } from './cube'
 
 /**
@@ -40,6 +41,42 @@ const FINE_RELIEF = 0.11
 const ROCK_FROM = 0.06
 const ROCK_FULL = 0.22
 
+/** The height the ground is drawn at, before it is lifted to a radius. */
+function drawnHeight(
+  planet: Planet,
+  x: number,
+  y: number,
+  z: number,
+): {
+  readonly surface: ReturnType<typeof surfaceAt>
+  readonly fine: number
+  readonly drawn: number
+} {
+  const surface = surfaceAt(planet, x, y, z)
+  const fine = fineReliefAt(planet, x, y, z)
+  return {
+    surface,
+    fine,
+    drawn: surface.height + fine * fineReliefWeight(surface.height) * FINE_RELIEF,
+  }
+}
+
+/**
+ * How far from the centre the drawn ground is in a direction, and never
+ * below the sea: what something flying low must stay above. The same
+ * arithmetic the patches are built with, so the two cannot disagree about
+ * where the ground is.
+ */
+export function groundRadiusAt(
+  planet: Planet,
+  direction: readonly [number, number, number],
+): number {
+  const [x, y, z] = direction
+  const length = Math.hypot(x, y, z) || 1
+  const { drawn } = drawnHeight(planet, x / length, y / length, z / length)
+  return Math.max(SEA_RADIUS, 1 + liftOf(drawn, planet.relief))
+}
+
 export const vertexCount = (segments: number): number => (segments + 1) ** 2 + 4 * (segments + 1)
 
 export function samplePatch(planet: Planet, key: PatchKey, segments: number): PatchData {
@@ -57,9 +94,7 @@ export function samplePatch(planet: Planet, key: PatchKey, segments: number): Pa
     for (let i = -1; i <= segments + 1; i += 1) {
       const [u, v] = patchUv(key, i / segments, j / segments)
       const [x, y, z] = directionOn(key.face, u, v)
-      const surface = surfaceAt(planet, x, y, z)
-      const fine = fineReliefAt(planet, x, y, z)
-      const drawn = surface.height + fine * fineReliefWeight(surface.height) * FINE_RELIEF
+      const { surface, fine, drawn } = drawnHeight(planet, x, y, z)
       const radius = 1 + liftOf(drawn, planet.relief)
       const at = ((j + 1) * ring + (i + 1)) * 3
       wide[at] = x * radius

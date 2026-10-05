@@ -1,0 +1,97 @@
+import { describe, expect, it } from 'vitest'
+
+import {
+  advance,
+  MAX_ALTITUDE,
+  MIN_ALTITUDE,
+  pinchGlide,
+  poseOf,
+  startGlide,
+  steer,
+  type Ground,
+  type Vec3,
+} from './glide'
+
+const flat: Ground = () => 1
+const length = (v: Vec3): number => Math.hypot(v[0], v[1], v[2])
+const dot = (a: Vec3, b: Vec3): number => a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
+
+const start = startGlide([0, 0, 1], [1, 0, 0], flat)
+
+describe('gliding', () => {
+  it('starts above the ground at its altitude, heading along the ground', () => {
+    expect(start.eye).toBeCloseTo(1 + start.altitude, 10)
+    expect(dot(start.heading, start.position)).toBeCloseTo(0, 10)
+    expect(length(start.heading)).toBeCloseTo(1, 10)
+  })
+
+  it('makes a heading that points into the ground lie flat along it', () => {
+    const tilted = startGlide([0, 0, 1], [0.6, 0, 0.8], flat)
+    expect(dot(tilted.heading, tilted.position)).toBeCloseTo(0, 10)
+    expect(tilted.heading[0]).toBeGreaterThan(0.99)
+  })
+
+  it('moves forward along its heading and stays on the sphere', () => {
+    let glide = start
+    for (let frame = 0; frame < 120; frame += 1) glide = advance(glide, 1 / 60, flat)
+    expect(length(glide.position)).toBeCloseTo(1, 10)
+    expect(dot(glide.heading, glide.position)).toBeCloseTo(0, 8)
+    // Heading +x from the +z pole, so it has moved towards +x.
+    expect(glide.position[0]).toBeGreaterThan(0)
+    expect(Math.abs(glide.position[1])).toBeLessThan(1e-9)
+  })
+
+  it('rises before a ridge rather than into it', () => {
+    // A wall of ground just ahead, in the direction of travel.
+    const wall: Ground = (d) => (d[0] > 0.02 ? 1.03 : 1)
+    let glide = start
+    let peak = glide.eye
+    for (let frame = 0; frame < 60; frame += 1) {
+      glide = advance(glide, 1 / 60, wall)
+      if (glide.position[0] <= 0.02) peak = glide.eye
+    }
+    expect(peak).toBeGreaterThan(1.02)
+  })
+
+  it('never comes closer to the ground than its clearance', () => {
+    const bumpy: Ground = (d) => 1 + 0.02 * Math.abs(Math.sin(d[0] * 400))
+    let glide = startGlide([0, 0, 1], [1, 0, 0], bumpy)
+    for (let frame = 0; frame < 600; frame += 1) {
+      glide = advance(glide, 1 / 60, bumpy)
+      expect(glide.eye).toBeGreaterThan(bumpy(glide.position))
+    }
+  })
+
+  it('turns with a sideways drag and keeps flying along the ground', () => {
+    const turned = steer(start, 200, 0, 800)
+    expect(dot(turned.heading, start.heading)).toBeLessThan(0.99)
+    expect(dot(turned.heading, turned.position)).toBeCloseTo(0, 10)
+    // Right is right: seen from above (+z) heading +x, a right turn goes towards −y.
+    expect(turned.heading[1]).toBeLessThan(0)
+  })
+
+  it('climbs and dives within its limits', () => {
+    // Screen y grows downwards: a finger moving up climbs.
+    expect(steer(start, 0, -100_000, 800).altitude).toBe(MAX_ALTITUDE)
+    expect(steer(start, 0, 100_000, 800).altitude).toBe(MIN_ALTITUDE)
+    expect(pinchGlide(start, 2).altitude).toBeLessThan(start.altitude)
+    expect(pinchGlide(start, Number.NaN)).toBe(start)
+  })
+
+  it('looks ahead and a little down, with up away from the centre', () => {
+    const pose = poseOf(start)
+    const forward: Vec3 = [
+      pose.look[0] - pose.eye[0],
+      pose.look[1] - pose.eye[1],
+      pose.look[2] - pose.eye[2],
+    ]
+    expect(dot(forward, start.heading)).toBeGreaterThan(0.9)
+    expect(dot(forward, start.position)).toBeLessThan(0)
+    expect(pose.up).toEqual(start.position)
+  })
+
+  it('does nothing for a step of no time', () => {
+    expect(advance(start, 0, flat)).toBe(start)
+    expect(advance(start, Number.NaN, flat)).toBe(start)
+  })
+})

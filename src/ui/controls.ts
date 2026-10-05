@@ -1,19 +1,25 @@
 import type { Clock } from '@/app/clock'
 
-import { drag, grab, INITIAL_ORBIT, pinch, release, settle, wheel, type Orbit } from './orbit'
-
 /**
- * Pointer events in, an `Orbit` out. One finger or the mouse turns the
- * camera; two fingers pinch; the wheel zooms. Pointer Events rather than
- * touch and mouse separately, so a pen, a finger and a trackpad all take
- * the same path.
+ * Pointer events in, gestures out. One finger or the mouse drags; two
+ * fingers pinch; the wheel scrolls. Pointer Events rather than touch and
+ * mouse separately, so a pen, a finger and a trackpad all take the same
+ * path.
  *
- * The orbit is settled lazily, when the frame loop asks for it, from the
- * clock — so a coast runs on elapsed time and never on a frame count.
+ * What a gesture does is not decided here: the same drag turns the orbit or
+ * steers a glide depending on what the camera is doing, and that is the
+ * caller's to know.
  */
-export interface OrbitControls {
-  readonly current: () => Orbit
-  readonly dispose: () => void
+export interface GestureHandlers {
+  /** A finger landed. */
+  readonly grab: () => void
+  /** A finger moved by (dx, dy) pixels over `seconds`, on a target `height` pixels tall. */
+  readonly drag: (dx: number, dy: number, seconds: number, height: number) => void
+  /** The last finger lifted, `sinceMove` seconds after it last moved. */
+  readonly release: (sinceMove: number) => void
+  /** Two fingers spread by `factor` (new gap over old). */
+  readonly pinch: (factor: number) => void
+  readonly wheel: (deltaY: number) => void
 }
 
 interface Point {
@@ -21,10 +27,12 @@ interface Point {
   readonly y: number
 }
 
-export function attachOrbit(target: HTMLElement, clock: Clock): OrbitControls {
-  let orbit = INITIAL_ORBIT
-  let settledAt = clock.now()
-  let lastMoveAt = settledAt
+export function attachGestures(
+  target: HTMLElement,
+  clock: Clock,
+  handlers: GestureHandlers,
+): () => void {
+  let lastMoveAt = clock.now()
   const pointers = new Map<number, Point>()
 
   const gap = (): number => {
@@ -35,7 +43,7 @@ export function attachOrbit(target: HTMLElement, clock: Clock): OrbitControls {
   const down = (event: PointerEvent): void => {
     target.setPointerCapture(event.pointerId)
     pointers.set(event.pointerId, { x: event.clientX, y: event.clientY })
-    orbit = grab(orbit)
+    handlers.grab()
     lastMoveAt = clock.now()
   }
 
@@ -47,11 +55,10 @@ export function attachOrbit(target: HTMLElement, clock: Clock): OrbitControls {
       const was = gap()
       pointers.set(event.pointerId, { x: event.clientX, y: event.clientY })
       const is = gap()
-      if (was > 0) orbit = pinch(orbit, is / was)
+      if (was > 0) handlers.pinch(is / was)
     } else {
       pointers.set(event.pointerId, { x: event.clientX, y: event.clientY })
-      orbit = drag(
-        orbit,
+      handlers.drag(
         event.clientX - before.x,
         event.clientY - before.y,
         (now - lastMoveAt) / 1000,
@@ -63,16 +70,15 @@ export function attachOrbit(target: HTMLElement, clock: Clock): OrbitControls {
 
   const up = (event: PointerEvent): void => {
     if (!pointers.delete(event.pointerId)) return
-    // Lifting one finger of a pinch leaves the other holding the planet;
-    // only the last finger lets it coast.
-    if (pointers.size === 0) orbit = release(orbit, (clock.now() - lastMoveAt) / 1000)
-    else orbit = grab(orbit)
-    settledAt = clock.now()
+    // Lifting one finger of a pinch leaves the other holding on; only the
+    // last finger lets go.
+    if (pointers.size === 0) handlers.release((clock.now() - lastMoveAt) / 1000)
+    else handlers.grab()
   }
 
   const scroll = (event: WheelEvent): void => {
     event.preventDefault()
-    orbit = wheel(orbit, event.deltaY)
+    handlers.wheel(event.deltaY)
   }
 
   target.addEventListener('pointerdown', down)
@@ -81,19 +87,11 @@ export function attachOrbit(target: HTMLElement, clock: Clock): OrbitControls {
   target.addEventListener('pointercancel', up)
   target.addEventListener('wheel', scroll, { passive: false })
 
-  return {
-    current: () => {
-      const now = clock.now()
-      orbit = settle(orbit, (now - settledAt) / 1000)
-      settledAt = now
-      return orbit
-    },
-    dispose: () => {
-      target.removeEventListener('pointerdown', down)
-      target.removeEventListener('pointermove', move)
-      target.removeEventListener('pointerup', up)
-      target.removeEventListener('pointercancel', up)
-      target.removeEventListener('wheel', scroll)
-    },
+  return () => {
+    target.removeEventListener('pointerdown', down)
+    target.removeEventListener('pointermove', move)
+    target.removeEventListener('pointerup', up)
+    target.removeEventListener('pointercancel', up)
+    target.removeEventListener('wheel', scroll)
   }
 }

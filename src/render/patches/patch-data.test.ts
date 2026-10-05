@@ -3,7 +3,8 @@ import { describe, expect, it } from 'vitest'
 import { createPlanet } from '@/generation/planet'
 import { parseSeed, type Seed } from '@/generation/seed'
 
-import { patchIndex, samplePatch, vertexCount } from './patch-data'
+import { groundRadiusAt, patchIndex, samplePatch, vertexCount } from './patch-data'
+import { SEA_RADIUS } from '../water'
 
 const parsed = parseSeed('2257afq')
 if (parsed === undefined) throw new Error('test seed must parse')
@@ -61,6 +62,16 @@ describe('samplePatch', () => {
       const mineN = at(patch.normals, j * side + segments)
       const theirsN = at(right.normals, j * side)
       for (let axis = 0; axis < 3; axis += 1) expect(mineN[axis]).toBeCloseTo(theirsN[axis] ?? 0, 4)
+    }
+  })
+})
+
+describe('groundRadiusAt', () => {
+  it('puts the ground where the patches draw it, and never under the sea', () => {
+    for (let vertex = 0; vertex < (segments + 1) ** 2; vertex += 7) {
+      const p = at(patch.positions, vertex)
+      const drawn = Math.hypot(...p)
+      expect(groundRadiusAt(planet, p)).toBeCloseTo(Math.max(SEA_RADIUS, drawn), 5)
     }
   })
 })

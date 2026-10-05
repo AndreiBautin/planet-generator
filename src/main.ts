@@ -1,14 +1,16 @@
 import { systemClock } from '@/app/clock'
 import { readConfig } from '@/app/config'
 import { linkFor, parseLink } from '@/app/link'
-import { createPlanet, DEFAULT_DIALS, type Dials } from '@/generation/planet'
+import { createPlanet, DEFAULT_DIALS, type Dials, type Planet } from '@/generation/planet'
 import { newSeed, type Seed } from '@/generation/seed'
 import { createBuilder } from '@/render/builder'
+import { groundRadiusAt } from '@/render/patches/patch-data'
 import { pickQuality } from '@/render/quality'
 import { startScene } from '@/render/scene'
 import { logger, setLogLevel } from '@/shared/logger'
-import { attachOrbit } from '@/ui/controls'
+import { attachGestures } from '@/ui/controls'
 import { attachHud } from '@/ui/hud'
+import { createRig } from '@/ui/rig'
 import { shareLink } from '@/ui/share'
 
 /**
@@ -46,8 +48,13 @@ const canvas = document.createElement('canvas')
 canvas.setAttribute('aria-label', 'The planet. Drag to turn it, pinch or scroll to zoom.')
 canvas.setAttribute('role', 'img')
 document.body.prepend(canvas)
-const orbit = attachOrbit(canvas, systemClock)
-const scene = startScene(canvas, systemClock, orbit.current, {
+
+// The ground a glide flies over is the planet on screen: read through a
+// variable, because a dial moved mid-flight swaps the planet under it.
+let planet: Planet = createPlanet(seed, dials)
+const rig = createRig(systemClock, () => (direction) => groundRadiusAt(planet, direction))
+attachGestures(canvas, systemClock, rig.gestures)
+const scene = startScene(canvas, systemClock, rig.view, {
   quality,
   builder: createBuilder(navigator.hardwareConcurrency),
   reducedMotion: window.matchMedia('(prefers-reduced-motion: reduce)').matches,
@@ -59,18 +66,23 @@ const scene = startScene(canvas, systemClock, orbit.current, {
  * the sea rises a notch would be a show nobody asked for.
  */
 const show = async (born: boolean): Promise<void> => {
-  const planet = createPlanet(seed, dials)
-  hud.render(planet)
+  const next = createPlanet(seed, dials)
+  planet = next
+  hud.render(next)
   document.body.classList.add('forming')
   // False when a later planet was asked for first; that one will clear the
   // forming state when it arrives.
-  if (!(await scene.show(planet, { born }))) return
+  if (!(await scene.show(next, { born }))) return
   document.body.classList.remove('forming')
-  logger.info('planet.shown', { seed, kind: planet.kind })
+  logger.info('planet.shown', { seed, kind: next.kind })
 }
 
 const hud = attachHud({
   onNew: () => {
+    // A new world is born in orbit: rising over the old one first would be
+    // two seconds of a planet that is about to be replaced.
+    rig.cut()
+    hud.flying(false)
     seed = freshSeed()
     dials = DEFAULT_DIALS
     window.history.pushState(null, '', linkFor(seed, dials))
@@ -81,6 +93,11 @@ const hud = attachHud({
       if (message !== undefined) hud.toast(message)
     })
   },
+  onFly: () => {
+    if (rig.flying()) rig.land(scene.orbitOver)
+    else rig.fly(scene.diveFrom())
+    hud.flying(rig.flying())
+  },
   onDials: (next) => {
     dials = next
     // Replaced rather than pushed: a dial dragged across its range is one
@@ -90,7 +107,28 @@ const hud = attachHud({
   },
 })
 
+// Arrow keys steer a glide on a keyboard, and Escape lands.
+window.addEventListener('keydown', (event) => {
+  if (!rig.flying() || event.target instanceof HTMLInputElement) return
+  const steps: Record<string, readonly [number, number]> = {
+    ArrowLeft: [-0.04, 0],
+    ArrowRight: [0.04, 0],
+    ArrowUp: [0, -0.08],
+    ArrowDown: [0, 0.08],
+  }
+  const step = steps[event.key]
+  if (step !== undefined) {
+    event.preventDefault()
+    rig.nudge(step[0], step[1])
+  } else if (event.key === 'Escape') {
+    rig.land(scene.orbitOver)
+    hud.flying(false)
+  }
+})
+
 window.addEventListener('popstate', () => {
+  rig.cut()
+  hud.flying(false)
   const link = parseLink(window.location.search)
   const changed = link.seed !== seed
   seed = link.seed ?? freshSeed()

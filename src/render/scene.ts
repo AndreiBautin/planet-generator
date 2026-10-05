@@ -28,17 +28,35 @@ import { waterMaterial } from './water'
 export interface Scene {
   /** Resolves true once the planet is on screen, false if another was asked for first. */
   readonly show: (planet: Planet, options: { readonly born: boolean }) => Promise<boolean>
+  /**
+   * Where to begin a glide from here: the ground under the middle of the
+   * view, heading towards the top of the screen — so the dive goes into
+   * the picture the person was looking at.
+   */
+  readonly diveFrom: () => { readonly position: Vec3; readonly heading: Vec3 }
+  /** The orbit angles that look straight down on a point of the planet, as it is turned now. */
+  readonly orbitOver: (position: Vec3) => { readonly yaw: number; readonly pitch: number }
   readonly dispose: () => void
 }
 
 /**
  * Where the camera should be, asked for once a frame. Defined here rather
  * than taken from the controls, so the scene does not know what moves it.
+ *
+ * Two cameras and a blend between them: the orbit, in the room's frame,
+ * and the glide, in the planet's own frame so it is carried round as the
+ * planet turns. Blending in the scene is what lets a dive start from
+ * wherever the orbit was and land wherever the glide is.
  */
 export interface CameraView {
-  readonly yaw: number
-  readonly pitch: number
-  readonly distance: number
+  readonly orbit: {
+    readonly yaw: number
+    readonly pitch: number
+    readonly distance: number
+  }
+  readonly surface: { readonly eye: Vec3; readonly look: Vec3; readonly up: Vec3 } | undefined
+  /** 0 is all orbit, 1 all glide. */
+  readonly blend: number
 }
 
 export interface SceneOptions {
@@ -211,6 +229,50 @@ export function startScene(
   // rather than reacting to one, and only ever downward.
   const frames: number[] = []
   let lastFrameAt = clock.now()
+  let lastTurn = 0
+
+  const orbitEye = new THREE.Vector3()
+  const surfaceEye = new THREE.Vector3()
+  const surfaceLook = new THREE.Vector3()
+  const surfaceUp = new THREE.Vector3()
+  const target = new THREE.Vector3()
+  const up = new THREE.Vector3()
+  const ROOM_UP = new THREE.Vector3(0, 1, 0)
+  const ORIGIN = new THREE.Vector3(0, 0, 0)
+
+  /** Put the camera where the view asks, blending the orbit and the glide. */
+  const place = (view: CameraView, turn: number): void => {
+    const { yaw, pitch, distance } = view.orbit
+    orbitEye.set(
+      distance * Math.cos(pitch) * Math.sin(yaw),
+      distance * Math.sin(pitch),
+      distance * Math.cos(pitch) * Math.cos(yaw),
+    )
+    const t = view.surface === undefined ? 0 : Math.min(1, Math.max(0, view.blend))
+    if (view.surface === undefined || t === 0) {
+      camera.position.copy(orbitEye)
+      camera.up.copy(ROOM_UP)
+      camera.lookAt(ORIGIN)
+    } else {
+      surfaceEye.set(...intoRoom(view.surface.eye, turn))
+      surfaceLook.set(...intoRoom(view.surface.look, turn))
+      surfaceUp.set(...intoRoom(view.surface.up, turn))
+      camera.position.lerpVectors(orbitEye, surfaceEye, t)
+      target.lerpVectors(ORIGIN, surfaceLook, t)
+      up.lerpVectors(ROOM_UP, surfaceUp, t).normalize()
+      camera.up.copy(up)
+      camera.lookAt(target)
+    }
+    // Near the ground the near plane has to come in, or the hill in front
+    // of the eye is cut away; far out it can stand back, which keeps depth
+    // precise across the whole planet.
+    const above = camera.position.length() - 1
+    const near = Math.min(0.1, Math.max(0.0004, above * 0.2))
+    if (Math.abs(near - camera.near) > camera.near * 0.05) {
+      camera.near = near
+      camera.updateProjectionMatrix()
+    }
+  }
 
   renderer.setAnimationLoop(() => {
     const now = clock.now()
@@ -226,17 +288,11 @@ export function startScene(
       }
     }
 
-    const { yaw, pitch, distance } = view()
-    camera.position.set(
-      distance * Math.cos(pitch) * Math.sin(yaw),
-      distance * Math.sin(pitch),
-      distance * Math.cos(pitch) * Math.cos(yaw),
-    )
-    camera.lookAt(0, 0, 0)
-
     // From the clock rather than per frame, so a dropped frame does not
     // slow the planet down.
     const turn = (now / TURN_MS) * Math.PI * 2
+    lastTurn = turn
+    place(view(), turn)
     if (coming !== undefined) {
       coming.terrain.update(inPlanetFrame(camera.position, turn, 1))
       if (coming.terrain.ready && (coming.keepClouds || coming.clouds !== undefined)) {
@@ -257,6 +313,17 @@ export function startScene(
 
   return {
     show,
+    diveFrom: () => {
+      const position = unit(inPlanetFrame(camera.position, lastTurn, 1))
+      // The screen's up, taken into the planet's frame, is the way ahead.
+      const up = new THREE.Vector3(0, 1, 0).applyQuaternion(camera.quaternion)
+      const heading = inPlanetFrame(up, lastTurn, 1)
+      return { position, heading }
+    },
+    orbitOver: (position) => {
+      const [x, y, z] = intoRoom(position, lastTurn)
+      return { yaw: Math.atan2(x, z), pitch: Math.asin(Math.max(-1, Math.min(1, y))) }
+    },
     dispose: () => {
       renderer.setAnimationLoop(null)
       window.removeEventListener('resize', resize)
@@ -272,12 +339,28 @@ export function startScene(
   }
 }
 
+const unit = (v: Vec3): Vec3 => {
+  const length = Math.hypot(v[0], v[1], v[2]) || 1
+  return [v[0] / length, v[1] / length, v[2] / length]
+}
+
+/** A point in the planet's own frame, carried round to where the planet has turned to. */
+function intoRoom(point: Vec3, turn: number): [number, number, number] {
+  const cos = Math.cos(turn)
+  const sin = Math.sin(turn)
+  return [point[0] * cos + point[2] * sin, point[1], -point[0] * sin + point[2] * cos]
+}
+
 /**
  * The camera in the planet's own frame: undo the planet's turn about its
  * axis and its birth scale, so the terrain is split for where the camera is
  * relative to the ground rather than relative to the room.
  */
-function inPlanetFrame(position: THREE.Vector3, turn: number, scale: number): Vec3 {
+function inPlanetFrame(
+  position: { readonly x: number; readonly y: number; readonly z: number },
+  turn: number,
+  scale: number,
+): Vec3 {
   const cos = Math.cos(-turn)
   const sin = Math.sin(-turn)
   const x = position.x * cos + position.z * sin

@@ -10,11 +10,15 @@ export interface HudHandlers {
   readonly onNew: () => void
   readonly onShare: () => void
   readonly onDials: (dials: Dials) => void
+  /** Fly when orbiting, land when flying. */
+  readonly onFly: () => void
 }
 
 export interface Hud {
   readonly render: (planet: Planet) => void
   readonly toast: (message: string) => void
+  /** Say whether the camera is flying: the button's word, and the hint. */
+  readonly flying: (flying: boolean) => void
 }
 
 const element = <T extends HTMLElement>(id: string, type: new () => T): T => {
@@ -41,6 +45,8 @@ export function attachHud(handlers: HudHandlers): Hud {
 
   element('new', HTMLButtonElement).addEventListener('click', handlers.onNew)
   element('share', HTMLButtonElement).addEventListener('click', handlers.onShare)
+  const fly = element('fly', HTMLButtonElement)
+  fly.addEventListener('click', handlers.onFly)
   tune.addEventListener('click', () => {
     panel.hidden = !panel.hidden
     tune.setAttribute('aria-pressed', String(!panel.hidden))
@@ -73,6 +79,11 @@ export function attachHud(handlers: HudHandlers): Hud {
       dials.water.value = String(Math.round(planet.dials.water * 100))
       dials.temperature.value = String(Math.round(planet.dials.temperature * 100))
       dials.roughness.value = String(Math.round(planet.dials.roughness * 100))
+    },
+    flying: (flying) => {
+      fly.textContent = flying ? 'Land' : 'Fly'
+      fly.setAttribute('aria-pressed', String(flying))
+      document.body.classList.toggle('flying', flying)
     },
     toast: (message) => {
       toastLine.textContent = message

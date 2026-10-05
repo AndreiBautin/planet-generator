@@ -180,6 +180,44 @@
       .toast.shown {
         opacity: 1;
       }
+      /* Flying, the hint says how to steer — once, fading after a few
+         seconds, because it is only news the first time. */
+      .hint {
+        position: fixed;
+        left: 50%;
+        top: calc(max(16px, env(safe-area-inset-top)) + 84px);
+        transform: translateX(-50%);
+        margin: 0;
+        padding: 8px 14px;
+        border-radius: 12px;
+        background: var(--glass);
+        border: 1px solid var(--edge);
+        font-size: 13px;
+        color: var(--dim);
+        white-space: nowrap;
+        opacity: 0;
+        pointer-events: none;
+      }
+      .flying .hint {
+        animation: hint 6s ease forwards;
+      }
+      @keyframes hint {
+        0%,
+        100% {
+          opacity: 0;
+        }
+        12%,
+        75% {
+          opacity: 1;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .flying .hint {
+          animation: none;
+          opacity: 1;
+        }
+      }
+
       /* While a world is being made, its name breathes so the wait reads as
          work rather than as a frozen page. */
       .forming .title h1 {
@@ -224,10 +262,12 @@
       <nav class="actions" aria-label="Planet">
         <button type="button" id="tune" aria-pressed="false" aria-controls="dials">Tune</button>
         <button type="button" id="new" class="primary">New planet</button>
+        <button type="button" id="fly" aria-pressed="false">Fly</button>
         <button type="button" id="share">Share</button>
       </nav>
     </div>
 
+    <p class="hint" id="hint">Drag to steer and climb · pinch to change height</p>
     <p class="toast" id="toast" role="status" aria-live="polite"></p>
     <script type="module" src="/src/main.ts"></script>
   </body>
