@@ -95,7 +95,10 @@ export function buildAtmosphere(planet: Planet, sun: THREE.Vector3): THREE.Mesh 
         vec3 colour = glow * (1.0 + toward * 0.8) + vec3(toward * 0.35);
 
         float a = amount * day * strength;
-        gl_FragColor = vec4(colour * a * 1.3, 1.0);
+        // Linear light out: the frame is tone-mapped and encoded once, at
+        // the end, by the post pass, like every other material's.
+        vec3 sky = colour * a * 1.3;
+        gl_FragColor = vec4(pow(sky, vec3(2.2)), 1.0);
       }
     `,
     side: THREE.BackSide,

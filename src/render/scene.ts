@@ -5,6 +5,12 @@ import type { Planet } from '@/generation/planet'
 import { createRng } from '@/generation/rng'
 import { starField } from '@/generation/stars'
 
+import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js'
+import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js'
+import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js'
+import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js'
+import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js'
+
 import { AIR_RADIUS, buildAtmosphere } from './atmosphere'
 import { BORN, birthAt, type Birth } from './birth'
 import type { Builder } from './builder'
@@ -109,8 +115,47 @@ interface Coming {
 
 /** Frames measured before the governor judges the device. */
 const FRAME_WINDOW = 90
-/** One slow turn every two minutes. */
-const TURN_MS = 120_000
+
+/** The post pass's own frame: half float so bloom has highlights to find, multisampled so edges stay clean. */
+function postTarget(): THREE.WebGLRenderTarget {
+  return new THREE.WebGLRenderTarget(window.innerWidth, window.innerHeight, {
+    type: THREE.HalfFloatType,
+    samples: 4,
+  })
+}
+
+/** A vignette and a fine grain: the two cheapest things between a render and a photograph. */
+const GRADE_SHADER = {
+  uniforms: { tDiffuse: { value: null }, grain: { value: 0.035 }, vignette: { value: 0.32 } },
+  vertexShader: /* glsl */ `
+    varying vec2 vUv;
+    void main() {
+      vUv = uv;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    }
+  `,
+  fragmentShader: /* glsl */ `
+    uniform sampler2D tDiffuse;
+    uniform float grain;
+    uniform float vignette;
+    varying vec2 vUv;
+    float gradeHash(vec2 p) {
+      vec3 q = fract(vec3(p.xyx) * 0.1031);
+      q += dot(q, q.yzx + 33.33);
+      return fract((q.x + q.y) * q.z);
+    }
+    void main() {
+      vec4 c = texture2D(tDiffuse, vUv);
+      vec2 d = vUv - 0.5;
+      float edge = 1.0 - smoothstep(0.35, 1.1, dot(d, d) * 2.4);
+      c.rgb *= mix(1.0 - vignette, 1.0, edge);
+      c.rgb += (gradeHash(gl_FragCoord.xy) - 0.5) * grain * c.rgb;
+      gl_FragColor = c;
+    }
+  `,
+}
+/** One slow turn every eight minutes: a glide stays in daylight long enough to see the ground it came for. */
+const TURN_MS = 480_000
 
 export function startScene(
   canvas: HTMLCanvasElement,
@@ -118,7 +163,7 @@ export function startScene(
   view: () => CameraView,
   options: SceneOptions,
 ): Scene {
-  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true })
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: !options.quality.post })
   let pixelRatio = options.quality.pixelRatio
   renderer.setPixelRatio(pixelRatio)
   renderer.toneMapping = THREE.ACESFilmicToneMapping
@@ -126,7 +171,30 @@ export function startScene(
   renderer.setSize(window.innerWidth, window.innerHeight)
 
   const scene = new THREE.Scene()
+  // The post pass: the frame rendered into a half-float target with
+  // multisampling, a soft bloom off the brightest things (the sun on the
+  // sea, lava, a snowfield's glints), a vignette and a grain, then tone
+  // mapping and encoding once at the end. Off on a modest phone, where
+  // the frame goes straight to the screen as before.
+  const composer = options.quality.post ? new EffectComposer(renderer, postTarget()) : undefined
+  const bloom = new UnrealBloomPass(
+    new THREE.Vector2(window.innerWidth, window.innerHeight),
+    0.12,
+    0.5,
+    1.0,
+  )
+  const grade = new ShaderPass(GRADE_SHADER)
+  if (composer !== undefined) {
+    composer.setPixelRatio(pixelRatio)
+    composer.setSize(window.innerWidth, window.innerHeight)
+  }
   const camera = new THREE.PerspectiveCamera(FIELD_OF_VIEW, 1, 0.1, 100)
+  if (composer !== undefined) {
+    composer.addPass(new RenderPass(scene, camera))
+    composer.addPass(bloom)
+    composer.addPass(new OutputPass())
+    composer.addPass(grade)
+  }
   let rush = 0
   const frame = (): void => {
     camera.aspect = window.innerWidth / window.innerHeight
@@ -141,7 +209,11 @@ export function startScene(
   // side falls dark; the ambient is just enough to keep the night readable.
   const sun = new THREE.DirectionalLight(0xfff2e0, 3.2)
   sun.position.set(5, 1.5, 2.5)
-  scene.add(sun, sun.target, new THREE.AmbientLight(0x1a2438, 0.35))
+  // The sky lights the ground from above and the ground bounces back from
+  // below: what gives a snowfield's shadows their blue and keeps a slope
+  // facing away from the sun from going flat. Tinted to each world's air.
+  const skylight = new THREE.HemisphereLight(0x9fc3ff, 0x4a3b2c, 0.5)
+  scene.add(sun, sun.target, skylight, new THREE.AmbientLight(0x22304a, 0.3))
   const sunDirection = sun.position.clone().normalize()
   // Shadows near the ground, from the trees and the relief: the shadow
   // camera is a small box kept over the ground under the eye, because a
@@ -273,6 +345,7 @@ export function startScene(
   const resize = (): void => {
     frame()
     renderer.setSize(window.innerWidth, window.innerHeight)
+    composer?.setSize(window.innerWidth, window.innerHeight)
   }
   window.addEventListener('resize', resize)
 
@@ -375,7 +448,7 @@ export function startScene(
     const day = smooth(-0.15, 0.3, camera.position.clone().normalize().dot(sunDirection))
     // Seeing as far as the horizon, about √(2h) away, should leave a far hill
     // about half visible.
-    fog.density = low * (0.85 / Math.sqrt(2 * Math.max(above, 0.002)))
+    fog.density = low * (0.65 / Math.sqrt(2 * Math.max(above, 0.002)))
     const glow: unknown = shown?.air.material
     if (glow instanceof THREE.ShaderMaterial) {
       const value: unknown = glow.uniforms.glow?.value
@@ -402,6 +475,8 @@ export function startScene(
         pixelRatio = next
         renderer.setPixelRatio(pixelRatio)
         renderer.setSize(window.innerWidth, window.innerHeight)
+        composer?.setPixelRatio(pixelRatio)
+        composer?.setSize(window.innerWidth, window.innerHeight)
       }
     }
 
@@ -439,7 +514,8 @@ export function startScene(
       shown.terrain.update(inPlanetFrame(camera.position, turn, stage.scale), viewCone(turn))
       rain.update(rainEye.copy(camera.position), rainOver(shown.clouds, turn))
     }
-    renderer.render(scene, camera)
+    if (composer === undefined) renderer.render(scene, camera)
+    else composer.render()
   })
 
   /** How heavy a shower falls on the eye: the cloud over it, only low down. */
@@ -463,6 +539,9 @@ export function startScene(
   return {
     show,
     diveFrom: () => {
+      // Fly pressed before the first frame would read a camera still at the
+      // origin and dive from nowhere: place it first.
+      if (camera.position.lengthSq() < 1e-9) place(view(), lastTurn)
       const position = unit(inPlanetFrame(camera.position, lastTurn, 1))
       // The screen's up, taken into the planet's frame, is the way ahead.
       const up = new THREE.Vector3(0, 1, 0).applyQuaternion(camera.quaternion)

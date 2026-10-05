@@ -40,6 +40,8 @@ export interface Quality {
   /** Cloud texture width; its height is half. */
   readonly cloudWidth: number
   readonly pixelRatio: number
+  /** Whether the frame goes through the post pass — bloom, vignette, MSAA — or straight to the screen. */
+  readonly post: boolean
 }
 
 /** Pixel ratios the governor steps down through, highest first. */
@@ -60,6 +62,7 @@ export function pickQuality(device: Device): Quality {
     shadowMap: phone ? (modest ? 0 : 1024) : 2048,
     cloudWidth: phone ? 512 : 1024,
     pixelRatio: Math.min(device.pixelRatio, modest ? 1.5 : 2),
+    post: !(phone && modest),
   }
 }
 

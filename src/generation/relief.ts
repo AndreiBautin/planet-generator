@@ -9,7 +9,10 @@ import { surfaceAt, type Planet, type Surface } from './planet'
  * Shaped by the biome, because a desert and a snowfield are not the same
  * ground with a different colour: dry lowland is drawn into long dunes
  * lying across the wind, snow into soft drifts, and everywhere else into
- * crags and grain.
+ * crags and grain. High ground is cut into ridge networks — a ridged
+ * noise over coordinates bent by a slower one, so the ridges wander and
+ * branch the way eroded ranges do rather than lying in a lattice — and
+ * low ground into rolling hills; the two cross over with height.
  *
  * Kept apart from `surfaceAt` on purpose, and the reason is the seed
  * promise. Every link already shared is pinned by `surfaceAt`'s numbers, so
@@ -31,9 +34,26 @@ export function fineReliefAt(
   const px = x + oy
   const py = y + oz
   const pz = z + ox
-  const crags = ridged(planet.fine, px * 26, py * 26, pz * 26, 4)
+  // The coordinates bent before the ridges are read from them: that is
+  // what breaks the ridges' lattice into something that reads as eroded.
+  const bx = fbm(planet.fine, px * 5, py * 5, pz * 5, 2) * 0.07
+  const by = fbm(planet.fine, px * 5 + 19, py * 5 + 7, pz * 5 + 3, 2) * 0.07
+  const bz = fbm(planet.fine, px * 5 - 11, py * 5 + 23, pz * 5 - 5, 2) * 0.07
+  const qx = px + bx
+  const qy = py + by
+  const qz = pz + bz
+  const ridgeRaw = ridged(planet.fine, qx * 14, qy * 14, qz * 14, 5)
+  const ridges = Math.pow(ridgeRaw, 1.4)
+  const crags = ridged(planet.fine, qx * 26, qy * 26, qz * 26, 4)
+  const hills = fbm(planet.fine, qx * 9, qy * 9, qz * 9, 3) * 0.5 + 0.5
   const grain = fbm(planet.fine, px * 140, py * 140, pz * 140, 3) * 0.5 + 0.5
-  const rough = (crags * 0.75 + grain * 0.25) * (0.5 + planet.dials.roughness)
+  // Ridges belong to the ranges, which the pinned surface puts on high
+  // ground; the lowland rolls. Read off the height rather than everywhere,
+  // or the whole planet crumples like paper seen from orbit.
+  const mountain = smooth(0.18, 0.55, surface.height)
+  const rough =
+    (ridges * 1.2 * mountain + hills * 0.5 * (1 - mountain) + crags * 0.35 + grain * 0.18) *
+    (0.4 + planet.dials.roughness * 0.6)
 
   const dunes = duneWeight(planet, surface)
   const drifts = surface.biome === 'snow' ? 1 : 0

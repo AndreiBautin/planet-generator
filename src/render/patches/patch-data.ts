@@ -45,7 +45,7 @@ export interface PatchData {
 
 /** Vertices in a patch: the grid, then four edges' worth of skirt. */
 /** How far fine relief lifts the ground, in surface-height units. */
-const FINE_RELIEF = 0.11
+const FINE_RELIEF = 0.2
 /** Steepness (one minus the cosine of the slope) where rock starts and where it is all rock. */
 const ROCK_FROM = 0.06
 const ROCK_FULL = 0.22
