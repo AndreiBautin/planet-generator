@@ -5,6 +5,8 @@ import type { Planet } from '@/generation/planet'
 import { createRng } from '@/generation/rng'
 import { starField } from '@/generation/stars'
 
+import { buildAtmosphere } from './atmosphere'
+import { buildClouds } from './clouds'
 import { buildPlanetMesh } from './planet-mesh'
 import { buildWater } from './water'
 
@@ -54,10 +56,12 @@ export function startScene(host: HTMLElement, world: Planet, clock: Clock): Scen
   // Finer on a large screen, lighter on a phone: the triangle count grows
   // with the square of the detail.
   const detail = Math.min(window.innerWidth, window.innerHeight) >= 700 ? 96 : 64
-  // Land and sea turn together, as one body.
+  // Land and sea turn together, as one body; the clouds drift a little
+  // faster than the ground beneath them, and the air does not turn at all.
   const planet = new THREE.Group()
   planet.add(buildPlanetMesh(world, detail), buildWater(world, detail))
-  scene.add(planet)
+  const clouds = buildClouds(world, detail >= 96 ? 1024 : 512)
+  scene.add(planet, clouds, buildAtmosphere(world, sun.position))
 
   const resize = (): void => {
     camera.aspect = window.innerWidth / window.innerHeight
@@ -69,7 +73,9 @@ export function startScene(host: HTMLElement, world: Planet, clock: Clock): Scen
   // One slow turn every two minutes, from the clock rather than per frame,
   // so a dropped frame does not slow the planet down.
   renderer.setAnimationLoop(() => {
-    planet.rotation.y = (clock.now() / 120_000) * Math.PI * 2
+    const turns = clock.now() / 120_000
+    planet.rotation.y = turns * Math.PI * 2
+    clouds.rotation.y = turns * 1.15 * Math.PI * 2
     renderer.render(scene, camera)
   })
 

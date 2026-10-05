@@ -39,6 +39,8 @@ export interface Planet {
   readonly mountains: Noise3
   readonly detail: Noise3
   readonly moisture: Noise3
+  readonly clouds: Noise3
+  readonly cloudCover: number
   /** A random shift of the noise field, so two seeds never share a coastline. */
   readonly offset: readonly [number, number, number]
 }
@@ -82,6 +84,8 @@ export function createPlanet(seed: Seed, dials: Dials = DEFAULT_DIALS): Planet {
     mountains: createNoise3(rng.fork('mountains')),
     detail: createNoise3(rng.fork('detail')),
     moisture: createNoise3(rng.fork('moisture')),
+    clouds: createNoise3(rng.fork('clouds')),
+    cloudCover: traits.cloudCover,
     offset: [shape.range(-100, 100), shape.range(-100, 100), shape.range(-100, 100)],
   }
 }

@@ -36,6 +36,12 @@ export interface KindTraits {
   /** The sea is molten rather than water: it glows, and it is never ice. */
   readonly molten: boolean
   readonly palette: Palette
+  /** Share of the sky that is cloud, roughly 0 (clear) to 1 (overcast). */
+  readonly cloudCover: number
+  /** Cloud, or ash on a volcanic world. */
+  readonly cloudColour: Rgb
+  /** The glow of the air around the limb. */
+  readonly atmosphere: Rgb
 }
 
 const hex = (value: number): Rgb => [
@@ -60,6 +66,9 @@ export const KINDS: Readonly<Record<PlanetKind, KindTraits>> = {
       peak: hex(0xa59f97),
       ice: hex(0xf2f6fa),
     },
+    cloudCover: 0.5,
+    cloudColour: hex(0xffffff),
+    atmosphere: hex(0x5aa0ff),
   },
   oceanic: {
     label: 'Ocean world',
@@ -76,6 +85,9 @@ export const KINDS: Readonly<Record<PlanetKind, KindTraits>> = {
       peak: hex(0x8a8f86),
       ice: hex(0xeef7fb),
     },
+    cloudCover: 0.62,
+    cloudColour: hex(0xffffff),
+    atmosphere: hex(0x4fc4ff),
   },
   arid: {
     label: 'Desert world',
@@ -92,6 +104,9 @@ export const KINDS: Readonly<Record<PlanetKind, KindTraits>> = {
       peak: hex(0x6e3a22),
       ice: hex(0xf3ead8),
     },
+    cloudCover: 0.18,
+    cloudColour: hex(0xf3e2c8),
+    atmosphere: hex(0xffb877),
   },
   frozen: {
     label: 'Frozen world',
@@ -108,6 +123,9 @@ export const KINDS: Readonly<Record<PlanetKind, KindTraits>> = {
       peak: hex(0xc9d6e2),
       ice: hex(0xf4f9ff),
     },
+    cloudCover: 0.35,
+    cloudColour: hex(0xeef4fb),
+    atmosphere: hex(0xa8d8ff),
   },
   volcanic: {
     label: 'Volcanic world',
@@ -124,6 +142,9 @@ export const KINDS: Readonly<Record<PlanetKind, KindTraits>> = {
       peak: hex(0x5a5550),
       ice: hex(0x8a8580),
     },
+    cloudCover: 0.45,
+    cloudColour: hex(0x4a403a),
+    atmosphere: hex(0xff6a2a),
   },
 }
 
