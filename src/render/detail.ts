@@ -1,5 +1,6 @@
 import * as THREE from 'three'
 
+import { HAZE_SUN } from './haze'
 import type { GroundTextures } from './textures'
 
 /**
@@ -144,6 +145,7 @@ function passThrough(
   shader.uniforms.detailCloudSpin = DETAIL_CLOUD_SPIN
   shader.uniforms.detailCloudSun = DETAIL_CLOUD_SUN
   shader.uniforms.detailNormalMatrix = DETAIL_NORMAL_MATRIX
+  shader.uniforms.hazeSun = HAZE_SUN
 }
 
 const CLOUD_SHADOW = /* glsl */ `

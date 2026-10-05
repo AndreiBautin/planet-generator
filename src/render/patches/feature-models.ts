@@ -4,6 +4,7 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import { FEATURES, type Feature } from '@/generation/features'
 
 import { DETAIL_NORMAL_MATRIX, DETAIL_RANGE, DETAIL_TIME } from '../detail'
+import { HAZE_SUN } from '../haze'
 import type { GroundLayer } from '../textures'
 import { STRIDE, type Scatter } from './scatter'
 
@@ -337,6 +338,7 @@ export function featureMaterial(born: number, stone: GroundLayer): THREE.MeshSta
     shader.uniforms.featureStoneNormal = stone.normal
     shader.uniforms.featureStoneMean = stone.mean
     shader.uniforms.featureNormalMatrix = DETAIL_NORMAL_MATRIX
+    shader.uniforms.hazeSun = HAZE_SUN
     shader.vertexShader =
       'uniform float featureRange;\nuniform float featureNow;\nuniform float featureBorn;\nattribute float stony;\nvarying vec3 vFeatureUp;\nvarying vec3 vFeaturePlanet;\nvarying vec3 vFeatureNormal;\nvarying float vFeatureStony;\nvarying float vFeatureHeight;\n' +
       shader.vertexShader.replace(

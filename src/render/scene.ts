@@ -12,6 +12,7 @@ import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js'
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js'
 
 import { AIR_RADIUS, buildAtmosphere } from './atmosphere'
+import { HAZE_SUN, installHaze } from './haze'
 import { BORN, birthAt, type Birth } from './birth'
 import type { Builder } from './builder'
 import { cloudDataOf, cloudsFromTexture, cloudsSeenFrom } from './clouds'
@@ -205,6 +206,7 @@ export function startScene(
   view: () => CameraView,
   options: SceneOptions,
 ): Scene {
+  installHaze()
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: !options.quality.post })
   let pixelRatio = options.quality.pixelRatio
   renderer.setPixelRatio(pixelRatio)
@@ -504,6 +506,13 @@ export function startScene(
         DETAIL_SKY.value.copy(airColour)
       }
     }
+    // The sun in view space for the haze, weighted by how much daylight
+    // reaches the air here; the camera's inverse is last frame's, which is
+    // close enough for a glow.
+    HAZE_SUN.value
+      .copy(sunDirection)
+      .transformDirection(camera.matrixWorldInverse)
+      .multiplyScalar(low * day)
     const stars: unknown = shown?.sky.material
     if (stars instanceof THREE.PointsMaterial) stars.opacity = 1 - low * day * 0.92
   }

@@ -57,7 +57,7 @@ export function pickQuality(device: Device): Quality {
     maxLevel: phone && modest ? 8 : 9,
     patchCache: phone ? (modest ? 450 : 600) : 1200,
     inFlight: phone ? 12 : 24,
-    featureRange: phone ? (modest ? 0.05 : 0.07) : 0.11,
+    featureRange: phone ? (modest ? 0.055 : 0.085) : 0.15,
     featureInFlight: phone ? 8 : 16,
     shadowMap: phone ? (modest ? 0 : 1024) : 2048,
     cloudWidth: phone ? 512 : 1024,
