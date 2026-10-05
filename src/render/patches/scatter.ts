@@ -111,7 +111,11 @@ export function scatterPatch(planet: Planet, key: PatchKey): Scatter {
     cone: [],
     floe: [],
   }
+  // Each world's own cast of green: a little towards yellow on one, towards
+  // blue-green on another, so two temperate worlds do not share one forest.
+  const cast = (hashSeed(`${planet.seed}/leaves`)[1] / 4294967296 - 0.5) * 0.16
   const palette: Palette = {
+    cast,
     lush: fromPalette(planet.palette.lush),
     dry: fromPalette(planet.palette.dry),
     highland: fromPalette(planet.palette.highland),
@@ -265,6 +269,8 @@ interface Rgb {
 }
 
 interface Palette {
+  /** −0.08 to 0.08: leaves shifted towards yellow (positive) or blue-green. */
+  readonly cast: number
   readonly lush: Rgb
   readonly dry: Rgb
   readonly highland: Rgb
@@ -308,12 +314,20 @@ function colourOf(
     case 'broadleaf': {
       // Leaves are green first and the planet's palette second: an ochre
       // world's "lush" made orange trees that read as dead ones.
-      const leaf = towards([0.1, 0.24, 0.06], palette.lush, 0.3 + pick * 0.25)
+      const leaf = towards(
+        [0.1 + palette.cast, 0.24, 0.06 - palette.cast * 0.6],
+        palette.lush,
+        0.3 + pick * 0.25,
+      )
       const turned = warmth < 0.2 && pick > 0.88
       return scaled(turned ? [0.55, 0.22, 0.04] : leaf, light * 0.85)
     }
     case 'conifer': {
-      const needles = towards([0.05, 0.14, 0.06], palette.lush, 0.2 + pick * 0.2)
+      const needles = towards(
+        [0.05 + palette.cast * 0.5, 0.14, 0.06 - palette.cast * 0.4],
+        palette.lush,
+        0.2 + pick * 0.2,
+      )
       // Snow lies on the branches where the ground is snow: a pine on a
       // snowfield is more white than green, or it reads as a black post on
       // the ice; one on bare cold ground is only dusted.

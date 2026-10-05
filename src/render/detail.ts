@@ -1,4 +1,4 @@
-import type * as THREE from 'three'
+import * as THREE from 'three'
 
 import type { GroundTextures } from './textures'
 
@@ -32,6 +32,12 @@ export const DETAIL_TIME = { value: 0 }
  * it the ground draws a biome's floor, beyond it a picture of the biome.
  */
 export const DETAIL_RANGE = { value: 0.1 }
+/** The cloud layer's opacity map, which the ground and sea take shadows from; null while none is baked. */
+export const DETAIL_CLOUDS: { value: THREE.Texture | null } = { value: null }
+/** How far the clouds have turned ahead of the ground, in radians about y. */
+export const DETAIL_CLOUD_SPIN = { value: 0 }
+/** The sun's direction in the planet's frame, for where a cloud's shadow falls. */
+export const DETAIL_CLOUD_SUN = { value: new THREE.Vector3(1, 0, 0) }
 
 const NOISE = /* glsl */ `
   // A hash that holds up at large coordinates, unlike the sin() kind,
@@ -115,12 +121,31 @@ function passThrough(
     )
   const varying = extra === undefined ? '' : `varying ${extra.type} v_${extra.attribute};\n`
   shader.fragmentShader =
-    `uniform float detailTime;\nuniform float detailRange;\nvarying vec3 vDetailPosition;\n${varying}` +
+    `uniform float detailTime;\nuniform float detailRange;\nuniform sampler2D detailClouds;\nuniform float detailCloudSpin;\nuniform vec3 detailCloudSun;\nvarying vec3 vDetailPosition;\n${varying}` +
     NOISE +
+    CLOUD_SHADOW +
     shader.fragmentShader
   shader.uniforms.detailTime = DETAIL_TIME
   shader.uniforms.detailRange = DETAIL_RANGE
+  shader.uniforms.detailClouds = DETAIL_CLOUDS
+  shader.uniforms.detailCloudSpin = DETAIL_CLOUD_SPIN
+  shader.uniforms.detailCloudSun = DETAIL_CLOUD_SUN
 }
+
+const CLOUD_SHADOW = /* glsl */ `
+  // How much cloud lies between this point and the sun: the cloud map read
+  // where the sun's ray from here meets the layer, in the layer's own frame
+  // (it turns a little faster than the ground). Soft, because the map is.
+  float cloudShadow(vec3 p) {
+    float up = max(0.15, dot(detailCloudSun, normalize(p)));
+    vec3 d = normalize(p + detailCloudSun * (0.035 / up));
+    float c = cos(detailCloudSpin);
+    float s = sin(detailCloudSpin);
+    d = vec3(d.x * c + d.z * s, d.y, -d.x * s + d.z * c);
+    vec2 uv = vec2(atan(d.z, -d.x) / 6.2831853 + 0.5, 1.0 - acos(clamp(d.y, -1.0, 1.0)) / 3.1415927);
+    return texture2D(detailClouds, uv).r;
+  }
+`
 
 /**
  * The ground: grain and bumps, and the pattern of whatever the ground is.
@@ -283,7 +308,8 @@ export function withGroundDetail(
           detailHeight -= crack * 0.5 * stone;
         }
 
-        diffuseColor.rgb *= detailShade * (1.0 + detailHeight * 0.3);`,
+        diffuseColor.rgb *= detailShade * (1.0 + detailHeight * 0.3);
+        diffuseColor.rgb *= 1.0 - cloudShadow(vDetailPosition) * 0.55;`,
       )
       .replace(
         '#include <roughnessmap_fragment>',
@@ -354,7 +380,8 @@ export function withWaterDetail(material: THREE.Material): THREE.Material {
         float caps = max(crest * 0.3, smoothstep(0.9, 0.98, detailNoise(vDetailPosition * 1100.0 - drift * 1100.0)) * 0.4) * seaNear;
         float white = clamp(foam + caps, 0.0, 1.0);
         diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.92, 0.95, 0.97), white);
-        diffuseColor.a = mix(diffuseColor.a, 0.95, white);`,
+        diffuseColor.a = mix(diffuseColor.a, 0.95, white);
+        diffuseColor.rgb *= 1.0 - cloudShadow(vDetailPosition) * 0.5;`,
       )
       .replace(
         '#include <normal_fragment_maps>',

@@ -321,6 +321,8 @@ export function featuresFor(scatter: Scatter, material: THREE.Material): THREE.I
       const members = byShape[which] ?? []
       if (members.length === 0) return
       const mesh = new THREE.InstancedMesh(shape, material, members.length)
+      mesh.castShadow = true
+      mesh.receiveShadow = true
       members.forEach((at, slot) => {
         const o = at * STRIDE
         where.set(data[o] ?? 0, data[o + 1] ?? 0, data[o + 2] ?? 0)

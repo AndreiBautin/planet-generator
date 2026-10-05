@@ -36,6 +36,11 @@ export interface Glide {
   readonly yawRate: number
   /** Bank, in radians, positive rolling right into a right turn. */
   readonly roll: number
+  /**
+   * Speed gained by diving and spent by climbing, as a share of the base
+   * speed: a dive to the deck is quick, a zoom climb slows and bleeds off.
+   */
+  readonly rush: number
 }
 
 export const MIN_ALTITUDE = 0.004
@@ -68,6 +73,10 @@ const PITCH_FOLLOW = 4.5
 const LEVEL_RATE = 0.7
 /** How much of the speed a full pitch turns into climb or dive. */
 const CLIMB_SHARE = 1.6
+/** How fast a full dive gains rush, per second, and how quickly it bleeds away level. */
+const RUSH_GAIN = 1.1
+const RUSH_DECAY = 0.45
+export const MAX_RUSH = 1.0
 /** Bank per radian a second of turn, and how quickly the wings follow. */
 const BANK_PER_YAW = 0.32
 export const MAX_ROLL = 0.6
@@ -103,8 +112,12 @@ function flatten(heading: Vec3, position: Vec3): Vec3 {
   return unit(along)
 }
 
-/** How fast it travels, in radians a second: quicker higher up, so the ground passes at a steady pace. */
-export const speedOf = (glide: Glide): number => 0.006 + glide.altitude * 1.4
+/**
+ * How fast it travels, in radians a second: quicker higher up, so the
+ * ground passes at a steady pace, and quicker again with the rush of a
+ * dive.
+ */
+export const speedOf = (glide: Glide): number => (0.006 + glide.altitude * 1.4) * (1 + glide.rush)
 
 export function startGlide(position: Vec3, heading: Vec3, ground: Ground): Glide {
   const at = unit(position)
@@ -117,6 +130,7 @@ export function startGlide(position: Vec3, heading: Vec3, ground: Ground): Glide
     pitchGoal: 0,
     yawRate: 0,
     roll: 0,
+    rush: 0,
   }
 }
 
@@ -196,7 +210,14 @@ export function advance(glide: Glide, seconds: number, ground: Ground): Glide {
     ROLL_FOLLOW,
     step,
   )
-  const moved = { ...glide, position, heading, yawRate, altitude, pitch, pitchGoal, roll }
+  // Energy: nose down and the speed builds, nose up and it is spent; level,
+  // it settles back to cruising.
+  const rush = clamp(
+    glide.rush * Math.exp(-RUSH_DECAY * step) - Math.sin(pitch) * RUSH_GAIN * step,
+    -0.35,
+    MAX_RUSH,
+  )
+  const moved = { ...glide, position, heading, yawRate, altitude, pitch, pitchGoal, roll, rush }
   const target = groundAhead(moved, ground) + altitude
   const settled = target + (glide.eye - target) * Math.exp(-SETTLE_RATE * step)
   const floor = ground(position) + CLEARANCE
@@ -210,6 +231,8 @@ export interface Pose {
   readonly look: Vec3
   /** Which way is up for the eye: away from the centre, rolled by the bank. */
   readonly up: Vec3
+  /** How much of a dive's rush it is carrying, 0 to 1: the lens widens with it. */
+  readonly rush: number
 }
 
 export function poseOf(glide: Glide): Pose {
@@ -221,5 +244,10 @@ export function poseOf(glide: Glide): Pose {
   const forward = unit(
     add(scale(glide.heading, Math.cos(tilt)), scale(glide.position, -Math.sin(tilt))),
   )
-  return { eye, look: add(eye, forward), up: rotate(glide.position, forward, -glide.roll) }
+  return {
+    eye,
+    look: add(eye, forward),
+    up: rotate(glide.position, forward, -glide.roll),
+    rush: clamp(glide.rush, 0, 1),
+  }
 }

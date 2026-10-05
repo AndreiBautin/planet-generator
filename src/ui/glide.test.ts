@@ -114,6 +114,20 @@ describe('gliding', () => {
     expect(dived.altitude).toBeLessThan(start.altitude)
   })
 
+  it('gains speed in a dive and spends it in a climb', () => {
+    let dived = steer(start, 0, 300, 800)
+    for (let at = 0; at < 60; at += 1) dived = advance(dived, 1 / 60, flat)
+    expect(dived.rush).toBeGreaterThan(0.1)
+    expect(poseOf(dived).rush).toBeGreaterThan(0)
+    let climbed = steer(dived, 0, -600, 800)
+    for (let at = 0; at < 90; at += 1) climbed = advance(climbed, 1 / 60, flat)
+    expect(climbed.rush).toBeLessThan(dived.rush)
+    let settled = dived
+    for (let at = 0; at < 60 * 15; at += 1) settled = advance(settled, 1 / 60, flat)
+    expect(Math.abs(settled.rush)).toBeLessThan(0.02)
+    expect(poseOf(start).rush).toBe(0)
+  })
+
   it('levels itself again once left alone, and keeps within its ceiling and floor', () => {
     let flown = steer(start, 0, -100_000, 800)
     for (let at = 0; at < 60 * 20; at += 1) flown = advance(flown, 1 / 60, flat)

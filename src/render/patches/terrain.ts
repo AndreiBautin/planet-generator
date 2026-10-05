@@ -191,7 +191,10 @@ export class Terrain {
     ground.setAttribute('pattern', new THREE.BufferAttribute(patch.pattern, 4))
     ground.setIndex(new THREE.BufferAttribute(this.index, 1))
     ground.computeBoundingSphere()
-    node.add(new THREE.Mesh(ground, this.materials.ground))
+    const land = new THREE.Mesh(ground, this.materials.ground)
+    land.receiveShadow = true
+    land.castShadow = true
+    node.add(land)
 
     if (patch.hasSea) {
       // The sea over this patch: the same grid laid on the smooth sphere at
@@ -223,6 +226,7 @@ export class Terrain {
       water.computeBoundingSphere()
       const sea = new THREE.Mesh(water, this.materials.water)
       sea.renderOrder = 1
+      sea.receiveShadow = true
       node.add(sea)
     }
     return node

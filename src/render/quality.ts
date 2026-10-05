@@ -35,6 +35,8 @@ export interface Quality {
   readonly featureRange: number
   /** Feature tile requests out at once. */
   readonly featureInFlight: number
+  /** Width of the sun's shadow map near the ground; 0 for no shadows. */
+  readonly shadowMap: number
   /** Cloud texture width; its height is half. */
   readonly cloudWidth: number
   readonly pixelRatio: number
@@ -55,6 +57,7 @@ export function pickQuality(device: Device): Quality {
     inFlight: phone ? 12 : 24,
     featureRange: phone ? (modest ? 0.05 : 0.07) : 0.11,
     featureInFlight: phone ? 8 : 16,
+    shadowMap: phone ? (modest ? 0 : 1024) : 2048,
     cloudWidth: phone ? 512 : 1024,
     pixelRatio: Math.min(device.pixelRatio, modest ? 1.5 : 2),
   }

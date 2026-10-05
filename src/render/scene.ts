@@ -10,6 +10,9 @@ import { BORN, birthAt, type Birth } from './birth'
 import type { Builder } from './builder'
 import { cloudsFromTexture, cloudsSeenFrom } from './clouds'
 import {
+  DETAIL_CLOUD_SPIN,
+  DETAIL_CLOUD_SUN,
+  DETAIL_CLOUDS,
   DETAIL_RANGE,
   DETAIL_TIME,
   withGroundDetail,
@@ -63,7 +66,9 @@ export interface CameraView {
     readonly pitch: number
     readonly distance: number
   }
-  readonly surface: { readonly eye: Vec3; readonly look: Vec3; readonly up: Vec3 } | undefined
+  readonly surface:
+    | { readonly eye: Vec3; readonly look: Vec3; readonly up: Vec3; readonly rush: number }
+    | undefined
   /** 0 is all orbit, 1 all glide. */
   readonly blend: number
 }
@@ -118,9 +123,12 @@ export function startScene(
 
   const scene = new THREE.Scene()
   const camera = new THREE.PerspectiveCamera(FIELD_OF_VIEW, 1, 0.1, 100)
+  let rush = 0
   const frame = (): void => {
     camera.aspect = window.innerWidth / window.innerHeight
-    camera.fov = fieldOfView(camera.aspect)
+    // The lens widens with the rush of a dive, which is most of what makes
+    // speed felt on a screen.
+    camera.fov = fieldOfView(camera.aspect) * (1 + rush * 0.16)
     camera.updateProjectionMatrix()
   }
   frame()
@@ -129,7 +137,20 @@ export function startScene(
   // side falls dark; the ambient is just enough to keep the night readable.
   const sun = new THREE.DirectionalLight(0xfff2e0, 3.2)
   sun.position.set(5, 1.5, 2.5)
-  scene.add(sun, new THREE.AmbientLight(0x1a2438, 0.35))
+  scene.add(sun, sun.target, new THREE.AmbientLight(0x1a2438, 0.35))
+  const sunDirection = sun.position.clone().normalize()
+  // Shadows near the ground, from the trees and the relief: the shadow
+  // camera is a small box kept over the ground under the eye, because a
+  // map over the whole planet would give a tree a fraction of a texel.
+  if (options.quality.shadowMap > 0) {
+    renderer.shadowMap.enabled = true
+    renderer.shadowMap.type = THREE.PCFShadowMap
+    sun.castShadow = true
+    sun.shadow.mapSize.set(options.quality.shadowMap, options.quality.shadowMap)
+    sun.shadow.bias = -0.00002
+    sun.shadow.normalBias = 0.0002
+  }
+  const shadowGround = new THREE.Vector3()
 
   const { quality, builder } = options
   let shown: Shown | undefined
@@ -201,6 +222,7 @@ export function startScene(
       ;({ clouds, air, sky } = previous)
     } else {
       clouds = next.clouds ?? cloudsFromTexture(next.world, new Uint8Array(8), 2)
+      DETAIL_CLOUDS.value = cloudMapOf(clouds)
       air = buildAtmosphere(next.world, sun.position)
       sky = buildSky(next.world, pixelRatio)
     }
@@ -289,10 +311,35 @@ export function startScene(
       camera.up.copy(up)
       camera.lookAt(target)
     }
+    const wanted = view.surface === undefined ? 0 : view.surface.rush * t
+    if (Math.abs(wanted - rush) > 0.002) {
+      rush = wanted
+      frame()
+    }
     // Near the ground the near plane has to come in, or the hill in front
     // of the eye is cut away; far out it can stand back, which keeps depth
     // precise across the whole planet.
     const above = camera.position.length() - 1
+    if (renderer.shadowMap.enabled) {
+      // Shadows only low down, where a tree is big enough to throw one:
+      // from orbit the pass would cost a frame and show nothing.
+      const low = t > 0 && above < 0.2
+      sun.castShadow = low
+      if (low) {
+        shadowGround.copy(camera.position).normalize()
+        sun.target.position.copy(shadowGround)
+        sun.position.copy(shadowGround).addScaledVector(sunDirection, 0.4)
+        const box = sun.shadow.camera
+        const reach = Math.min(0.09, Math.max(0.015, above * 2.5))
+        box.left = -reach
+        box.right = reach
+        box.top = reach
+        box.bottom = -reach
+        box.near = 0.4 - 0.08
+        box.far = 0.4 + 0.08
+        box.updateProjectionMatrix()
+      }
+    }
     const near = Math.min(0.1, Math.max(0.0004, above * 0.2))
     if (Math.abs(near - camera.near) > camera.near * 0.05) {
       camera.near = near
@@ -307,7 +354,6 @@ export function startScene(
   // there is none.
   const fog = new THREE.FogExp2(0x000000, 0)
   scene.fog = fog
-  const sunDirection = sun.position.clone().normalize()
   const airColour = new THREE.Color()
   const airAround = (above: number): void => {
     const low = 1 - smooth(0.08, 0.35, above)
@@ -350,6 +396,10 @@ export function startScene(
     lastTurn = turn
     DETAIL_TIME.value = now / 1000
     DETAIL_RANGE.value = quality.featureRange
+    // The clouds drift ahead of the ground by a sixth of its turn, and their
+    // shadows fall from the sun's side.
+    DETAIL_CLOUD_SPIN.value = -0.15 * turn
+    DETAIL_CLOUD_SUN.value.set(...inPlanetFrame(sunDirection, turn, 1))
     place(view(), turn)
     if (coming !== undefined) {
       coming.terrain.update(inPlanetFrame(camera.position, turn, 1), viewCone(turn))
@@ -410,6 +460,13 @@ const unit = (v: Vec3): Vec3 => {
 }
 
 /** A point in the planet's own frame, carried round to where the planet has turned to. */
+/** The cloud layer's own opacity texture, for the ground to take shadows from. */
+function cloudMapOf(clouds: THREE.Mesh): THREE.Texture | null {
+  const material: unknown = clouds.material
+  if (material instanceof THREE.MeshStandardMaterial) return material.alphaMap
+  return null
+}
+
 function intoRoom(point: Vec3, turn: number): [number, number, number] {
   const cos = Math.cos(turn)
   const sin = Math.sin(turn)

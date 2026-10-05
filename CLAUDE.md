@@ -130,6 +130,25 @@ checks nothing. The pre-push hook runs `pnpm verify`; CI runs the same.
   so its features scale up over `GROW_SECONDS` rather than appearing. One
   material per tile is cheap: the cache key is shared, so it is a few
   uniforms, not a compile.
+- **The sun throws shadows near the ground, from a box that follows the
+  eye.** `sun.castShadow` only while flying under 0.2 radii up; the shadow
+  camera is an orthographic box a few hundredths of a radius across kept
+  over the ground under the camera (scene.ts), because a map over the
+  whole planet gives a tree a fraction of a texel. Ground and features cast
+  and receive, the sea receives. `quality.shadowMap` is 2048 on a desktop,
+  1024 on a good phone, 0 on a modest one. The biases are in planet radii
+  and tiny; raise them before suspecting anything else if acne appears.
+- **Clouds shade the ground.** `cloudShadow` in detail.ts reads the cloud
+  layer's own opacity map (`DETAIL_CLOUDS`) where the sun's ray from a
+  point meets the layer, in the layer's frame — it turns 0.15 of a turn
+  ahead of the ground (`DETAIL_CLOUD_SPIN`), and the sample is offset
+  along `DETAIL_CLOUD_SUN` by the layer's height. The texture's mapping is
+  `SphereGeometry`'s: u from `atan(z, -x)`, v from `acos(y)`.
+- **A dive gains speed and a climb spends it.** `Glide.rush` (glide.ts),
+  built from the pitch and bleeding off level; `speedOf` scales by it and
+  the lens widens with it (`Pose.rush` → `camera.fov` in scene.ts). The
+  one knob that made the flight feel fast was the field of view, not the
+  speed.
 - **A wood is a stand, not a sprinkle.** Reported as _"trees still spawn
   seemingly randomly"_. `groupingsAt` ramped softly, so every acre got a
   thin scattering; it is a sharp step now — a broad field says where the

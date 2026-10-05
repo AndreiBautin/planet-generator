@@ -47,7 +47,8 @@ shared. Nothing else would notice. So:
   sphere, rises before a ridge, never comes below its clearance over bumpy
   ground, turns the way the finger goes, noses up with a finger moving up
   and climbs as it flies, levels itself when left alone and keeps within
-  its ceiling and floor, looks up the sky when pitched up; a dive turned
+  its ceiling and floor, looks up the sky when pitched up, gains speed in a dive and spends it in
+  a climb; a dive turned
   back mid-way rises from where it had got to.
 - **The baked ground textures** (`ground-atlas.test.ts`): every kind is a
   full square with real variation, the seam is no sharper than the
