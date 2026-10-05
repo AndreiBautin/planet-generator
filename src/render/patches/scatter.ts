@@ -13,7 +13,7 @@ import { hashSeed } from '@/generation/rng'
 import { fromPalette } from '../colour'
 import { SEA_RADIUS } from '../water'
 import { directionOn, patchUv, type PatchKey } from './cube'
-import { groundRadiusAt } from './patch-data'
+import { groundRadiusAt, groundRadiusWith } from './patch-data'
 
 /**
  * The features that make up a patch of ground: trees, scrub, grass, cacti,
@@ -139,6 +139,19 @@ export function scatterPatch(planet: Planet, key: PatchKey): Scatter {
     found[feature].push(x * radius, y * radius, z * radius, size, c * Math.PI * 2, ...colour)
   }
 
+  // The ground's height at the cell corners, read once and shared by the
+  // four cells round each: the slope of a cell is read off its corners,
+  // where it was two samples of its own every cell.
+  const corners = new Map<number, number>()
+  const corner = (i: number, j: number): number => {
+    const name = i * 65536 + j
+    const known = corners.get(name)
+    if (known !== undefined) return known
+    const height = groundRadiusAt(planet, directionOn(key.face, i * CELL, j * CELL))
+    corners.set(name, height)
+    return height
+  }
+
   // Cells whose corner lies in [u0, u1) × [v0, v1): half-open, so a cell on
   // the edge two patches share belongs to exactly one of them.
   for (let j = Math.ceil(v0 / CELL); j * CELL < v1; j += 1) {
@@ -152,14 +165,16 @@ export function scatterPatch(planet: Planet, key: PatchKey): Scatter {
       // Open water carries nothing: skip the slope sampling there.
       if (atSea && featuresAt(planet, surface, 0) === NOTHING) continue
 
-      const here = groundRadiusAt(planet, direction)
+      const here = groundRadiusWith(planet, x, y, z, surface)
       let steep = 0
       if (!atSea) {
-        // Slope from two neighbours a fraction of a cell away.
-        const eastward = groundRadiusAt(planet, directionOn(key.face, u + CELL * 0.3, v))
-        const northward = groundRadiusAt(planet, directionOn(key.face, u, v + CELL * 0.3))
-        const run = CELL * 0.3 * 0.785
-        const rise = Math.hypot(eastward - here, northward - here) / run
+        // Slope across the cell, from its four corners.
+        const a = corner(i, j)
+        const b = corner(i + 1, j)
+        const c = corner(i, j + 1)
+        const d = corner(i + 1, j + 1)
+        const run = CELL * 0.785
+        const rise = Math.hypot((b + d - a - c) / 2, (c + d - a - b) / 2) / run
         steep = 1 - 1 / Math.sqrt(1 + rise * rise)
       }
 

@@ -104,6 +104,23 @@ export function groundRadiusAt(
   return Math.max(SEA_RADIUS, 1 + liftOf(drawn, planet.relief))
 }
 
+/**
+ * The same, for a unit direction whose surface is already in hand: the
+ * scatter has just sampled it, and sampling it again was a fifth of the
+ * cost of a tile of trees.
+ */
+export function groundRadiusWith(
+  planet: Planet,
+  x: number,
+  y: number,
+  z: number,
+  surface: Surface,
+): number {
+  const fine = fineReliefAt(planet, x, y, z, surface)
+  const drawn = surface.height + fine * reliefWeightAt(planet, surface) * FINE_RELIEF
+  return Math.max(SEA_RADIUS, 1 + liftOf(drawn, planet.relief))
+}
+
 export const vertexCount = (segments: number): number => (segments + 1) ** 2 + 4 * (segments + 1)
 
 export function samplePatch(planet: Planet, key: PatchKey, segments: number): PatchData {

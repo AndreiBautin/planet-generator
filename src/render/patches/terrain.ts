@@ -148,9 +148,9 @@ export class Terrain {
       }
     }
     const queue = [...wanted.values()].sort((a, b) => a.distance - b.distance)
-    for (const { key } of queue) {
+    for (const { key, distance } of queue) {
       if (this.waiting >= this.options.inFlight) break
-      this.request(key)
+      this.request(key, distance)
     }
 
     // What to draw: the leaves where they are in, and where one is not, the
@@ -314,7 +314,7 @@ export class Terrain {
     this.flora.dispose()
   }
 
-  private request(key: PatchKey): void {
+  private request(key: PatchKey, urgency = 0): void {
     const name = keyOf(key)
     const existing = this.entries.get(name)
     if (existing?.requested === true) return
@@ -334,7 +334,7 @@ export class Terrain {
     this.entries.set(name, entry)
     this.waiting += 1
     void this.builder
-      .patch(this.world.seed, this.world.dials, key, this.options.segments)
+      .patch(this.world.seed, this.world.dials, key, this.options.segments, urgency)
       .then((patch) => {
         this.waiting -= 1
         // A planet replaced while its patches were being made: drop them.

@@ -90,9 +90,12 @@ export class Flora {
       .filter((key) => !this.tiles.has(keyOf(key)))
       .map((key) => ({ key, distance: aheadOf(centreOf(key), camera, view) }))
       .sort((a, b) => a.distance - b.distance)
-    for (const { key } of missing) {
+    for (const { key, distance } of missing) {
       if (this.waiting >= this.options.inFlight) break
-      this.request(key)
+      // Ahead of the ground: a patch of ground not yet in has a coarser
+      // stand-in drawn in its place, and a tile of trees not yet in has
+      // nothing — its trees spring up where the eye already is.
+      this.request(key, distance - 10)
     }
 
     for (const [name, tile] of this.tiles) {
@@ -119,12 +122,12 @@ export class Flora {
     this.tiles.clear()
   }
 
-  private request(key: PatchKey): void {
+  private request(key: PatchKey, urgency: number): void {
     const name = keyOf(key)
     const tile: Tile = { key, node: undefined, material: undefined, usedAt: this.frame, seenAt: -1 }
     this.tiles.set(name, tile)
     this.waiting += 1
-    void this.builder.features(this.world.seed, this.world.dials, key).then((scatter) => {
+    void this.builder.features(this.world.seed, this.world.dials, key, urgency).then((scatter) => {
       this.waiting -= 1
       if (this.disposed || this.tiles.get(name) !== tile) return
       const node = new THREE.Group()
