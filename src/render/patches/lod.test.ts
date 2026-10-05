@@ -1,6 +1,16 @@
 import { describe, expect, it } from 'vitest'
 
-import { childrenOf, directionOn, keyOf, parentOf, patchUv, ROOTS, type Vec3 } from './cube'
+import {
+  childrenOf,
+  directionOn,
+  keyOf,
+  neighboursOf,
+  parentOf,
+  patchAt,
+  patchUv,
+  ROOTS,
+  type Vec3,
+} from './cube'
 import {
   ancestorAt,
   centreOf,
@@ -42,6 +52,32 @@ describe('the cube', () => {
     const fromZ = directionOn(4, 1, 1)
     for (const point of [fromX, fromY, fromZ]) {
       for (const component of point) expect(component).toBeCloseTo(expected, 10)
+    }
+  })
+
+  it('finds the patch holding a direction, the inverse of laying one out', () => {
+    for (const key of [
+      { face: 0, level: 3, x: 2, y: 5 },
+      { face: 4, level: 6, x: 63, y: 0 },
+      { face: 5, level: 1, x: 0, y: 1 },
+    ] as const) {
+      const [u, v] = patchUv(key, 0.5, 0.5)
+      expect(patchAt(directionOn(key.face, u, v), key.level)).toEqual(key)
+    }
+  })
+
+  it('finds each neighbour, across a face edge too, and each neighbour finds it back', () => {
+    for (const key of [
+      { face: 4, level: 3, x: 3, y: 3 },
+      { face: 4, level: 3, x: 0, y: 7 },
+      { face: 2, level: 2, x: 3, y: 0 },
+    ] as const) {
+      const neighbours = neighboursOf(key)
+      expect(new Set(neighbours.map(keyOf)).size).toBe(4)
+      for (const neighbour of neighbours) {
+        expect(neighbour.level).toBe(key.level)
+        expect(neighboursOf(neighbour).map(keyOf)).toContain(keyOf(key))
+      }
     }
   })
 

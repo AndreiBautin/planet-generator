@@ -99,3 +99,44 @@ export function directionOn(face: Face, u: number, v: number): Vec3 {
 
 /** The angle a patch spans across, roughly: a quarter turn halved per level. */
 export const patchAngle = (level: number): number => Math.PI / 2 / 2 ** level
+
+/** The patch at `level` that holds a direction: the inverse of `directionOn`, cut to a grid. */
+export function patchAt(direction: Vec3, level: number): PatchKey {
+  let face: Face = 0
+  let best = -Infinity
+  FACES.forEach((frame, index) => {
+    const along =
+      direction[0] * frame.normal[0] +
+      direction[1] * frame.normal[1] +
+      direction[2] * frame.normal[2]
+    if (along > best) {
+      best = along
+      face = index as Face
+    }
+  })
+  const frame = FACES[face] ?? FACES[0]
+  if (frame === undefined) throw new Error('no faces')
+  const dot = (a: Vec3): number => direction[0] * a[0] + direction[1] * a[1] + direction[2] * a[2]
+  const u = (Math.atan(dot(frame.u) / best) * 4) / Math.PI
+  const v = (Math.atan(dot(frame.v) / best) * 4) / Math.PI
+  const cells = 2 ** level
+  const cell = (w: number): number =>
+    Math.min(cells - 1, Math.max(0, Math.floor(((w + 1) / 2) * cells)))
+  return { face, level, x: cell(u), y: cell(v) }
+}
+
+/**
+ * The patch of the same level across each edge, crossing onto the next face
+ * where the edge is a face's: bottom, top, left, right, as `edgeOrder` in
+ * patch-data.ts walks them.
+ */
+export function neighboursOf(key: PatchKey): readonly PatchKey[] {
+  const past = 0.5 / 2 ** key.level / 4
+  const at = (s: number, t: number): PatchKey => {
+    const [u, v] = patchUv(key, s, t)
+    return patchAt(directionOn(key.face, u, v), key.level)
+  }
+  const size = 2 / 2 ** key.level
+  const step = past / size
+  return [at(0.5, -step), at(0.5, 1 + step), at(-step, 0.5), at(1 + step, 0.5)]
+}

@@ -190,6 +190,10 @@ attribute vec4 coarsePosition;
 // coarse stand-in is on screen close up, and swapped in at once the ground
 // and the shallows changed in one frame. It starts as the parent and slides.
 attribute float arrival;
+// 1 along an edge this patch shares with a coarser one: there it takes the
+// coarser edge's shape exactly, so the two meet with no step for a skirt to
+// show through (terrain.ts).
+attribute float stitch;
 attribute vec3 coarseNormal;
 float terrainMorphAt(vec3 local) {
   float level = coarsePosition.w;
@@ -198,7 +202,7 @@ float terrainMorphAt(vec3 local) {
   float parentSpan = 1.5707963 / exp2(level - 1.0);
   float splits = parentSpan / terrainMorphLod.x / terrainMorphLod.y;
   float away = distance((modelMatrix * vec4(local, 1.0)).xyz, cameraPosition);
-  return max(smoothstep(0.5 * splits, 0.85 * splits, away), arrival);
+  return max(max(smoothstep(0.5 * splits, 0.85 * splits, away), arrival), stitch);
 }
 `
 
@@ -452,14 +456,18 @@ export function withGroundDetail(
           detailShade *= mix(1.0, floorTone, woods * stand);
           diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(1.1, 0.84, 0.6), stand * woods * 0.6);
         }
-        float canopy = woods * crownFilter * (1.0 - stand);
+        // Past where the trees stand, a wood is painted as what a wood looks
+        // like from there: a dark, cool mass, mottled softly, with no cells.
+        // It was drawn as crowns — pale cells with dark gaps — which read as
+        // a honeycomb on the ground until the trees appeared on top of it.
+        // Its tone matches the floor and the trees, so they arrive into a
+        // wood already there rather than onto a pattern.
+        float canopy = woods * (1.0 - stand);
         if (canopy > 0.02) {
-          vec3 crowns = detailCells(vDetailPosition * 1400.0);
-          float crown = 1.0 - smoothstep(0.2, 0.75, crowns.x);
-          float tone = mix(0.5, 1.12, crown) * (0.82 + crowns.z * 0.36);
-          tone *= 0.85 + detailNoise(vDetailPosition * 220.0) * 0.3;
+          float mottle = detailNoise(vDetailPosition * 220.0) * 0.6 + mix(0.5, detailNoise(vDetailPosition * 900.0), crownFilter) * 0.4;
+          float tone = 0.42 + mottle * 0.2;
           detailShade *= mix(1.0, tone, canopy);
-          detailHeight += (crown - 0.5) * 0.8 * canopy;
+          diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(0.8, 0.95, 0.88), canopy);
         }
 
         // Sand: ripples the wind has drawn, bent by a slower noise so they

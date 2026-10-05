@@ -4,7 +4,7 @@ import type { Planet } from '@/generation/planet'
 
 import type { Builder } from '../builder'
 import { SEA_RADIUS } from '../water'
-import { childrenOf, keyOf, parentOf, ROOTS, type PatchKey, type Vec3 } from './cube'
+import { childrenOf, keyOf, neighboursOf, parentOf, ROOTS, type PatchKey, type Vec3 } from './cube'
 import { aheadOf, ancestorAt, centreOf, selectLeaves, type LodParams, type ViewCone } from './lod'
 import { Flora, type FloraOptions } from './flora'
 import { patchIndex, quarterIndex, type PatchData } from './patch-data'
@@ -40,6 +40,9 @@ interface Entry {
   /** Its ground and sea drawn whole, and a quarter at a time (in `childrenOf` order). */
   readonly whole: THREE.Object3D[]
   readonly quarters: THREE.Object3D[][]
+  /** Which edges are stitched to a coarser neighbour, a bit each, and the attribute that says so. */
+  edges: number
+  stitch: THREE.BufferAttribute | undefined
   shownAt: number | undefined
   requested: boolean
   usedAt: number
@@ -54,6 +57,7 @@ export class Terrain {
   private disposed = false
   private lastShown: ReadonlySet<string> = new Set<string>()
   private readonly sliding = new Set<Entry>()
+  private lastCamera: Vec3 | undefined
 
   private readonly world: Planet
   private readonly builder: Builder
@@ -110,7 +114,7 @@ export class Terrain {
     // view on the way down. Nearest first: the ground under the camera is
     // what somebody is looking at.
     const wanted = new Map<string, { readonly key: PatchKey; readonly distance: number }>()
-    for (const leaf of leaves) {
+    const ask = (leaf: PatchKey, later: number): void => {
       let drawn = -1
       for (let level = leaf.level; level >= 0; level -= 1) {
         if (this.entries.get(keyOf(ancestorAt(leaf, level)))?.node !== undefined) {
@@ -118,11 +122,29 @@ export class Terrain {
           break
         }
       }
-      if (drawn === leaf.level) continue
+      if (drawn === leaf.level) return
       const next = ancestorAt(leaf, drawn + 1)
       const name = keyOf(next)
-      if (this.entries.get(name)?.requested === true || wanted.has(name)) continue
-      wanted.set(name, { key: next, distance: aheadOf(centreOf(next), camera, view) })
+      if (this.entries.get(name)?.requested === true || wanted.has(name)) return
+      wanted.set(name, { key: next, distance: later + aheadOf(centreOf(next), camera, view) })
+    }
+    for (const leaf of leaves) ask(leaf, 0)
+    // And the ground a second and a half on, at the pace the eye is moving,
+    // asked for after everything needed now: on a phone the builder runs
+    // behind a glide, and ground asked for only once it was needed arrived
+    // after the eye did, sharpening in front of it.
+    const last = this.lastCamera
+    this.lastCamera = camera
+    if (last !== undefined) {
+      const ahead: Vec3 = [
+        camera[0] + (camera[0] - last[0]) * PREFETCH_FRAMES,
+        camera[1] + (camera[1] - last[1]) * PREFETCH_FRAMES,
+        camera[2] + (camera[2] - last[2]) * PREFETCH_FRAMES,
+      ]
+      const moved = Math.hypot(ahead[0] - camera[0], ahead[1] - camera[1], ahead[2] - camera[2])
+      if (moved > 1e-4 && moved < 0.2) {
+        for (const leaf of selectLeaves(ahead, this.options, view)) ask(leaf, 100)
+      }
     }
     const queue = [...wanted.values()].sort((a, b) => a.distance - b.distance)
     for (const { key } of queue) {
@@ -203,6 +225,7 @@ export class Terrain {
         for (const part of parts) part.visible = on
       })
     }
+    this.stitch(drawn)
     this.lastShown = shown
     for (const entry of this.sliding) {
       const weight = entry.shownAt === undefined ? 0 : arrivalAt(entry.shownAt, DETAIL_TIME.value)
@@ -213,6 +236,53 @@ export class Terrain {
       if (weight <= 0) this.sliding.delete(entry)
     }
     this.evict(shown)
+  }
+
+  /**
+   * Where a drawn patch meets a coarser one, bend its edge to the coarser
+   * edge: the stitch attribute slides those vertices to where the parent
+   * draws them, which is where the coarser neighbour's edge lies. Without
+   * it the two edges only nearly met, and the skirt hung under the finer one
+   * showed as a pale curtain wherever the ground stepped down — sharpest
+   * along a snowline.
+   */
+  private stitch(drawn: ReadonlyMap<string, number>): void {
+    const coarser = (key: PatchKey): boolean => {
+      if (drawn.has(keyOf(key))) return false
+      let below = key
+      for (let above = parentOf(key); above !== undefined; above = parentOf(above)) {
+        const quarters = drawn.get(keyOf(above))
+        if (quarters !== undefined) {
+          const quarter = below.x - above.x * 2 + (below.y - above.y * 2) * 2
+          return (quarters & (1 << quarter)) !== 0
+        }
+        below = above
+      }
+      return false
+    }
+    for (const name of drawn.keys()) {
+      const entry = this.entries.get(name)
+      if (entry?.stitch === undefined) continue
+      let edges = 0
+      neighboursOf(entry.key).forEach((neighbour, edge) => {
+        if (coarser(neighbour)) edges |= 1 << edge
+      })
+      if (edges === entry.edges) continue
+      entry.edges = edges
+      const values = entry.stitch.array as Float32Array
+      values.fill(0)
+      const side = this.options.segments + 1
+      const grid = side * side
+      for (let k = 0; k < side; k += 1) {
+        const along = [k, (side - 1) * side + k, k * side, k * side + side - 1]
+        along.forEach((vertex, edge) => {
+          if ((edges & (1 << edge)) === 0) return
+          values[vertex] = 1
+          values[grid + edge * side + k] = 1
+        })
+      }
+      entry.stitch.needsUpdate = true
+    }
   }
 
   /** Whether a coarser patch over this one was drawn last frame. */
@@ -243,6 +313,8 @@ export class Terrain {
       arrival: [],
       whole: [],
       quarters: [[], [], [], []],
+      edges: 0,
+      stitch: undefined,
       shownAt: undefined,
       requested: true,
       usedAt: this.frame,
@@ -257,6 +329,7 @@ export class Terrain {
         // A planet replaced while its patches were being made: drop them.
         if (this.disposed || this.entries.get(name) !== entry) return
         entry.node = this.nodeFor(patch, entry.arrival, entry.whole, entry.quarters)
+        entry.stitch = entry.node.userData.stitch as THREE.BufferAttribute
         entry.node.visible = false
         this.group.add(entry.node)
       })
@@ -284,6 +357,10 @@ export class Terrain {
     landArrival.setUsage(THREE.DynamicDrawUsage)
     ground.setAttribute('arrival', landArrival)
     arrival.push(landArrival)
+    const stitch = new THREE.BufferAttribute(new Float32Array(patch.positions.length / 3), 1)
+    stitch.setUsage(THREE.DynamicDrawUsage)
+    ground.setAttribute('stitch', stitch)
+    node.userData.stitch = stitch
     const landOf = (geometry: THREE.BufferGeometry): THREE.Mesh => {
       const land = new THREE.Mesh(geometry, this.materials.ground)
       land.receiveShadow = true
@@ -392,6 +469,9 @@ export class Terrain {
     }
   }
 }
+
+/** How far ahead the ground is asked for, in frames at the eye's present pace (about 1.5 s at 30 fps). */
+const PREFETCH_FRAMES = 45
 
 /** Every quarter of a patch drawn: the patch whole. */
 const WHOLE = 0b1111
