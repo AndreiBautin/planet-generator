@@ -61,13 +61,13 @@ it can be. Checked when live.
 
 ### B — The ship
 
-- [ ] **B1 The ship in flight.** A third-person airship ahead of the eye
+- [x] **B1 The ship in flight.** A third-person airship ahead of the eye
       in the glide, drawn from its modules, banking with the turns.
-- [ ] **B2 The hold and the workbench.** Cargo by kind, capacity from the
+- [x] **B2 The hold and the workbench.** Cargo by kind, capacity from the
       hold module; a workbench that fits modules from materials: hold,
       lamps, drill, heat shield (volcanic landings), cold runners (frozen
       landings), surveyor scope.
-- [ ] **B3 The expedition.** A run: fuel, three worlds offered each jump
+- [x] **B3 The expedition.** A run: fuel, three worlds offered each jump
       (seeds derived from the expedition's seed), landings gated by the
       ship's modules, the run ending when the fuel is gone. The logbook
       and its unlocks persist across runs.

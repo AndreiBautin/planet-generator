@@ -30,6 +30,8 @@ import { groundTextures } from './textures'
 import { groundRadiusAt } from '@/generation/ground'
 import { AREA, BLOCK, BASE_ROW, frameAt, type Block, type Frame } from '@/generation/voxel'
 import { castBlocks } from '@/generation/raycast'
+import type { Ship } from '@/generation/expedition'
+import { buildShip, releaseShip, SHIP_LENGTH } from './ship'
 import { directionOn, faceUvOf } from '@/generation/cube'
 import type { Hole } from './patches/lod'
 import { waterMaterial } from './water'
@@ -67,6 +69,10 @@ export interface Scene {
   readonly placeBlock: (block: Block) => boolean
   /** Every block changed by hand on the current landing. */
   readonly changes: () => readonly (readonly [number, Block])[]
+  /** The ship to draw ahead of the eye in a glide, rebuilt when its modules change. */
+  readonly setShip: (ship: Ship) => void
+  /** How far the surveyor digs and builds from, in blocks. */
+  readonly setReach: (blocks: number) => void
   /** Let the landing go, and draw the planet's own ground there again. */
   readonly takeOff: () => void
   /** The orbit angles that look straight down on a point of the planet, as it is turned now. */
@@ -124,8 +130,8 @@ export interface Plot {
   readonly frame: Frame
 }
 const PLOT = (AREA * BLOCK * 0.85) / (Math.PI / 4)
-/** How far the surveyor can dig or build, in blocks. */
-const REACH = 6
+/** How far the surveyor can dig or build, in blocks, until a drill is fitted. */
+const BASE_REACH = 6
 /** The surveyor's body, as the walker has it, for not building into it. */
 const EYE_HEIGHT = 1.6
 const BODY_HEIGHT = 1.75
@@ -224,6 +230,13 @@ export function startScene(
   const walkForward = new THREE.Vector3()
   const walkQuat = new THREE.Quaternion()
   let lastView: CameraView | undefined
+  let reach = BASE_REACH
+  // The airship, drawn a little ahead of and below the eye while gliding.
+  let shipModel: THREE.Group | undefined
+  const shipForward = new THREE.Vector3()
+  const shipUp = new THREE.Vector3()
+  const shipRight = new THREE.Vector3()
+  const shipBasis = new THREE.Matrix4()
 
   const { quality, builder } = options
   let shown: Shown | undefined
@@ -409,6 +422,29 @@ export function startScene(
       camera.up.copy(up)
       camera.lookAt(target)
     }
+    if (shipModel !== undefined) {
+      // In the glide the ship leads the eye: ahead and below, turned the
+      // way the glide looks and rolled with its bank. Gone when walking
+      // (it is parked somewhere behind the camera's back) and in orbit.
+      const gliding = view.surface !== undefined && view.walk === undefined && t > 0.6
+      shipModel.visible = gliding
+      if (gliding) {
+        // Level with the ground, keeping a third of the look's pitch: a
+        // glide looks down at the land, and a hull that followed the look
+        // outright read as a dive.
+        shipForward.copy(target).sub(camera.position).normalize()
+        shipForward.addScaledVector(up, -shipForward.dot(up) * 0.65).normalize()
+        shipUp.copy(up)
+        shipRight.crossVectors(shipUp, shipForward).normalize()
+        shipUp.crossVectors(shipForward, shipRight).normalize()
+        shipBasis.makeBasis(shipRight, shipUp, shipForward)
+        shipModel.quaternion.setFromRotationMatrix(shipBasis)
+        shipModel.position
+          .copy(camera.position)
+          .addScaledVector(shipForward, SHIP_LENGTH * 3.4)
+          .addScaledVector(shipUp, -SHIP_LENGTH * 1.05)
+      }
+    }
     const wanted = view.surface === undefined || view.walk !== undefined ? 0 : view.surface.rush * t
     if (Math.abs(wanted - rush) > 0.002) {
       rush = wanted
@@ -441,8 +477,16 @@ export function startScene(
     // Walking, the near plane is a hand's breadth and the far plane the
     // horizon, or the blocks in front of the eye are cut away and the
     // depth buffer is spent on a planet the blocks hide anyway.
+    // With the ship drawn a few lengths ahead, the near plane must stay
+    // inside it: at height the usual rule pushes it past the hull and the
+    // ship is cut away whole.
     const near =
-      view.walk !== undefined ? BLOCK * 0.15 : Math.min(0.1, Math.max(0.0004, above * 0.2))
+      view.walk !== undefined
+        ? BLOCK * 0.15
+        : Math.min(
+            shipModel?.visible === true ? SHIP_LENGTH * 1.5 : 0.1,
+            Math.max(0.0004, above * 0.2),
+          )
     const far = view.walk !== undefined ? 3 : 100
     if (Math.abs(near - camera.near) > camera.near * 0.05 || far !== camera.far) {
       camera.near = near
@@ -605,7 +649,7 @@ export function startScene(
       const hit = castBlocks(
         walk.eye,
         walk.forward,
-        REACH,
+        reach,
         (x, y, z) => view.stuffAt(x, y, z) === 'solid',
       )
       if (hit === undefined) return undefined
@@ -620,7 +664,7 @@ export function startScene(
       const hit = castBlocks(
         walk.eye,
         walk.forward,
-        REACH,
+        reach,
         (x, y, z) => view.stuffAt(x, y, z) === 'solid',
       )
       if (hit === undefined) return false
@@ -639,6 +683,18 @@ export function startScene(
       return true
     },
     changes: () => landing?.view.changes() ?? [],
+    setShip: (next) => {
+      if (shipModel !== undefined) {
+        scene.remove(shipModel)
+        releaseShip(shipModel)
+      }
+      shipModel = buildShip(next)
+      shipModel.visible = false
+      scene.add(shipModel)
+    },
+    setReach: (blocks) => {
+      reach = blocks
+    },
     takeOff: () => {
       if (landing === undefined) return
       landing.view.group.removeFromParent()
@@ -657,6 +713,7 @@ export function startScene(
       return { yaw: Math.atan2(x, z), pitch: Math.asin(Math.max(-1, Math.min(1, y))) }
     },
     dispose: () => {
+      if (shipModel !== undefined) releaseShip(shipModel)
       landing?.view.dispose()
       rain.dispose()
       renderer.setAnimationLoop(null)

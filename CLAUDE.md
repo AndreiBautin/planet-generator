@@ -303,6 +303,23 @@ piece is in:
   is the harness: take a burst of tiny screenshots to pump frames before
   judging. The planet turns once in twelve minutes now (`TURN_MS`), so a
   day on the ground is long enough to build something in.
+- **The ship is pure rules in `generation/expedition.ts`** — modules and
+  their costs, fuel, the three worlds a jump offers (seeds hashed from
+  the expedition's seed and the jump count, so a run is replayable), the
+  landing gate (shield for volcanic, runners for frozen), `fit` paying
+  from the hold exactly. `main.ts` owns the one `Ship` and the logbook;
+  `render/ship.ts` draws it from its modules, rebuilt only when they
+  change. **The hold is the ship's, not the world's** — one `hold` save,
+  because digging on one world to fit a module for the next is the game.
+  Plot edits stay per world.
+- **The ship in the glide is placed by a basis built from the camera's
+  look and up, and it has to be right-handed.** `right = up × forward`,
+  `up' = forward × right`; the first build crossed them the other way,
+  which is a reflection, and `setFromRotationMatrix` turned it into a
+  hull standing on end. Nothing errors on a left-handed basis. The near
+  plane is held inside the ship while it shows (`SHIP_LENGTH * 1.5`): the
+  flight rule scales it with height and cut the hull away whole above
+  about thirty ship lengths.
 
 ## Traps
 

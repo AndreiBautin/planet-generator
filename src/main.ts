@@ -12,7 +12,31 @@ import { attachGestures } from '@/ui/controls'
 import { attachHud } from '@/ui/hud'
 import { createRig } from '@/ui/rig'
 import { attachWalkControls } from '@/ui/walk-controls'
-import { loadHold, loadPlot, saveHold, savePlot } from '@/app/saves'
+import {
+  loadHold,
+  loadLogbook,
+  loadPlot,
+  loadShip,
+  saveHold,
+  saveLogbook,
+  savePlot,
+  saveShip,
+  type LogEntry,
+} from '@/app/saves'
+import {
+  fit,
+  holdCapacity,
+  holdTotal,
+  jump,
+  landingGate,
+  MODULE_SPECS,
+  newShip,
+  offeredWorlds,
+  reachOf,
+  type Ship,
+} from '@/generation/expedition'
+import { pickKind } from '@/generation/kinds'
+import { createRng } from '@/generation/rng'
 import type { Block } from '@/generation/voxel'
 import { shareLink } from '@/ui/share'
 
@@ -84,8 +108,9 @@ const show = async (born: boolean): Promise<void> => {
 const modeOf = (): 'orbit' | 'flying' | 'walking' =>
   rig.walking() ? 'walking' : rig.flying() ? 'flying' : 'orbit'
 
-// The hold: what has been dug on this world, and which block is held to
-// build with. Saved per world, like the edits at each plot.
+// The hold: what has been dug, on any world, and which block is held to
+// build with. It is the ship's, so it travels; the plot edits are the
+// world's and stay.
 let hold: Partial<Record<Block, number>> = {}
 let held: Block | undefined
 let plot: string | undefined
@@ -103,17 +128,42 @@ const saveSoon = (): void => {
   saving = setTimeout(() => {
     saving = undefined
     if (plot !== undefined) void savePlot(seed, plot, { edits: scene.changes() })
-    void saveHold(seed, { counts: hold })
+    void saveHold({ counts: hold })
   }, 400)
 }
 
+// The ship outlives any one world. It is loaded once; until then a fresh
+// one on an expedition seeded from this world stands in.
+let ship: Ship = newShip(seed)
+let logbook: LogEntry[] = []
+const showShip = (): void => {
+  const kinds: Record<string, ReturnType<typeof pickKind>> = {}
+  for (const offered of offeredWorlds(ship.expedition, ship.jumps)) {
+    kinds[offered] = pickKind(createRng(offered).fork('kind'))
+  }
+  hud.ship({ ship, hold, kinds, logged: logbook.length })
+  scene.setShip(ship)
+  scene.setReach(reachOf(ship))
+}
+void Promise.all([loadShip(), loadLogbook(), loadHold()]).then(([saved, log, theHold]) => {
+  if (saved !== undefined) ship = saved
+  logbook = log
+  hold = { ...theHold.counts }
+  showShip()
+  showHold()
+})
+
 /** Land on the plot under the glide, with whatever was dug there before laid back over it. */
 const dropIn = async (): Promise<void> => {
+  const gate = landingGate(ship, planet.kind)
+  if (gate !== undefined) {
+    hud.toast(`The ship needs ${MODULE_SPECS[gate].name.toLowerCase()} to land here`)
+    return
+  }
   const under = scene.plotUnder()
   if (under === undefined) return
-  const [saved, theHold] = await Promise.all([loadPlot(seed, under.name), loadHold(seed)])
+  const saved = await loadPlot(seed, under.name)
   if (!rig.flying()) return
-  hold = { ...theHold.counts }
   plot = under.name
   rig.drop(scene.landOn(under, saved.edits))
   hud.mode(modeOf())
@@ -152,6 +202,47 @@ const hud = attachHud({
     held = block
     showHold()
   },
+  onFit: (module) => {
+    const fitted = fit(ship, hold, module)
+    if (fitted.ship === ship) return
+    ship = fitted.ship
+    hold = { ...fitted.hold }
+    void saveShip(ship)
+    void saveHold({ counts: hold })
+    hud.toast(`${MODULE_SPECS[module].name} fitted`)
+    showShip()
+    showHold()
+  },
+  onJump: (next) => {
+    const flown = jump(ship)
+    if (flown === undefined) return
+    ship = flown
+    void saveShip(ship)
+    scene.takeOff()
+    rig.cut()
+    hud.mode('orbit')
+    seed = next
+    dials = DEFAULT_DIALS
+    window.history.pushState(null, '', linkFor(seed, dials))
+    void show(true)
+    showShip()
+  },
+  onNewExpedition: () => {
+    logbook = [
+      ...logbook,
+      {
+        expedition: ship.expedition,
+        worlds: ship.jumps,
+        modules: ship.modules.length,
+        endedAt: systemClock.now(),
+      },
+    ]
+    void saveLogbook(logbook)
+    ship = newShip(freshSeed())
+    void saveShip(ship)
+    hud.toast('A new expedition. The ship is bare again.')
+    showShip()
+  },
   onOrbit: () => {
     if (rig.walking()) scene.takeOff()
     rig.land(scene.orbitOver)
@@ -168,6 +259,10 @@ const hud = attachHud({
 
 attachWalkControls(canvas, hud.jump, hud.place, systemClock, rig.walking, rig.walk, {
   dig: () => {
+    if (holdTotal(hold) >= holdCapacity(ship)) {
+      hud.toast('The hold is full')
+      return
+    }
     const dug = scene.breakBlock()
     if (dug === undefined || dug === 'air') return
     hold[dug] = (hold[dug] ?? 0) + 1

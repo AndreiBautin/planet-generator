@@ -1,10 +1,12 @@
+import { MODULES, type Module, type Ship } from '@/generation/expedition'
 import type { Block } from '@/generation/voxel'
 import { logger } from '@/shared/logger'
 
 /**
- * What the surveyor did on a world, kept on the device: the blocks changed
- * at each landing plot, and what is in the hold. The world itself is never
- * stored — the seed makes it — so a save is only ever a diff.
+ * What the surveyor did, kept on the device: the blocks changed at each
+ * landing plot of each world, and what is in the ship's hold — one hold,
+ * because the ship carries it from world to world. The world itself is
+ * never stored — the seed makes it — so a save is only ever a diff.
  *
  * IndexedDB, behind two small functions, so nothing else in the app knows
  * what a database is. A save that cannot be read (a private window, a full
@@ -97,8 +99,8 @@ export function savePlot(seed: string, plot: string, save: PlotSave): Promise<vo
   return write(`plot:${seed}:${plot}`, { edits: save.edits })
 }
 
-export async function loadHold(seed: string): Promise<Hold> {
-  const raw = await read(`hold:${seed}`)
+export async function loadHold(): Promise<Hold> {
+  const raw = await read('hold')
   if (typeof raw !== 'object' || raw === null) return { counts: {} }
   const counts: unknown = (raw as { counts?: unknown }).counts
   if (typeof counts !== 'object' || counts === null) return { counts: {} }
@@ -109,6 +111,67 @@ export async function loadHold(seed: string): Promise<Hold> {
   return { counts: kept }
 }
 
-export function saveHold(seed: string, hold: Hold): Promise<void> {
-  return write(`hold:${seed}`, { counts: hold.counts })
+export function saveHold(hold: Hold): Promise<void> {
+  return write('hold', { counts: hold.counts })
+}
+
+/** The ship, which outlives any one world; absent until an expedition starts. */
+export async function loadShip(): Promise<Ship | undefined> {
+  const raw = await read('ship')
+  if (typeof raw !== 'object' || raw === null) return undefined
+  const { modules, fuel, expedition, jumps } = raw as {
+    modules?: unknown
+    fuel?: unknown
+    expedition?: unknown
+    jumps?: unknown
+  }
+  if (typeof fuel !== 'number' || typeof expedition !== 'string' || typeof jumps !== 'number')
+    return undefined
+  const kept: Module[] = []
+  if (Array.isArray(modules)) {
+    for (const module of modules as unknown[]) {
+      if (typeof module === 'string' && (MODULES as readonly string[]).includes(module))
+        kept.push(module as Module)
+    }
+  }
+  return {
+    modules: kept,
+    fuel: Math.max(0, Math.floor(fuel)),
+    expedition,
+    jumps: Math.floor(jumps),
+  }
+}
+
+export function saveShip(ship: Ship): Promise<void> {
+  return write('ship', { ...ship, modules: [...ship.modules] })
+}
+
+/** One finished expedition, for the logbook. */
+export interface LogEntry {
+  readonly expedition: string
+  readonly worlds: number
+  readonly modules: number
+  readonly endedAt: number
+}
+
+export async function loadLogbook(): Promise<LogEntry[]> {
+  const raw = await read('logbook')
+  if (!Array.isArray(raw)) return []
+  const kept: LogEntry[] = []
+  for (const entry of raw as unknown[]) {
+    if (typeof entry !== 'object' || entry === null) continue
+    const { expedition, worlds, modules, endedAt } = entry as Record<string, unknown>
+    if (
+      typeof expedition === 'string' &&
+      typeof worlds === 'number' &&
+      typeof modules === 'number' &&
+      typeof endedAt === 'number'
+    )
+      kept.push({ expedition, worlds, modules, endedAt })
+  }
+  return kept
+}
+
+export function saveLogbook(entries: readonly LogEntry[]): Promise<void> {
+  return write('logbook', entries)
 }

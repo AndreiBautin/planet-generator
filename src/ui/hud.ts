@@ -1,4 +1,17 @@
-import { KINDS } from '@/generation/kinds'
+import {
+  fit,
+  hasModule,
+  holdCapacity,
+  holdTotal,
+  lacking,
+  MODULE_SPECS,
+  MODULES,
+  offeredWorlds,
+  type Module,
+  type Ship,
+} from '@/generation/expedition'
+import { KINDS, type PlanetKind } from '@/generation/kinds'
+import type { Seed } from '@/generation/seed'
 import type { Block } from '@/generation/voxel'
 import type { Dials, Planet } from '@/generation/planet'
 
@@ -17,6 +30,21 @@ export interface HudHandlers {
   readonly onOrbit: () => void
   /** A block kind chosen on the hotbar. */
   readonly onHold: (block: Block) => void
+  /** Fit a module from the hold. */
+  readonly onFit: (module: Module) => void
+  /** Jump to one of the offered worlds. */
+  readonly onJump: (seed: Seed) => void
+  /** Start a new expedition, the old one logged. */
+  readonly onNewExpedition: () => void
+}
+
+/** What the Ship panel shows: the ship, the hold, the worlds offered, and the logbook's count. */
+export interface ShipView {
+  readonly ship: Ship
+  readonly hold: Readonly<Partial<Record<Block, number>>>
+  /** The kind of each offered world, once known; the names are the seeds. */
+  readonly kinds: Readonly<Record<string, PlanetKind>>
+  readonly logged: number
 }
 
 export type Mode = 'orbit' | 'flying' | 'walking'
@@ -31,6 +59,8 @@ export interface Hud {
   readonly place: HTMLElement
   /** Show what is in the hold and which block is held. */
   readonly hold: (counts: Readonly<Partial<Record<Block, number>>>, held: Block | undefined) => void
+  /** Show the ship: fuel, hold, modules to fit, worlds to jump to. */
+  readonly ship: (view: ShipView) => void
 }
 
 const element = <T extends HTMLElement>(id: string, type: new () => T): T => {
@@ -56,6 +86,37 @@ export function attachHud(handlers: HudHandlers): Hud {
   }
 
   element('new', HTMLButtonElement).addEventListener('click', handlers.onNew)
+  const shipPanel = element('ship', HTMLElement)
+  const shipToggle = element('ship-toggle', HTMLButtonElement)
+  const shipFuel = element('ship-fuel', HTMLElement)
+  const shipHold = element('ship-hold', HTMLElement)
+  const shipModules = element('ship-modules', HTMLElement)
+  const shipWorlds = element('ship-worlds', HTMLElement)
+  const shipLog = element('ship-log', HTMLElement)
+  shipToggle.addEventListener('click', () => {
+    shipPanel.hidden = !shipPanel.hidden
+    shipToggle.setAttribute('aria-pressed', String(!shipPanel.hidden))
+    if (!shipPanel.hidden) {
+      panel.hidden = true
+      tune.setAttribute('aria-pressed', 'false')
+    }
+  })
+  shipModules.addEventListener('click', (event) => {
+    const target = event.target
+    if (!(target instanceof HTMLButtonElement)) return
+    const module = target.dataset.module
+    if (module !== undefined) handlers.onFit(module as Module)
+  })
+  shipWorlds.addEventListener('click', (event) => {
+    const target = event.target
+    if (!(target instanceof HTMLButtonElement)) return
+    if (target.dataset.new !== undefined) {
+      handlers.onNewExpedition()
+      return
+    }
+    const seed = target.dataset.seed
+    if (seed !== undefined) handlers.onJump(seed as Seed)
+  })
   element('share', HTMLButtonElement).addEventListener('click', handlers.onShare)
   const fly = element('fly', HTMLButtonElement)
   fly.addEventListener('click', handlers.onFly)
@@ -74,6 +135,10 @@ export function attachHud(handlers: HudHandlers): Hud {
   tune.addEventListener('click', () => {
     panel.hidden = !panel.hidden
     tune.setAttribute('aria-pressed', String(!panel.hidden))
+    if (!panel.hidden) {
+      shipPanel.hidden = true
+      shipToggle.setAttribute('aria-pressed', 'false')
+    }
   })
 
   // A rebuild takes a moment, so a dial being dragged waits for the finger
@@ -124,6 +189,76 @@ export function attachHud(handlers: HudHandlers): Hud {
     },
     jump,
     place,
+    ship: ({ ship, hold, kinds, logged }) => {
+      shipFuel.textContent = `Fuel ${String(ship.fuel)}`
+      shipHold.textContent = `Hold ${String(holdTotal(hold))} / ${String(holdCapacity(ship))}`
+      shipModules.replaceChildren()
+      for (const module of MODULES) {
+        const spec = MODULE_SPECS[module]
+        const row = document.createElement('div')
+        row.className = 'ship-row'
+        const text = document.createElement('span')
+        const name = document.createElement('b')
+        name.textContent = spec.name
+        const does = document.createElement('small')
+        const short = lacking(hold, spec.cost)
+        const cost = Object.entries(spec.cost)
+          .map(([block, count]) => `${String(count)} ${block}`)
+          .join(', ')
+        does.textContent = hasModule(ship, module) ? spec.does : `${spec.does} Costs ${cost}.`
+        text.append(name, does)
+        row.append(text)
+        if (hasModule(ship, module)) {
+          row.classList.add('fitted')
+          const mark = document.createElement('span')
+          mark.textContent = 'Fitted'
+          row.append(mark)
+        } else {
+          const button = document.createElement('button')
+          button.type = 'button'
+          button.dataset.module = module
+          button.textContent = 'Fit'
+          button.disabled = Object.keys(short).length > 0 || fit(ship, hold, module).ship === ship
+          row.append(button)
+        }
+        shipModules.append(row)
+      }
+      shipWorlds.replaceChildren()
+      if (ship.fuel <= 0) {
+        const row = document.createElement('div')
+        row.className = 'ship-row'
+        const text = document.createElement('span')
+        text.textContent = 'Out of fuel: the expedition is over.'
+        const button = document.createElement('button')
+        button.type = 'button'
+        button.dataset.new = ''
+        button.textContent = 'New expedition'
+        row.append(text, button)
+        shipWorlds.append(row)
+      } else {
+        for (const seed of offeredWorlds(ship.expedition, ship.jumps)) {
+          const row = document.createElement('div')
+          row.className = 'ship-row'
+          const text = document.createElement('span')
+          const kind = kinds[seed]
+          const name = document.createElement('b')
+          name.textContent = kind === undefined ? 'A world' : KINDS[kind].label
+          const sub = document.createElement('small')
+          sub.textContent = seed
+          text.append(name, sub)
+          const button = document.createElement('button')
+          button.type = 'button'
+          button.dataset.seed = seed
+          button.textContent = 'Jump'
+          row.append(text, button)
+          shipWorlds.append(row)
+        }
+      }
+      shipLog.textContent =
+        logged === 0
+          ? `Expedition ${ship.expedition} · jump ${String(ship.jumps + 1)}`
+          : `Expedition ${ship.expedition} · jump ${String(ship.jumps + 1)} · ${String(logged)} logged`
+    },
     hold: (counts, held) => {
       hotbar.replaceChildren()
       for (const [block, count] of Object.entries(counts)) {
