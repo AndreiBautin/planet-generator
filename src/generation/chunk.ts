@@ -59,13 +59,15 @@ export function chunkBlocks(
 }
 
 /** Which photograph a face wears: the ground kinds, in the order textures.ts lists them. */
-export type Tile = 0 | 1 | 2 | 3 | 4 | 5
+export type Tile = 0 | 1 | 2 | 3 | 4 | 5 | 6
 const GRASS: Tile = 0
 const LITTER: Tile = 1
 const SAND: Tile = 2
 const STONE: Tile = 3
 const SNOW: Tile = 4
 const BASALT: Tile = 5
+/** Not a photograph: a lamp's own light, which the chunk material glows with. */
+const LAMP: Tile = 6
 
 export interface Palette {
   readonly lush: Rgb
@@ -108,6 +110,8 @@ function looksOf(palette: Palette): Readonly<Record<Block, readonly [Look, Look,
   const cactusLook: Look = { tile: GRASS, tint: [0.3, 0.55, 0.28] }
   const fluid: Look = { tile: STONE, tint: palette.shallow }
   const cacheLook: Look = { tile: BASALT, tint: [0.95, 0.72, 0.2] }
+  const lampLook: Look = { tile: LAMP, tint: [1, 0.92, 0.75] }
+  const saplingLook: Look = { tile: GRASS, tint: scale(palette.lush, 0.95) }
   const same = (look: Look): readonly [Look, Look, Look] => [look, look, look]
   return {
     air: same(fluid),
@@ -126,6 +130,8 @@ function looksOf(palette: Palette): Readonly<Record<Block, readonly [Look, Look,
     needles: same(needlesLook),
     cactus: same(cactusLook),
     cache: same(cacheLook),
+    lamp: same(lampLook),
+    sapling: same(saplingLook),
   }
 }
 

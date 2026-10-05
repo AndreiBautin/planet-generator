@@ -86,11 +86,11 @@ it can be. Checked when live.
 
 ### D — Marks from orbit
 
-- [ ] **D1 Felled and dug.** Removed features leave the feature grid;
+- [x] **D1 Felled and dug.** Removed features leave the feature grid;
       pits and structures draw as blocks in the glide at low altitude.
-- [ ] **D2 Lights.** Lamps placed on the ground are points of light on
+- [x] **D2 Lights.** Lamps placed on the ground are points of light on
       the night side.
-- [ ] **D3 Growth.** Planted saplings grow into stands over real days,
+- [x] **D3 Growth.** Planted saplings grow into stands over real days,
       spreading along the moisture map, in the forest layer the glide
       draws.
 - [ ] **D4 Water and lava.** A dam fills its basin; a channel carries

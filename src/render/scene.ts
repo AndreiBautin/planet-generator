@@ -28,11 +28,20 @@ import { Terrain } from './patches/terrain'
 import { nextPixelRatio, typicalFrame, type Quality } from './quality'
 import { groundTextures } from './textures'
 import { groundRadiusAt } from '@/generation/ground'
-import { AREA, BLOCK, BASE_ROW, frameAt, type Block, type Frame } from '@/generation/voxel'
+import {
+  AREA,
+  BLOCK,
+  BASE_ROW,
+  blockKey,
+  frameAt,
+  type Block,
+  type Frame,
+} from '@/generation/voxel'
+import { buildPlotMarks, releaseMarks, type PlotMarks } from './marks'
 import { castBlocks } from '@/generation/raycast'
 import type { Ship } from '@/generation/expedition'
 import { buildShip, releaseShip, SHIP_LENGTH } from './ship'
-import { directionOn, faceUvOf } from '@/generation/cube'
+import { directionOn, faceUvOf, type Face } from '@/generation/cube'
 import type { Hole } from './patches/lod'
 import { waterMaterial } from './water'
 
@@ -63,10 +72,10 @@ export interface Scene {
    * edits laid over: the row to stand on, and what is at any block.
    */
   readonly landOn: (plot: Plot, edits: readonly (readonly [number, Block])[]) => Landed
-  /** Dig the block looked at, within reach: what it was, or nothing. */
-  readonly breakBlock: () => Block | undefined
+  /** Dig the block looked at, within reach: what it was and where, or nothing. */
+  readonly breakBlock: () => Dug | undefined
   /** Set a block against the face looked at, within reach, if it would not stand in the surveyor. */
-  readonly placeBlock: (block: Block) => boolean
+  readonly placeBlock: (block: Block) => number | undefined
   /** Every block changed by hand on the current landing. */
   readonly changes: () => readonly (readonly [number, Block])[]
   /** The ship to draw ahead of the eye in a glide, rebuilt when its modules change. */
@@ -78,6 +87,17 @@ export interface Scene {
   /** The orbit angles that look straight down on a point of the planet, as it is turned now. */
   readonly orbitOver: (position: Vec3) => { readonly yaw: number; readonly pitch: number }
   readonly dispose: () => void
+  /** The placements felled on this world, left out of the glide's features. */
+  readonly setFelled: (ids: readonly string[]) => void
+  /** The marks left on this world's plots, drawn from the air. */
+  readonly setMarks: (plots: readonly Omit<PlotMarks, 'base'>[]) => void
+}
+
+/** A dug block: what it was, its key, and the placement it was the root of, if any. */
+export interface Dug {
+  readonly block: Block
+  readonly key: number
+  readonly felled: string | undefined
 }
 
 /**
@@ -132,6 +152,23 @@ export interface Plot {
   readonly frame: Frame
 }
 const PLOT = (AREA * BLOCK * 0.85) / (Math.PI / 4)
+
+/** The frame of a plot from its name, the way `plotUnder` names them; nothing for a name that is not one. */
+export function plotFrameOf(name: string): Frame | undefined {
+  const parts = name.split('/').map(Number)
+  const [face, iu, iv] = parts
+  if (parts.length !== 3 || face === undefined || iu === undefined || iv === undefined)
+    return undefined
+  if (
+    !Number.isInteger(face) ||
+    face < 0 ||
+    face > 5 ||
+    !Number.isFinite(iu) ||
+    !Number.isFinite(iv)
+  )
+    return undefined
+  return frameAt(directionOn(face as Face, iu * PLOT, iv * PLOT))
+}
 /** How far the surveyor can dig or build, in blocks, until a drill is fitted. */
 const BASE_REACH = 6
 /** The surveyor's body, as the walker has it, for not building into it. */
@@ -235,7 +272,34 @@ export function startScene(
   let reach = BASE_REACH
   // The airship, drawn a little ahead of and below the eye while gliding.
   let shipModel: THREE.Group | undefined
+  // The world's felled placements and the marks on its plots, kept here so
+  // a world shown again (a dial moved) gets them back without being asked.
+  let felled: readonly string[] = []
+  let markPlots: readonly Omit<PlotMarks, 'base'>[] = []
+  let marks: THREE.Group | undefined
+  let walkedPlot: string | undefined
+  const rebuildMarks = (): void => {
+    if (marks !== undefined) {
+      marks.removeFromParent()
+      releaseMarks(marks)
+      marks = undefined
+    }
+    if (shown === undefined) return
+    marks = new THREE.Group()
+    for (const plot of markPlots) {
+      const group = buildPlotMarks(
+        { ...plot, base: groundRadiusAt(shown.world, plot.frame.origin) },
+        shown.world,
+      )
+      if (group === undefined) continue
+      group.visible = plot.name !== walkedPlot
+      marks.add(group)
+    }
+    shown.terrain.group.add(marks)
+  }
   const shipForward = new THREE.Vector3()
+  // The last heading the ship flew, for a look straight down, which has no level part.
+  const shipHeading = new THREE.Vector3(1, 0, 0)
   const shipUp = new THREE.Vector3()
   const shipRight = new THREE.Vector3()
   const shipBasis = new THREE.Matrix4()
@@ -347,6 +411,8 @@ export function startScene(
       sky,
       bornAt: animate ? clock.now() : keep ? previous.bornAt : undefined,
     }
+    shown.terrain.setFelled(felled)
+    rebuildMarks()
     pose(shown, animate ? birthAt(0) : stageOf(shown))
     next.resolve(true)
   }
@@ -433,9 +499,16 @@ export function startScene(
       if (gliding) {
         // Level with the ground, keeping a third of the look's pitch: a
         // glide looks down at the land, and a hull that followed the look
-        // outright read as a dive.
+        // outright read as a dive. A look straight down has no level part
+        // at all — the hull sat on the eye, fins across the whole screen —
+        // so the last heading stands in.
         shipForward.copy(target).sub(camera.position).normalize()
-        shipForward.addScaledVector(up, -shipForward.dot(up) * 0.65).normalize()
+        const dive = shipForward.dot(up)
+        shipForward.addScaledVector(up, -dive)
+        if (shipForward.lengthSq() < 1e-6) shipForward.copy(shipHeading)
+        shipForward.normalize()
+        shipHeading.copy(shipForward)
+        shipForward.addScaledVector(up, dive * 0.35).normalize()
         shipUp.copy(up)
         shipRight.crossVectors(shipUp, shipForward).normalize()
         shipUp.crossVectors(shipForward, shipRight).normalize()
@@ -614,7 +687,7 @@ export function startScene(
       const iv = Math.round(v / PLOT)
       return {
         name: `${String(face)}/${String(iu)}/${String(iv)}`,
-        frame: frameAt(directionOn(face, iu * PLOT, iv * PLOT)),
+        frame: plotFrameOf(`${String(face)}/${String(iu)}/${String(iv)}`) ?? frameAt(under),
       }
     },
     landOn: (plot, edits) => {
@@ -637,6 +710,8 @@ export function startScene(
       )
       shown.terrain.group.add(view.group)
       landing = { view, hole: { centre: frame.origin, radius: (AREA / 2) * BLOCK * 0.92 } }
+      walkedPlot = plot.name
+      for (const group of marks?.children ?? []) group.visible = group.name !== plot.name
       const startY = BASE_ROW + 2
       return {
         frame,
@@ -657,12 +732,13 @@ export function startScene(
       )
       if (hit === undefined) return undefined
       const was = view.blockAt(hit.x, hit.y, hit.z)
+      const root = view.rootAt(hit.x, hit.y, hit.z)
       view.setBlock(hit.x, hit.y, hit.z, 'air')
-      return was
+      return { block: was, key: blockKey(hit.x, hit.y, hit.z), felled: root }
     },
     placeBlock: (block) => {
       const walk = lastView?.walk
-      if (landing === undefined || walk === undefined) return false
+      if (landing === undefined || walk === undefined) return undefined
       const view = landing.view
       const hit = castBlocks(
         walk.eye,
@@ -670,7 +746,7 @@ export function startScene(
         reach,
         (x, y, z) => view.stuffAt(x, y, z) === 'solid',
       )
-      if (hit === undefined) return false
+      if (hit === undefined) return undefined
       const [x, y, z] = hit.before
       // Not into the surveyor's own body.
       const feetY = walk.eye[1] - EYE_HEIGHT
@@ -680,10 +756,10 @@ export function startScene(
         y + 1 > feetY &&
         y < feetY + BODY_HEIGHT
       ) {
-        return false
+        return undefined
       }
       view.setBlock(x, y, z, block)
-      return true
+      return blockKey(x, y, z)
     },
     changes: () => landing?.view.changes() ?? [],
     setShip: (next) => {
@@ -698,11 +774,21 @@ export function startScene(
     setReach: (blocks) => {
       reach = blocks
     },
+    setFelled: (ids) => {
+      felled = ids
+      shown?.terrain.setFelled(ids)
+    },
+    setMarks: (plots) => {
+      markPlots = plots
+      rebuildMarks()
+    },
     takeOff: () => {
       if (landing === undefined) return
       landing.view.group.removeFromParent()
       landing.view.dispose()
       landing = undefined
+      walkedPlot = undefined
+      for (const group of marks?.children ?? []) group.visible = true
     },
     diveFrom: () => {
       const position = unit(inPlanetFrame(camera.position, lastTurn, 1))
@@ -717,6 +803,7 @@ export function startScene(
     },
     dispose: () => {
       if (shipModel !== undefined) releaseShip(shipModel)
+      if (marks !== undefined) releaseMarks(marks)
       landing?.view.dispose()
       rain.dispose()
       renderer.setAnimationLoop(null)

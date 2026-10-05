@@ -164,6 +164,11 @@ export class Terrain {
     this.evict(shown)
   }
 
+  /** Leave the felled placements out of the features. */
+  setFelled(ids: readonly string[]): void {
+    this.flora.setFelled(ids)
+  }
+
   dispose(): void {
     this.disposed = true
     for (const entry of this.entries.values()) if (entry.node !== undefined) free(entry.node)

@@ -23,6 +23,8 @@ export interface ModuleSpec {
   readonly does: string
   /** Blocks it costs, by kind. */
   readonly cost: Readonly<Partial<Record<Block, number>>>
+  /** Blocks it puts in the hold when fitted, by kind. */
+  readonly gives?: Readonly<Partial<Record<Block, number>>>
 }
 
 export const MODULE_SPECS: Readonly<Record<Module, ModuleSpec>> = {
@@ -33,8 +35,9 @@ export const MODULE_SPECS: Readonly<Record<Module, ModuleSpec>> = {
   },
   lamps: {
     name: 'Lamps',
-    does: 'Light the ship at night, and lamps to leave on the ground.',
+    does: 'Light the ship at night, and twelve lamps to leave on the ground.',
     cost: { wood: 8, sand: 8 },
+    gives: { lamp: 12 },
   },
   drill: {
     name: 'Drill',
@@ -124,6 +127,12 @@ export function fit(
   for (const [block, have] of Object.entries(hold) as [Block, number][]) {
     const left = have - (cost[block] ?? 0)
     if (left > 0) paid[block] = left
+  }
+  for (const [block, count] of Object.entries(MODULE_SPECS[module].gives ?? {}) as [
+    Block,
+    number,
+  ][]) {
+    paid[block] = (paid[block] ?? 0) + count
   }
   return { ship: { ...ship, modules: [...ship.modules, module] }, hold: paid }
 }

@@ -6,23 +6,27 @@ import { newSeed, type Seed } from '@/generation/seed'
 import { createBuilder } from '@/render/builder'
 import { groundRadiusAt } from '@/render/patches/patch-data'
 import { pickQuality } from '@/render/quality'
-import { startScene } from '@/render/scene'
+import { plotFrameOf, startScene } from '@/render/scene'
 import { logger, setLogLevel } from '@/shared/logger'
 import { attachGestures } from '@/ui/controls'
 import { attachHud } from '@/ui/hud'
 import { createRig } from '@/ui/rig'
 import { attachWalkControls } from '@/ui/walk-controls'
 import {
+  loadFelled,
   loadHold,
   loadLogbook,
   loadPlot,
+  loadPlots,
   loadShip,
+  saveFelled,
   saveHold,
   saveLogbook,
   savePlot,
   saveShip,
   type LogEntry,
 } from '@/app/saves'
+import { grown, type TimedEdit } from '@/generation/growth'
 import {
   cacheOf,
   scopeInFlight,
@@ -114,9 +118,18 @@ const scene = startScene(canvas, systemClock, rig.view, {
   onView: (view) => {
     let reading: ScopeReading | undefined
     if (hasModule(ship, 'scope') && !hasFound(ship, seed)) {
+      const near =
+        plotFrame !== undefined &&
+        plotFrame.origin[0] * cache.direction[0] +
+          plotFrame.origin[1] * cache.direction[1] +
+          plotFrame.origin[2] * cache.direction[2] >
+          0.9
       if (view.walk !== undefined && plotFrame !== undefined) {
+        // `columnOf` projects through the planet's centre, so a cache on
+        // the far side would read as close; on foot it is cold unless the
+        // plot is on the cache's own side.
         const [cx, cz] = columnOf(plotFrame, cache.direction)
-        reading = scopeOnFoot(Math.hypot(view.walk.x - cx, view.walk.z - cz))
+        reading = near ? scopeOnFoot(Math.hypot(view.walk.x - cx, view.walk.z - cz)) : 'cold'
       } else if (view.surface !== undefined && view.walk === undefined) {
         reading = scopeInFlight(angleBetween(unit(view.surface.eye), cache.direction))
       }
@@ -140,6 +153,11 @@ const show = async (born: boolean): Promise<void> => {
   cache = cacheFor(next)
   hud.render(next)
   showShip()
+  void loadFelled(seed).then((ids) => {
+    felled = ids
+    scene.setFelled(ids)
+  })
+  void showMarks()
   document.body.classList.add('forming')
   // False when a later planet was asked for first; that one will clear the
   // forming state when it arrives.
@@ -158,6 +176,28 @@ let hold: Partial<Record<Block, number>> = {}
 let held: Block | undefined
 let plot: string | undefined
 let plotFrame: Frame | undefined
+// When each sapling on the current plot went in, by block key: what makes it grow.
+let planted = new Map<number, number>()
+// The placements felled on this world, left out of the glide.
+let felled: readonly string[] = []
+/** The current plot's edits, with the planting times the view does not hold. */
+const timedChanges = (): readonly TimedEdit[] =>
+  scene.changes().map(([key, block]) => {
+    const at = planted.get(key)
+    return block === 'sapling' && at !== undefined ? [key, block, at] : [key, block]
+  })
+/** Draw every mark left on this world from the air. */
+const showMarks = async (): Promise<void> => {
+  const world = seed
+  const plots = await loadPlots(world)
+  if (world !== seed) return
+  scene.setMarks(
+    plots.flatMap(({ name, save }) => {
+      const frame = plotFrameOf(name)
+      return frame === undefined ? [] : [{ name, frame, edits: save.edits }]
+    }),
+  )
+}
 const showHold = (): void => {
   if (held !== undefined && (hold[held] ?? 0) <= 0) held = undefined
   if (held === undefined) {
@@ -167,13 +207,32 @@ const showHold = (): void => {
   hud.hold(hold, held)
 }
 let saving: ReturnType<typeof setTimeout> | undefined
+/** Save the plot and the hold now, for the world and plot as they are at this moment. */
+const saveNow = async (): Promise<void> => {
+  if (saving !== undefined) clearTimeout(saving)
+  saving = undefined
+  const world = seed
+  const here = plot
+  await Promise.all([
+    here === undefined ? undefined : savePlot(world, here, { edits: timedChanges() }),
+    saveHold({ counts: hold }),
+  ])
+}
 const saveSoon = (): void => {
   if (saving !== undefined) clearTimeout(saving)
   saving = setTimeout(() => {
-    saving = undefined
-    if (plot !== undefined) void savePlot(seed, plot, { edits: scene.changes() })
-    void saveHold({ counts: hold })
+    void saveNow()
   }, 400)
+}
+/** Leave the ground: the plot saved first, so the marks drawn from the air are the ones left. */
+const leaveGround = (): void => {
+  if (plot === undefined) return
+  void saveNow().then(() => showMarks())
+  // Forgotten before the ground goes: a save after take-off would read an
+  // empty landing and write the plot as empty.
+  plot = undefined
+  plotFrame = undefined
+  scene.takeOff()
 }
 
 // The ship outlives any one world. It is loaded once; until then a fresh
@@ -215,9 +274,22 @@ const dropIn = async (): Promise<void> => {
   if (under === undefined) return
   const saved = await loadPlot(seed, under.name)
   if (!rig.flying()) return
+  // Saplings planted long enough ago come up as trees, saved back as such.
+  const edits = grown(saved.edits, systemClock.now())
+  if (edits !== saved.edits) void savePlot(seed, under.name, { edits })
+  planted = new Map(
+    edits.flatMap(([key, block, at]) =>
+      block === 'sapling' && at !== undefined ? [[key, at]] : [],
+    ),
+  )
   plot = under.name
   plotFrame = under.frame
-  rig.drop(scene.landOn(under, saved.edits))
+  rig.drop(
+    scene.landOn(
+      under,
+      edits.map(([key, block]) => [key, block] as const),
+    ),
+  )
   hud.mode(modeOf())
   showHold()
 }
@@ -226,7 +298,7 @@ const hud = attachHud({
   onNew: () => {
     // A new world is born in orbit: rising over the old one first would be
     // two seconds of a planet that is about to be replaced.
-    scene.takeOff()
+    leaveGround()
     rig.cut()
     hud.mode('orbit')
     seed = freshSeed()
@@ -241,8 +313,8 @@ const hud = attachHud({
   },
   onFly: () => {
     if (rig.walking()) {
+      leaveGround()
       rig.takeOff()
-      scene.takeOff()
     } else if (rig.flying()) {
       void dropIn()
     } else {
@@ -270,7 +342,7 @@ const hud = attachHud({
     if (flown === undefined) return
     ship = flown
     void saveShip(ship)
-    scene.takeOff()
+    leaveGround()
     rig.cut()
     hud.mode('orbit')
     seed = next
@@ -296,7 +368,7 @@ const hud = attachHud({
     showShip()
   },
   onOrbit: () => {
-    if (rig.walking()) scene.takeOff()
+    leaveGround()
     rig.land(scene.orbitOver)
     hud.mode(modeOf())
   },
@@ -316,8 +388,14 @@ attachWalkControls(canvas, hud.jump, hud.place, systemClock, rig.walking, rig.wa
       return
     }
     const dug = scene.breakBlock()
-    if (dug === undefined || dug === 'air') return
-    if (dug === 'cache') {
+    if (dug === undefined || dug.block === 'air') return
+    if (dug.felled !== undefined && !felled.includes(dug.felled)) {
+      felled = [...felled, dug.felled]
+      void saveFelled(seed, felled)
+      scene.setFelled(felled)
+    }
+    if (dug.block === 'sapling') planted.delete(dug.key)
+    if (dug.block === 'cache') {
       // The cache is never a block in the hold: it is opened where it lies.
       const opened = openCache(ship, hold, seed)
       ship = opened.ship
@@ -329,13 +407,22 @@ attachWalkControls(canvas, hud.jump, hud.place, systemClock, rig.walking, rig.wa
       saveSoon()
       return
     }
-    hold[dug] = (hold[dug] ?? 0) + 1
+    // A crown dug gives a sapling one time in four, decided by the block's
+    // key so the same leaves always give the same thing.
+    const got: Block =
+      (dug.block === 'leaves' || dug.block === 'needles') &&
+      (Math.imul(dug.key, 2654435761) >>> 0) % 4 === 0
+        ? 'sapling'
+        : dug.block
+    hold[got] = (hold[got] ?? 0) + 1
     showHold()
     saveSoon()
   },
   build: () => {
     if (held === undefined || (hold[held] ?? 0) <= 0) return
-    if (!scene.placeBlock(held)) return
+    const key = scene.placeBlock(held)
+    if (key === undefined) return
+    if (held === 'sapling') planted.set(key, systemClock.now())
     hold[held] = (hold[held] ?? 0) - 1
     showHold()
     saveSoon()
@@ -347,7 +434,7 @@ window.addEventListener('keydown', (event) => {
   if (!(rig.flying() || rig.walking()) || event.target instanceof HTMLInputElement) return
   if (rig.walking()) {
     if (event.key === 'Escape') {
-      scene.takeOff()
+      leaveGround()
       rig.land(scene.orbitOver)
       hud.mode('orbit')
     }
@@ -368,7 +455,7 @@ window.addEventListener('keydown', (event) => {
     event.preventDefault()
     rig.nudge(step[0], step[1])
   } else if (event.key === 'Escape') {
-    if (rig.walking()) scene.takeOff()
+    leaveGround()
     rig.land(scene.orbitOver)
     hud.mode('orbit')
   }

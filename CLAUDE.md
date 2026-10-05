@@ -342,7 +342,48 @@ piece is in:
   parts into the hold, two fuel, the seed recorded in `Ship.found`; the
   block itself never enters the hold. The scope reads by angle in the air
   and by blocks on foot (`scopeInFlight`, `scopeOnFoot`) — a landing area
-  is three degrees across, so one scale would go quiet once landed.
+  is three degrees across, so one scale would go quiet once landed. On
+  foot the reading is `cold` unless the plot is on the cache's own side
+  of the planet: `columnOf` projects through the centre, and read naively
+  a cache on the far side came up `burning` on every landing.
+- **The marks a surveyor leaves are drawn from the saved edits**
+  (`render/marks.ts`): every plot of the world with a save, each as one
+  instanced mesh of unit cubes placed the way the landing's blocks are
+  (`placeInPlot`, the same basis `LandingView` builds), dug blocks dark,
+  lamps as additive points lit on the night side. `main.ts` loads them
+  with `loadPlots` and the scene keeps them across a dial change; the
+  plot being walked on is hidden while its blocks are on screen for real.
+  **Every way off the ground goes through `leaveGround`**, which saves the
+  plot first and then forgets it — a debounced save firing after take-off
+  read an empty landing and wrote the plot as empty, and a save after a
+  jump wrote it under the next world's seed.
+- **A felled tree stays felled from the air.** Every `Placement` carries
+  an id (face, cell, slot); `landingAt` records which placement is rooted
+  in each column (`Landing.roots`), the worker hands the chunk's roots
+  back with its blocks, and digging a root block returns the id in `Dug`.
+  `main.ts` keeps the world's felled ids (`saveFelled`), the scene hands
+  them to `Flora.setFelled`, which drops every tile and asks again with
+  the list, and `scatterPatch` leaves those placements out. Only the root
+  block fells: the crown's blocks stay as stamps on the next landing,
+  which is a known rough edge.
+- **Lamps and saplings are blocks.** Fitting the lamps module puts twelve
+  `lamp` blocks in the hold (`ModuleSpec.gives`); the chunk material
+  treats tile 6 as its own light and adds emissive, so a lamp glows at
+  night on the ground as well as from the air. A dug crown gives a
+  `sapling` one time in four, by a hash of the block key. A planted
+  sapling's edit carries its moment (`TimedEdit`, a third element the
+  saves read as optional), and `grown` in `generation/growth.ts` turns
+  every sapling older than `GROW_MS` into a trunk and crown of ordinary
+  edits on the next landing — the clock is a parameter, and an undated
+  sapling never grows.
+- **The ship's heading survives a look straight down.** The hull is
+  levelled by removing the look's up component; straight down that leaves
+  nothing to normalise, and the hull sat on the eye with its fins across
+  the whole screen after a take-off from a downward look. The last
+  heading stands in (`shipHeading`).
+- **The Place and Jump buttons listen to pointer events**, so a
+  scripted `.click()` on them in the preview does nothing; press them
+  with a real click when checking a build on the ground.
 
 ## Traps
 

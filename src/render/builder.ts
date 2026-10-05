@@ -24,7 +24,12 @@ import { answer } from './work'
 export interface Builder {
   readonly clouds: (seed: Seed, dials: Dials, width: number) => Promise<Uint8Array>
   readonly patch: (seed: Seed, dials: Dials, key: PatchKey, segments: number) => Promise<PatchData>
-  readonly features: (seed: Seed, dials: Dials, key: PatchKey) => Promise<Scatter>
+  readonly features: (
+    seed: Seed,
+    dials: Dials,
+    key: PatchKey,
+    felled: readonly string[],
+  ) => Promise<Scatter>
   /** A chunk of the landing at `origin`: its mesh and its blocks. */
   readonly chunk: (
     seed: Seed,
@@ -33,7 +38,11 @@ export interface Builder {
     cx: number,
     cz: number,
     edits: readonly (readonly [number, Block])[],
-  ) => Promise<{ readonly mesh: ChunkMesh; readonly blocks: Uint8Array }>
+  ) => Promise<{
+    readonly mesh: ChunkMesh
+    readonly blocks: Uint8Array
+    readonly roots: readonly (readonly [number, number, number, string])[]
+  }>
 }
 
 interface Lane {
@@ -100,11 +109,11 @@ export function createBuilder(cores: number): Builder {
       next += 1
       const result = await run({ id: next, kind: 'chunk', seed, dials, origin, cx, cz, edits })
       if (result.kind !== 'chunk') throw new Error('builder answered a chunk with something else')
-      return { mesh: result.mesh, blocks: result.blocks }
+      return { mesh: result.mesh, blocks: result.blocks, roots: result.roots }
     },
-    features: async (seed, dials, key) => {
+    features: async (seed, dials, key, felled) => {
       next += 1
-      const result = await run({ id: next, kind: 'features', seed, dials, key })
+      const result = await run({ id: next, kind: 'features', seed, dials, key, felled })
       if (result.kind !== 'features')
         throw new Error('builder answered features with something else')
       return result.features

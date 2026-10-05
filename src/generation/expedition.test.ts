@@ -56,7 +56,7 @@ describe('the expedition', () => {
     expect(lacking({ wood: 3 }, MODULE_SPECS.lamps.cost)).toEqual({ wood: 5, sand: 8 })
     const rich = fit(ship, { wood: 10, sand: 8, stone: 1 }, 'lamps')
     expect(rich.ship.modules).toEqual(['lamps'])
-    expect(rich.hold).toEqual({ wood: 2, stone: 1 })
+    expect(rich.hold).toEqual({ wood: 2, stone: 1, lamp: 12 })
     // Fitting it again changes nothing.
     expect(fit(rich.ship, rich.hold, 'lamps')).toEqual({ ship: rich.ship, hold: rich.hold })
   })

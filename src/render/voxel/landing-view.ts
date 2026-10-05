@@ -13,7 +13,7 @@ import {
 } from '@/generation/chunk'
 import type { Vec3 } from '@/generation/cube'
 import type { Planet } from '@/generation/planet'
-import { AREA, BASE_ROW, BLOCK, blockKey, HEIGHT, type Block } from '@/generation/voxel'
+import { AREA, BASE_ROW, BLOCK, blockKey, columnKey, HEIGHT, type Block } from '@/generation/voxel'
 
 import { fromPalette } from '../colour'
 
@@ -64,6 +64,8 @@ export class LandingView {
   private readonly solid: THREE.Material
   private readonly fluid: THREE.Material
   private readonly edits: Map<number, Block>
+  /** The feature rooted in each column, from the chunks: dig its root row and it is felled. */
+  private readonly roots = new Map<number, { readonly row: number; readonly id: string }>()
   private readonly palette: Palette
   private waiting = 0
   private frame = 0
@@ -133,6 +135,12 @@ export class LandingView {
     if (SOLID.has(block)) return 'solid'
     if (FLUID.has(block)) return 'liquid'
     return 'air'
+  }
+
+  /** The placement whose root this block is, if it is one. */
+  rootAt(x: number, y: number, z: number): string | undefined {
+    const root = this.roots.get(columnKey(x, z))
+    return root !== undefined && root.row === y ? root.id : undefined
   }
 
   /** Every block changed by hand, as [key, block] pairs, for saving. */
@@ -249,9 +257,10 @@ export class LandingView {
     this.waiting += 1
     void this.builder
       .chunk(this.planet.seed, this.planet.dials, this.origin, cx, cz, [...this.edits])
-      .then(({ mesh, blocks }) => {
+      .then(({ mesh, blocks, roots }) => {
         this.waiting -= 1
         if (this.disposed || this.held.get(name) !== chunk) return
+        for (const [x, z, row, id] of roots) this.roots.set(columnKey(x, z), { row, id })
         chunk.blocks = blocks
         chunk.node = this.nodeFor(mesh, cx, cz)
         this.group.add(chunk.node)

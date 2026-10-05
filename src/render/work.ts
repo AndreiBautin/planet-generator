@@ -1,8 +1,8 @@
-import { chunkBlocks, meshChunk } from '@/generation/chunk'
+import { CHUNK, chunkBlocks, meshChunk } from '@/generation/chunk'
 import { createPlanet, type Planet } from '@/generation/planet'
 import { cacheOf } from '@/generation/cache'
 import { surveyPlanet } from '@/generation/landmarks'
-import { blockKey, landingAt, type Landing } from '@/generation/voxel'
+import { blockKey, columnKey, landingAt, type Landing } from '@/generation/voxel'
 
 import type { WorkRequest, WorkResult } from './build-protocol'
 import { samplePatch } from './patches/patch-data'
@@ -76,10 +76,23 @@ export function answer(request: WorkRequest): WorkResult {
         patch: samplePatch(planet, request.key, request.segments),
       }
     case 'features':
-      return { id: request.id, kind: 'features', features: scatterPatch(planet, request.key) }
+      return {
+        id: request.id,
+        kind: 'features',
+        features: scatterPatch(planet, request.key, new Set(request.felled)),
+      }
     case 'chunk': {
       const landing = landingFor(planet, request.origin)
       const blocks = chunkBlocks(landing, request.cx, request.cz, new Map(request.edits), blockKey)
+      const roots: (readonly [number, number, number, string])[] = []
+      for (let x = 0; x < CHUNK; x += 1) {
+        for (let z = 0; z < CHUNK; z += 1) {
+          const wx = request.cx * CHUNK + x
+          const wz = request.cz * CHUNK + z
+          const root = landing.roots.get(columnKey(wx, wz))
+          if (root !== undefined) roots.push([wx, wz, root.row, root.id])
+        }
+      }
       const mesh = meshChunk(blocks, {
         lush: linear(planet.palette.lush),
         dry: linear(planet.palette.dry),
@@ -88,7 +101,7 @@ export function answer(request: WorkRequest): WorkResult {
         ice: linear(planet.palette.ice),
         shallow: linear(planet.palette.shallow),
       })
-      return { id: request.id, kind: 'chunk', mesh, blocks }
+      return { id: request.id, kind: 'chunk', mesh, blocks, roots }
     }
   }
 }

@@ -51,6 +51,8 @@ export const BLOCKS = [
   'needles',
   'cactus',
   'cache',
+  'lamp',
+  'sapling',
 ] as const
 export type Block = (typeof BLOCKS)[number]
 
@@ -72,7 +74,18 @@ export interface Landing extends Frame {
   readonly stamps: ReadonlyMap<number, Block>
   /** Blocks cut into the ground below: the cache's chamber, if it lies in this area. */
   readonly buried: ReadonlyMap<number, Block>
+  /** The standing feature rooted in each column, by `columnKey`: dig its root and it is felled. */
+  readonly roots: ReadonlyMap<number, Root>
 }
+
+export interface Root {
+  readonly id: string
+  /** The row of the block that holds it up: the first stamped above the ground. */
+  readonly row: number
+}
+
+/** One number for a block column, for the roots map. */
+export const columnKey = (x: number, z: number): number => (x + 1024) * 4096 + (z + 1024)
 
 /** How many blocks under the ground the cache's chamber is cut. */
 export const CACHE_DEPTH = 5
@@ -291,9 +304,10 @@ export function landingAt(planet: Planet, direction: Vec3, cache?: Vec3): Landin
   const { origin, east, north } = frameAt(direction)
   const stamps = new Map<number, Block>()
   const buried = new Map<number, Block>()
+  const roots = new Map<number, Root>()
   const base = groundRadiusAt(planet, origin)
   const seaRow = seaRowOf(base)
-  const landing: Landing = { planet, origin, east, north, base, seaRow, stamps, buried }
+  const landing: Landing = { planet, origin, east, north, base, seaRow, stamps, buried, roots }
   if (cache !== undefined) {
     // The cache: a hollow three blocks across, cut CACHE_DEPTH under the
     // ground, the cache block at its heart. Only when it lies in this area;
@@ -337,6 +351,8 @@ export function landingAt(planet: Planet, direction: Vec3, cache?: Vec3): Landin
             ? seaRow
             : groundRowOf(floorRadiusAt(planet, directionOf(landing, x, z)), seaRow)
         stamp(stamps, placed, x, z, ground, seaRow)
+        if (placed.feature !== 'floe')
+          roots.set(columnKey(x, z), { id: placed.id, row: ground + 1 })
       }
     }
   }

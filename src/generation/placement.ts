@@ -75,6 +75,8 @@ function pick(growth: Growth, groups: Groupings, roll: number): Feature | undefi
 }
 
 export interface Placement {
+  /** A stable name — face, cell and slot — so a felled tree can be left out of the glide. */
+  readonly id: string
   readonly feature: Feature
   /** Unit direction from the centre. */
   readonly direction: Vec3
@@ -131,6 +133,7 @@ export function placementsIn(
   const standing = pick(featuresAt(planet, surface, steep), groups, cellHash(word, face, i, j, 3))
   if (standing !== undefined) {
     out.push({
+      id: `${String(face)}/${String(i)}/${String(j)}/0`,
       feature: standing,
       direction,
       ground: here,
@@ -152,6 +155,7 @@ export function placementsIn(
     const fv = (j + 0.1 + cellHash(word, face, i, j, 9) * 0.8) * CELL
     const at = directionOn(face, fu, fv)
     out.push({
+      id: `${String(face)}/${String(i)}/${String(j)}/1`,
       feature: cover,
       direction: at,
       ground: groundRadiusAt(planet, at),

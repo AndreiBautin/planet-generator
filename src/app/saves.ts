@@ -1,4 +1,5 @@
 import { MODULES, type Module, type Ship } from '@/generation/expedition'
+import type { TimedEdit } from '@/generation/growth'
 import type { Block } from '@/generation/voxel'
 import { logger } from '@/shared/logger'
 
@@ -17,8 +18,8 @@ const DATABASE = 'planet-generator'
 const STORE = 'saves'
 
 export interface PlotSave {
-  /** [block key, block] pairs; see voxel.ts `blockKey`. */
-  readonly edits: readonly (readonly [number, Block])[]
+  /** [block key, block] pairs, with the moment of planting on a sapling; see voxel.ts `blockKey`. */
+  readonly edits: readonly TimedEdit[]
 }
 
 export interface Hold {
@@ -62,6 +63,33 @@ async function read(key: string): Promise<unknown> {
   })
 }
 
+/** Every [key, value] whose key starts with a prefix. */
+async function readAll(prefix: string): Promise<readonly (readonly [string, unknown])[]> {
+  const db = await open()
+  if (db === undefined) return []
+  return new Promise((resolve) => {
+    const range = IDBKeyRange.bound(prefix, `${prefix}\uffff`)
+    const store = db.transaction(STORE, 'readonly').objectStore(STORE)
+    const keys = store.getAllKeys(range)
+    const values = store.getAll(range)
+    values.onsuccess = () => {
+      const found: (readonly [string, unknown])[] = []
+      const names = keys.result as unknown[]
+      const rows = values.result as unknown[]
+      for (let i = 0; i < names.length; i += 1) {
+        const name = names[i]
+        if (typeof name === 'string') found.push([name, rows[i]])
+      }
+      resolve(found)
+      db.close()
+    }
+    values.onerror = () => {
+      resolve([])
+      db.close()
+    }
+  })
+}
+
 async function write(key: string, value: unknown): Promise<void> {
   const db = await open()
   if (db === undefined) return
@@ -81,18 +109,42 @@ async function write(key: string, value: unknown): Promise<void> {
 }
 
 /** The edits at a landing plot of a world, or none. Read as `unknown` and checked. */
-export async function loadPlot(seed: string, plot: string): Promise<PlotSave> {
-  const raw = await read(`plot:${seed}:${plot}`)
+function plotFrom(raw: unknown): PlotSave {
   if (typeof raw !== 'object' || raw === null) return { edits: [] }
   const edits: unknown = (raw as { edits?: unknown }).edits
   if (!Array.isArray(edits)) return { edits: [] }
-  const kept: (readonly [number, Block])[] = []
+  const kept: TimedEdit[] = []
   for (const entry of edits as unknown[]) {
-    if (!Array.isArray(entry) || entry.length !== 2) continue
-    const [key, block] = entry as [unknown, unknown]
-    if (typeof key === 'number' && typeof block === 'string') kept.push([key, block as Block])
+    if (!Array.isArray(entry) || entry.length < 2 || entry.length > 3) continue
+    const [key, block, at] = entry as [unknown, unknown, unknown]
+    if (typeof key !== 'number' || typeof block !== 'string') continue
+    kept.push(typeof at === 'number' ? [key, block as Block, at] : [key, block as Block])
   }
   return { edits: kept }
+}
+
+export async function loadPlot(seed: string, plot: string): Promise<PlotSave> {
+  return plotFrom(await read(`plot:${seed}:${plot}`))
+}
+
+/** Every plot of a world that has a save, by name. */
+export async function loadPlots(
+  seed: string,
+): Promise<readonly { readonly name: string; readonly save: PlotSave }[]> {
+  const prefix = `plot:${seed}:`
+  const rows = await readAll(prefix)
+  return rows.map(([key, raw]) => ({ name: key.slice(prefix.length), save: plotFrom(raw) }))
+}
+
+/** The placements felled on a world, by id. */
+export async function loadFelled(seed: string): Promise<readonly string[]> {
+  const raw = await read(`felled:${seed}`)
+  if (!Array.isArray(raw)) return []
+  return (raw as unknown[]).filter((id): id is string => typeof id === 'string')
+}
+
+export function saveFelled(seed: string, ids: readonly string[]): Promise<void> {
+  return write(`felled:${seed}`, [...ids])
 }
 
 export function savePlot(seed: string, plot: string, save: PlotSave): Promise<void> {

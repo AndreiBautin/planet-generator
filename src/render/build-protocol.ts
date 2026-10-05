@@ -23,7 +23,12 @@ interface Planned {
 export type WorkRequest =
   | (Planned & { readonly kind: 'clouds'; readonly width: number })
   | (Planned & { readonly kind: 'patch'; readonly key: PatchKey; readonly segments: number })
-  | (Planned & { readonly kind: 'features'; readonly key: PatchKey })
+  | (Planned & {
+      readonly kind: 'features'
+      readonly key: PatchKey
+      /** Placements felled on this world, by id, left out of the tile. */
+      readonly felled: readonly string[]
+    })
   | (Planned & {
       readonly kind: 'chunk'
       /** The landing point, a unit direction. */
@@ -44,4 +49,6 @@ export type WorkResult =
       readonly mesh: ChunkMesh
       /** The chunk's blocks with their halo, for walking on and digging. */
       readonly blocks: Uint8Array
+      /** The features rooted in the chunk's columns: x, z, the root's row, the placement id. */
+      readonly roots: readonly (readonly [number, number, number, string])[]
     }

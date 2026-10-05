@@ -52,17 +52,24 @@ export function chunkMaterial(textures: GroundTextures): THREE.MeshStandardMater
         else if (which == 2) { c = texture2D(chunkTex2, uv).rgb; mean = chunkMean2; }
         else if (which == 3) { c = texture2D(chunkTex3, uv).rgb; mean = chunkMean3; }
         else if (which == 4) { c = texture2D(chunkTex4, uv).rgb; mean = chunkMean4; }
-        else { c = texture2D(chunkTex5, uv).rgb; mean = chunkMean5; }
+        else if (which == 5) { c = texture2D(chunkTex5, uv).rgb; mean = chunkMean5; }
+        else { c = vec3(1.0); mean = 0.5; }
         c /= mean * 2.0;
         float lum = dot(c, vec3(0.2126, 0.7152, 0.0722));
         return mix(vec3(lum), c, 0.35) * 2.0;
       }
       ` +
-      shader.fragmentShader.replace(
-        '#include <color_fragment>',
-        /* glsl */ `#include <color_fragment>
+      shader.fragmentShader
+        .replace(
+          '#include <color_fragment>',
+          /* glsl */ `#include <color_fragment>
         diffuseColor.rgb *= chunkPhoto(vChunkTile, vChunkUv);`,
-      )
+        )
+        .replace(
+          '#include <emissivemap_fragment>',
+          /* glsl */ `#include <emissivemap_fragment>
+        totalEmissiveRadiance += vec3(1.0, 0.8, 0.45) * step(5.5, vChunkTile);`,
+        )
   }
   material.customProgramCacheKey = () => 'planet-chunks'
   return material

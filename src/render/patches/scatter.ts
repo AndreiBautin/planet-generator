@@ -40,7 +40,11 @@ export type Scatter = Readonly<Partial<Record<Feature, Float32Array>>>
 
 const clamp01 = (value: number): number => Math.min(1, Math.max(0, value))
 
-export function scatterPatch(planet: Planet, key: PatchKey): Scatter {
+export function scatterPatch(
+  planet: Planet,
+  key: PatchKey,
+  felled: ReadonlySet<string> = new Set(),
+): Scatter {
   if (key.level < SCATTER_LEVEL) return {}
   const [u0, v0] = patchUv(key, 0, 0)
   const [u1, v1] = patchUv(key, 1, 1)
@@ -90,6 +94,7 @@ export function scatterPatch(planet: Planet, key: PatchKey): Scatter {
   for (let j = Math.ceil(v0 / CELL); j * CELL < v1; j += 1) {
     for (let i = Math.ceil(u0 / CELL); i * CELL < u1; i += 1) {
       for (const placed of placementsIn(planet, key.face, i, j, word)) {
+        if (felled.has(placed.id)) continue
         place(placed.feature, placed.direction, placed.ground, placed.surface, placed.rolls)
       }
     }

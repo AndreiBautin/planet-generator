@@ -55,6 +55,7 @@ export class Flora {
   private waiting = 0
   private frame = 0
   private disposed = false
+  private felled: readonly string[] = []
 
   constructor(world: Planet, builder: Builder, options: FloraOptions) {
     this.world = world
@@ -106,22 +107,35 @@ export class Flora {
     this.tiles.clear()
   }
 
+  /** The placements felled on this world: every tile is built again without them. */
+  setFelled(ids: readonly string[]): void {
+    if (ids === this.felled) return
+    this.felled = ids
+    for (const tile of this.tiles.values()) {
+      if (tile.node !== undefined) this.group.remove(tile.node)
+      free(tile)
+    }
+    this.tiles.clear()
+  }
+
   private request(key: PatchKey): void {
     const name = keyOf(key)
     const tile: Tile = { key, node: undefined, material: undefined, usedAt: this.frame }
     this.tiles.set(name, tile)
     this.waiting += 1
-    void this.builder.features(this.world.seed, this.world.dials, key).then((scatter) => {
-      this.waiting -= 1
-      if (this.disposed || this.tiles.get(name) !== tile) return
-      const node = new THREE.Group()
-      const material = featureMaterial(DETAIL_TIME.value, this.options.stone)
-      for (const mesh of featuresFor(scatter, material)) node.add(mesh)
-      node.visible = false
-      tile.node = node
-      tile.material = material
-      this.group.add(node)
-    })
+    void this.builder
+      .features(this.world.seed, this.world.dials, key, this.felled)
+      .then((scatter) => {
+        this.waiting -= 1
+        if (this.disposed || this.tiles.get(name) !== tile) return
+        const node = new THREE.Group()
+        const material = featureMaterial(DETAIL_TIME.value, this.options.stone)
+        for (const mesh of featuresFor(scatter, material)) node.add(mesh)
+        node.visible = false
+        tile.node = node
+        tile.material = material
+        this.group.add(node)
+      })
   }
 
   private evict(shown: ReadonlySet<string>): void {
