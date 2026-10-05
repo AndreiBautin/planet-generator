@@ -271,6 +271,8 @@ export function startScene(
     sun.shadow.normalBias = 0.0002
   }
   const shadowGround = new THREE.Vector3()
+  const shadowRight = new THREE.Vector3()
+  const shadowUp = new THREE.Vector3()
   const modelView = new THREE.Matrix4()
   // Rain around the eye where the cloud over it is heavy, while flying low.
   const rain = new Rain()
@@ -459,11 +461,32 @@ export function startScene(
       const low = t > 0 && above < 0.2
       sun.castShadow = low
       if (low) {
+        // The box is stepped in size and snapped to its own texel grid, so
+        // as the eye moves the shadow texels stay put on the ground. A box
+        // that slid and resized every frame made each texel crawl, which
+        // read as static over every flat surface — sand, ice, a cliff face.
+        const wanted = Math.min(0.09, Math.max(0.015, above * 2.5))
+        const reach = 0.015 * Math.pow(1.5, Math.ceil(Math.log(wanted / 0.015) / Math.log(1.5)))
+        const texel = (2 * reach) / options.quality.shadowMap
         shadowGround.copy(camera.position).normalize()
+        shadowRight.crossVectors(ROOM_UP, sunDirection).normalize()
+        shadowUp.crossVectors(sunDirection, shadowRight)
+        const a = Math.round(shadowGround.dot(shadowRight) / texel) * texel
+        const b = Math.round(shadowGround.dot(shadowUp) / texel) * texel
+        const c = shadowGround.dot(sunDirection)
+        shadowGround
+          .copy(shadowRight)
+          .multiplyScalar(a)
+          .addScaledVector(shadowUp, b)
+          .addScaledVector(sunDirection, c)
         sun.target.position.copy(shadowGround)
         sun.position.copy(shadowGround).addScaledVector(sunDirection, 0.4)
+        // Bias in proportion to the texel: a fixed one was a fraction of a
+        // texel low down and too little high up, where acne speckled the
+        // ground.
+        sun.shadow.normalBias = texel * 1.5
+        sun.shadow.bias = -texel * 0.1
         const box = sun.shadow.camera
-        const reach = Math.min(0.09, Math.max(0.015, above * 2.5))
         box.left = -reach
         box.right = reach
         box.top = reach
