@@ -8,7 +8,7 @@ import { childrenOf, keyOf, neighboursOf, parentOf, ROOTS, type PatchKey, type V
 import { aheadOf, ancestorAt, centreOf, selectLeaves, type LodParams, type ViewCone } from './lod'
 import { Flora, type FloraOptions } from './flora'
 import { patchIndex, quarterIndex, type PatchData } from './patch-data'
-import { DETAIL_TIME } from '../detail'
+import { DETAIL_TIME, TERRAIN_MORPH } from '../detail'
 
 /**
  * A planet's ground, streamed: asks the builder for the patches the camera
@@ -58,6 +58,10 @@ export class Terrain {
   private lastShown: ReadonlySet<string> = new Set<string>()
   private readonly sliding = new Set<Entry>()
   private lastCamera: Vec3 | undefined
+  /** How much looser than asked the detail threshold is right now, 1 and up. */
+  private coarsen = 1
+  private lateness = 0
+  private governedAt = 0
   private stitchedAt = 0
 
   private readonly world: Planet
@@ -105,7 +109,22 @@ export class Terrain {
     if (this.disposed) return
     this.frame += 1
     this.flora.update(camera, view)
-    const leaves = selectLeaves(camera, this.options, view)
+    // The detail asked for is what the builders can keep up with. Fine
+    // ground that lands after the eye has arrived is ground sharpening
+    // under you as you fly; a picture a step coarser that is all there is
+    // a picture. So the threshold loosens while patches run late, and
+    // tightens again, slowly, once they keep up.
+    const params = { ...this.options, threshold: this.options.threshold * this.coarsen }
+    TERRAIN_MORPH.value.set(this.options.segments, params.threshold)
+    const leaves = selectLeaves(camera, params, view)
+    let behind = 0
+    for (const leaf of leaves) {
+      for (let k: PatchKey | undefined = leaf; k !== undefined; k = parentOf(k)) {
+        if (this.entries.get(keyOf(k))?.node !== undefined) break
+        behind += 1
+      }
+    }
+    this.govern(behind / Math.max(1, leaves.length))
 
     // Refine from coarse to fine: where a leaf is drawn by a stand-in, ask
     // for the next level down from the stand-in rather than for the leaf
@@ -144,7 +163,7 @@ export class Terrain {
       ]
       const moved = Math.hypot(ahead[0] - camera[0], ahead[1] - camera[1], ahead[2] - camera[2])
       if (moved > 1e-4 && moved < 0.2) {
-        for (const leaf of selectLeaves(ahead, this.options, view)) ask(leaf, 100)
+        for (const leaf of selectLeaves(ahead, params, view)) ask(leaf, 100)
       }
     }
     const queue = [...wanted.values()].sort((a, b) => a.distance - b.distance)
@@ -293,6 +312,23 @@ export class Terrain {
         })
       }
       entry.stitch.needsUpdate = true
+    }
+  }
+
+  /**
+   * Loosen the detail while the patches on screen run behind, and tighten
+   * it again once they keep up. `behind` is the average number of levels
+   * the drawn ground is short of what was asked for, this frame.
+   */
+  private govern(behind: number): void {
+    // Smoothed, so a single late patch does not move it.
+    this.lateness += (behind - this.lateness) * 0.1
+    const now = DETAIL_TIME.value
+    if (now - this.governedAt < GOVERN_EVERY) return
+    this.governedAt = now
+    if (this.lateness > LATE) this.coarsen = Math.min(COARSEST, this.coarsen * 1.25)
+    else if (this.lateness < CAUGHT_UP && this.coarsen > 1) {
+      this.coarsen = Math.max(1, this.coarsen / 1.1)
     }
   }
 
@@ -484,6 +520,13 @@ export class Terrain {
 
 /** How far ahead the ground is asked for, in frames at the eye's present pace (about 1.5 s at 30 fps). */
 const PREFETCH_FRAMES = 45
+
+/** How often the governor may move, in seconds, and the lateness it moves at. */
+const GOVERN_EVERY = 0.5
+const LATE = 0.5
+const CAUGHT_UP = 0.15
+/** The loosest the threshold goes: three steps coarser, about one and a half levels. */
+const COARSEST = 3
 
 /** Every quarter of a patch drawn: the patch whole. */
 const WHOLE = 0b1111

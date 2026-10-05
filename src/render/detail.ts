@@ -355,9 +355,9 @@ export function withGroundDetail(
         float detailClose = 1.0 - smoothstep(0.008, 0.07, detailDistance);
         float patternFar = 1.0 - smoothstep(0.12, 0.7, detailDistance);
         float bumpSpan = length(fwidth(vDetailPosition));
-        float detailHeight =
-          (detailNoise(vDetailPosition * 650.0) - 0.5) * detailNear * (1.0 - smoothstep(0.2, 0.6, bumpSpan * 650.0)) +
-          (detailNoise(vDetailPosition * 2600.0) - 0.5) * 0.7 * detailClose * (1.0 - smoothstep(0.2, 0.6, bumpSpan * 2600.0));
+        // Relief comes from the photographs' own normal maps; a procedural
+        // bump that came in only near the eye was one more thing appearing.
+        float detailHeight = 0.0;
         float detailShade = 1.0;
         float detailRough = 1.0;
         vec3 detailTilt = vec3(0.0);
@@ -439,8 +439,6 @@ export function withGroundDetail(
         // pixels, by the screen-space rate the position changes.
         float pixelSpan = length(fwidth(vDetailPosition));
         float crownFilter = 1.0 - smoothstep(0.15, 0.45, pixelSpan * 1400.0);
-        float crackFilter = 1.0 - smoothstep(0.15, 0.45, pixelSpan * 2400.0);
-        float rippleFilter = 1.0 - smoothstep(0.1, 0.35, pixelSpan * 1900.0);
         // Where trees stand, the floor between them is dark at every
         // distance. It used to share the crowns' filter and went bright past
         // a short range, so a forest became dark trees on pale ground — the
@@ -470,38 +468,12 @@ export function withGroundDetail(
           diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(0.8, 0.95, 0.88), canopy);
         }
 
-        // Sand: ripples the wind has drawn, bent by a slower noise so they
-        // are never ruled lines.
-        float sand = v_pattern.y * detailNear * rippleFilter;
-        if (sand > 0.02) {
-          float bend = detailNoise(vDetailPosition * 400.0) * 6.0;
-          float ripple = sin(dot(vDetailPosition, vec3(1900.0, 600.0, 1300.0)) + bend);
-          detailShade *= 1.0 + ripple * 0.06 * sand;
-          detailHeight += ripple * 0.35 * sand;
-        }
-
-        // Snow: ridges carved along the wind, and a glint here and there
-        // right at your feet.
-        float snow = v_pattern.z * patternFar;
-        if (snow > 0.02) {
-          float ridge = detailNoise(vDetailPosition * vec3(500.0, 1500.0, 500.0));
-          detailHeight += (ridge - 0.5) * 0.9 * snow;
-          detailShade *= 1.0 + (ridge - 0.5) * 0.1 * snow;
-          float glint = step(0.986, detailHash(floor(vDetailPosition * 9000.0))) * (1.0 - smoothstep(0.1, 0.3, pixelSpan * 9000.0));
-          detailShade += glint * 0.5 * snow * detailClose;
-        }
-
-        // Stone: cracked into blocks, each a slightly different grey.
-        // Only ground that is mostly stone cracks: a grassy slope with a
-        // little rock in it drew crack lines across the turf.
-        float stone = smoothstep(0.35, 0.85, v_pattern.w) * patternFar * crackFilter;
-        if (stone > 0.02) {
-          vec3 blocks = detailCells(vDetailPosition * 2400.0);
-          float crack = (1.0 - smoothstep(0.0, 0.08, blocks.y - blocks.x)) * detailNear;
-          detailShade *= 1.0 - crack * 0.3 * stone;
-          detailShade *= 1.0 + (blocks.z - 0.5) * 0.16 * stone;
-          detailHeight -= crack * 0.5 * stone;
-        }
+        // No sand ripples, snow ridges or stone cracks drawn by hand here.
+        // Each was drawn only within a certain distance, so each appeared
+        // ahead of the eye as it flew — and the cracks, on a world that is
+        // mostly stone, read as a honeycomb over the whole ground. The
+        // photographs above carry the grain, and the GPU filters them
+        // smoothly at every distance, so nothing of theirs pops.
 
         diffuseColor.rgb *= detailShade * (1.0 + detailHeight * 0.3);
         diffuseColor.rgb *= 1.0 - cloudShadow(vDetailPosition) * 0.55;`,
