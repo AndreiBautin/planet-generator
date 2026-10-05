@@ -52,6 +52,17 @@ checks nothing. The pre-push hook runs `pnpm verify`; CI runs the same.
 - **What a glide flies over is what the patches draw.** Both go through
   `groundRadiusAt`/`drawnHeight` in `patch-data.ts`; change one and the
   glide flies through hills or above them.
+- **Close-up detail is two things, and neither is the mesh alone.** Fine
+  relief shapes the patches; `render/detail.ts` adds per-pixel grain, bumps
+  and water ripples, faded out with distance. Without the shader, a dive
+  ended in smooth single-colour land however fine the patches were.
+- **Split only what is seen.** `selectLeaves` takes the view cone and the
+  planet's real peak height: low down, that cut the patches wanted from 573
+  to 297 on a phone and from 1,821 to 717 on a desktop, against caches of a
+  few hundred. A cache smaller than the view is permanent thrash.
+- **Refine a step at a time.** The terrain asks for one level below what it
+  is drawing, not for the leaf; asking for the leaf left the whole faces up
+  until the finest ground arrived.
 - **The sky shader only fills the sky.** Haze over ground is the scene's
   fog. Laying the shader over everything with the ground taken as a sphere
   washed low land out white, because real hills stand above that sphere.

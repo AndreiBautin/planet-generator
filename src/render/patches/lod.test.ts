@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
 
 import { childrenOf, directionOn, keyOf, parentOf, patchUv, ROOTS, type Vec3 } from './cube'
-import { selectLeaves, type LodParams } from './lod'
+import { ancestorAt, selectLeaves, UNSEEN_LEVEL, type LodParams, type ViewCone } from './lod'
 
-const params: LodParams = { segments: 32, threshold: 0.006, maxLevel: 9 }
+const params: LodParams = { segments: 32, threshold: 0.006, maxLevel: 9, peak: 0.06 }
 
 /** Each leaf covers a quarter of its parent, so the leaves of a full tiling sum to six faces. */
 const coverage = (leaves: readonly { level: number }[]): number =>
@@ -76,5 +76,33 @@ describe('selectLeaves', () => {
     const fine = selectLeaves(camera, params).length
     const coarse = selectLeaves(camera, { ...params, threshold: 0.02 }).length
     expect(coarse).toBeLessThan(fine)
+  })
+
+  it('splits the ground in view and leaves what is behind the camera coarse', () => {
+    // Low over +z, looking along +x.
+    const camera: Vec3 = [0, 0, 1.016]
+    const view: ViewCone = { forward: [0.97, 0, -0.22], halfAngle: 0.6 }
+    const all = selectLeaves(camera, params)
+    const looking = selectLeaves(camera, params, view)
+    expect(looking.length).toBeLessThan(all.length * 0.6)
+    expect(coverage(looking)).toBeCloseTo(6, 10)
+    // Ahead stays fine; behind stops at the unseen level.
+    const behind = looking.filter((leaf) => {
+      const [u, v] = patchUv(leaf, 0.5, 0.5)
+      return directionOn(leaf.face, u, v)[0] < -0.2
+    })
+    expect(Math.max(...behind.map((leaf) => leaf.level))).toBeLessThanOrEqual(UNSEEN_LEVEL)
+    const ahead = looking.filter((leaf) => {
+      const [u, v] = patchUv(leaf, 0.5, 0.5)
+      const d = directionOn(leaf.face, u, v)
+      return d[0] > 0.02 && d[0] < 0.08 && Math.abs(d[1]) < 0.02
+    })
+    expect(Math.max(...ahead.map((leaf) => leaf.level))).toBeGreaterThan(UNSEEN_LEVEL + 2)
+  })
+
+  it('finds the coarser patch containing a fine one', () => {
+    const key = { face: 2, level: 6, x: 45, y: 13 } as const
+    expect(ancestorAt(key, 4)).toEqual({ face: 2, level: 4, x: 11, y: 3 })
+    expect(ancestorAt(key, 6)).toBe(key)
   })
 })

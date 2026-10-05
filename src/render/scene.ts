@@ -9,7 +9,9 @@ import { AIR_RADIUS, buildAtmosphere } from './atmosphere'
 import { BORN, birthAt, type Birth } from './birth'
 import type { Builder } from './builder'
 import { cloudsFromTexture, cloudsSeenFrom } from './clouds'
+import { DETAIL_TIME, withGroundDetail, withWaterDetail } from './detail'
 import type { Vec3 } from './patches/cube'
+import type { ViewCone } from './patches/lod'
 import { Terrain } from './patches/terrain'
 import { nextPixelRatio, typicalFrame, type Quality } from './quality'
 import { waterMaterial } from './water'
@@ -134,16 +136,17 @@ export function startScene(
         segments: quality.segments,
         threshold: quality.lodThreshold,
         maxLevel: quality.maxLevel,
-        inFlight: 8,
-        cached: 320,
+        // The highest this planet's ground can stand: its relief, with room
+        // for the fine relief on top.
+        peak: world.relief * 1.1 + 0.005,
+        inFlight: quality.inFlight,
+        cached: quality.patchCache,
       },
       {
-        ground: new THREE.MeshStandardMaterial({
-          vertexColors: true,
-          roughness: 0.92,
-          metalness: 0,
-        }),
-        water: waterMaterial(world),
+        ground: withGroundDetail(
+          new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.92, metalness: 0 }),
+        ),
+        water: world.molten ? waterMaterial(world) : withWaterDetail(waterMaterial(world)),
       },
     )
 
@@ -229,6 +232,17 @@ export function startScene(
   // rather than reacting to one, and only ever downward.
   const frames: number[] = []
   let lastFrameAt = clock.now()
+  const facing = new THREE.Vector3()
+
+  /** Which way the camera looks, in the planet's frame, and how wide its view is to the corner. */
+  const viewCone = (turn: number): ViewCone => {
+    camera.getWorldDirection(facing)
+    const half = THREE.MathUtils.degToRad(camera.fov / 2)
+    return {
+      forward: inPlanetFrame(facing, turn, 1),
+      halfAngle: Math.atan(Math.tan(half) * Math.sqrt(1 + camera.aspect * camera.aspect)),
+    }
+  }
   let lastTurn = 0
 
   const orbitEye = new THREE.Vector3()
@@ -322,9 +336,10 @@ export function startScene(
     // slow the planet down.
     const turn = (now / TURN_MS) * Math.PI * 2
     lastTurn = turn
+    DETAIL_TIME.value = now / 1000
     place(view(), turn)
     if (coming !== undefined) {
-      coming.terrain.update(inPlanetFrame(camera.position, turn, 1))
+      coming.terrain.update(inPlanetFrame(camera.position, turn, 1), viewCone(turn))
       if (coming.terrain.ready && (coming.keepClouds || coming.clouds !== undefined)) {
         const next = coming
         coming = undefined
@@ -337,7 +352,7 @@ export function startScene(
       shown.clouds.rotation.y = turn * 1.15
       pose(shown, stage)
       cloudsSeenFrom(shown.clouds, camera.position.length(), stage.scale, stage.clouds)
-      shown.terrain.update(inPlanetFrame(camera.position, turn, stage.scale))
+      shown.terrain.update(inPlanetFrame(camera.position, turn, stage.scale), viewCone(turn))
     }
     renderer.render(scene, camera)
   })

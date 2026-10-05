@@ -14,6 +14,13 @@ import {
  * Near ground splits deep and far ground stays coarse, so a phone can draw
  * a mountain at its feet and the horizon behind it.
  *
+ * Two things keep the count down, and both were measured to matter. Ground
+ * outside the view is not split past a coarse level: it is drawn, so a turn
+ * reveals a planet rather than a hole, but nobody is looking at its detail.
+ * And the horizon is worked out from how high this planet's mountains
+ * actually reach, not from a generous guess — at a glide's height the guess
+ * alone was splitting ground well past where any of it could be seen.
+ *
  * Pure: the camera is a position in the planet's own frame (so a turning
  * planet does not need re-splitting for turning), and the answer is the
  * list of leaves. The leaves tile the sphere exactly once.
@@ -27,10 +34,20 @@ export interface LodParams {
    */
   readonly threshold: number
   readonly maxLevel: number
+  /** How far above the unit sphere this planet's highest ground can reach. */
+  readonly peak: number
 }
 
-/** How far the ground can rise above the unit sphere, at most; keeps the test honest near mountains. */
-const GROUND_ALLOWANCE = 0.08
+/** Which way the camera looks, in the planet's frame, and how wide. */
+export interface ViewCone {
+  /** Unit direction the camera faces. */
+  readonly forward: Vec3
+  /** From the middle of the view to its corner, in radians. */
+  readonly halfAngle: number
+}
+
+/** Ground out of view is split no further than this. */
+export const UNSEEN_LEVEL = 3
 
 export function centreOf(key: PatchKey): Vec3 {
   const [u, v] = patchUv(key, 0.5, 0.5)
@@ -40,22 +57,44 @@ export function centreOf(key: PatchKey): Vec3 {
 /**
  * Whether a patch lies wholly beyond the horizon. From a distance d the
  * smooth sphere is seen out to acos(1/d) from the point beneath; a peak as
- * high as the allowance can show above the horizon from acos(1/R) further
- * still. A patch reaches its own angular radius past its centre.
+ * high as the planet's highest ground can show above the horizon from
+ * acos(1/R) further still. A patch reaches its own angular radius past its
+ * centre.
  */
-function hidden(key: PatchKey, camera: Vec3, distance: number): boolean {
+function hidden(key: PatchKey, camera: Vec3, distance: number, peak: number): boolean {
   const centre = centreOf(key)
   const cos = (centre[0] * camera[0] + centre[1] * camera[1] + centre[2] * camera[2]) / distance
-  const horizon = Math.acos(Math.min(1, 1 / distance)) + Math.acos(1 / (1 + GROUND_ALLOWANCE))
+  const horizon = Math.acos(Math.min(1, 1 / distance)) + Math.acos(1 / (1 + peak))
   // A patch's corners sit about 0.75 of its span from its centre.
   const reach = patchAngle(key.level) * 0.75
-  return Math.acos(Math.max(-1, Math.min(1, cos))) > horizon + reach + 0.05
+  return Math.acos(Math.max(-1, Math.min(1, cos))) > horizon + reach + 0.02
 }
 
-export function shouldSplit(key: PatchKey, camera: Vec3, params: LodParams): boolean {
+/** Whether a patch lies wholly outside the view, with a margin for turning. */
+function unseen(key: PatchKey, camera: Vec3, view: ViewCone): boolean {
+  const centre = centreOf(key)
+  const dx = centre[0] - camera[0]
+  const dy = centre[1] - camera[1]
+  const dz = centre[2] - camera[2]
+  const gap = Math.hypot(dx, dy, dz) || 1
+  const cos = (dx * view.forward[0] + dy * view.forward[1] + dz * view.forward[2]) / gap
+  const off = Math.acos(Math.max(-1, Math.min(1, cos)))
+  // How wide the patch looks from here: close up, a patch beside the camera
+  // can fill half the view while its centre is outside it.
+  const looks = Math.atan((patchAngle(key.level) * 0.75) / gap)
+  return off > view.halfAngle + looks + 0.15
+}
+
+export function shouldSplit(
+  key: PatchKey,
+  camera: Vec3,
+  params: LodParams,
+  view?: ViewCone,
+): boolean {
   if (key.level >= params.maxLevel) return false
   const distance = Math.hypot(camera[0], camera[1], camera[2])
-  if (hidden(key, camera, distance)) return false
+  if (hidden(key, camera, distance, params.peak)) return false
+  if (view !== undefined && key.level >= UNSEEN_LEVEL && unseen(key, camera, view)) return false
   const centre = centreOf(key)
   const span = patchAngle(key.level)
   const gap = Math.hypot(camera[0] - centre[0], camera[1] - centre[1], camera[2] - centre[2])
@@ -65,12 +104,23 @@ export function shouldSplit(key: PatchKey, camera: Vec3, params: LodParams): boo
   return span / params.segments / nearest > params.threshold
 }
 
-export function selectLeaves(camera: Vec3, params: LodParams): readonly PatchKey[] {
+export function selectLeaves(
+  camera: Vec3,
+  params: LodParams,
+  view?: ViewCone,
+): readonly PatchKey[] {
   const leaves: PatchKey[] = []
   const visit = (key: PatchKey): void => {
-    if (shouldSplit(key, camera, params)) for (const child of childrenOf(key)) visit(child)
+    if (shouldSplit(key, camera, params, view)) for (const child of childrenOf(key)) visit(child)
     else leaves.push(key)
   }
   for (const root of ROOTS) visit(root)
   return leaves
+}
+
+/** The patch at a coarser level that contains this one. */
+export function ancestorAt(key: PatchKey, level: number): PatchKey {
+  const shift = key.level - level
+  if (shift <= 0) return key
+  return { face: key.face, level, x: key.x >> shift, y: key.y >> shift }
 }

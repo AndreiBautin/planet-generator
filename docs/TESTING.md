@@ -25,7 +25,8 @@ shared. Nothing else would notice. So:
   rather than throws, and a config typo cannot switch on the wrong mode.
 - **The patch quadtree** (`lod.test.ts`, `patch-data.test.ts`): the leaves
   tile the sphere exactly once however close the camera is, the ground
-  under the camera splits finest and the far side stays whole, neighbours
+  under the camera splits finest and the far side stays whole, ground
+  behind the camera stays coarse while ground ahead splits, neighbours
   agree on their shared edge (positions and normals), and the ground a
   glide follows is the ground the patches draw.
 - **Fine relief leaves shared planets alone** (`relief.test.ts`): it lives

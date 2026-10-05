@@ -5,7 +5,7 @@ import type { Planet } from '@/generation/planet'
 import type { Builder } from '../builder'
 import { SEA_RADIUS } from '../water'
 import { keyOf, parentOf, ROOTS, type PatchKey, type Vec3 } from './cube'
-import { centreOf, selectLeaves, type LodParams } from './lod'
+import { ancestorAt, centreOf, selectLeaves, type LodParams, type ViewCone } from './lod'
 import { patchIndex, type PatchData } from './patch-data'
 
 /**
@@ -73,22 +73,42 @@ export class Terrain {
     return this.waiting
   }
 
-  /** Choose and draw the patches for a camera at this point in the planet's own frame. */
-  update(camera: Vec3): void {
+  /**
+   * Choose and draw the patches for a camera at this point in the planet's
+   * own frame, looking along `view` when it is known.
+   */
+  update(camera: Vec3, view?: ViewCone): void {
     if (this.disposed) return
     this.frame += 1
-    const leaves = selectLeaves(camera, this.options)
+    const leaves = selectLeaves(camera, this.options, view)
     const shown = new Set<string>()
 
-    // Ask for what is missing, nearest first: the ground under the camera
-    // is what somebody is looking at.
-    const missing = leaves
-      .filter((leaf) => this.entries.get(keyOf(leaf))?.requested !== true)
-      .map((leaf) => ({ leaf, distance: gap(centreOf(leaf), camera) }))
-      .sort((a, b) => a.distance - b.distance)
-    for (const { leaf } of missing) {
+    // Refine from coarse to fine: where a leaf is drawn by a stand-in, ask
+    // for the next level down from the stand-in rather than for the leaf
+    // itself. Diving from orbit, the leaves are seven levels below what is
+    // on screen; asking for them directly left the coarse faces up until the
+    // finest ground arrived all at once, and a step at a time sharpens the
+    // view on the way down. Nearest first: the ground under the camera is
+    // what somebody is looking at.
+    const wanted = new Map<string, { readonly key: PatchKey; readonly distance: number }>()
+    for (const leaf of leaves) {
+      let drawn = -1
+      for (let level = leaf.level; level >= 0; level -= 1) {
+        if (this.entries.get(keyOf(ancestorAt(leaf, level)))?.node !== undefined) {
+          drawn = level
+          break
+        }
+      }
+      if (drawn === leaf.level) continue
+      const next = ancestorAt(leaf, drawn + 1)
+      const name = keyOf(next)
+      if (this.entries.get(name)?.requested === true || wanted.has(name)) continue
+      wanted.set(name, { key: next, distance: gap(centreOf(next), camera) })
+    }
+    const queue = [...wanted.values()].sort((a, b) => a.distance - b.distance)
+    for (const { key } of queue) {
       if (this.waiting >= this.options.inFlight) break
-      this.request(leaf)
+      this.request(key)
     }
 
     for (const leaf of leaves) {

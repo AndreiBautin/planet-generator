@@ -24,6 +24,13 @@ export interface Quality {
   readonly lodThreshold: number
   /** How many times a face may be halved: the finest ground there is. */
   readonly maxLevel: number
+  /**
+   * Patches kept in memory. Low down the view wants a few hundred at once,
+   * and a cache smaller than that throws away ground it is about to draw.
+   */
+  readonly patchCache: number
+  /** Patch requests out at once: more fills the view faster and uses more of the workers. */
+  readonly inFlight: number
   /** Cloud texture width; its height is half. */
   readonly cloudWidth: number
   readonly pixelRatio: number
@@ -40,6 +47,8 @@ export function pickQuality(device: Device): Quality {
     segments: 32,
     lodThreshold: phone ? (modest ? 0.016 : 0.012) : modest ? 0.009 : 0.006,
     maxLevel: phone ? 8 : 9,
+    patchCache: phone ? (modest ? 450 : 600) : 1200,
+    inFlight: phone ? 12 : 24,
     cloudWidth: phone ? 512 : 1024,
     pixelRatio: Math.min(device.pixelRatio, modest ? 1.5 : 2),
   }
