@@ -118,6 +118,8 @@ export interface SceneOptions {
   readonly reducedMotion: boolean
   /** Where `public/` is served from, for the ground's photographs. */
   readonly assetBase: string
+  /** Told the view every frame, for readings that follow the eye. */
+  readonly onView?: (view: CameraView) => void
 }
 
 /**
@@ -550,6 +552,7 @@ export function startScene(
     DETAIL_CLOUD_SUN.value.set(...inPlanetFrame(sunDirection, turn, 1))
     const current = view()
     lastView = current
+    options.onView?.(current)
     place(current, turn)
     if (coming !== undefined) {
       coming.terrain.update(inPlanetFrame(camera.position, turn, 1), viewCone(turn))

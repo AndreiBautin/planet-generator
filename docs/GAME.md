@@ -74,14 +74,14 @@ it can be. Checked when live.
 
 ### C — Reading the planet
 
-- [ ] **C1 Landmarks.** Per seed, from coarse sampling: the highest peak,
+- [x] **C1 Landmarks.** Per seed, from coarse sampling: the highest peak,
       the largest lake, the widest lava field, the edge of the pack ice,
       the deepest valley, the longest coast. Pure, tested, stable.
-- [ ] **C2 The cache and its clue.** One cache per world, placed by a rule
+- [x] **C2 The cache and its clue.** One cache per world, placed by a rule
       over the landmarks; the clue is the rule in words ("in the lee of
       the highest range, where the lake meets the sand"); the scope reads
       warmer or colder as the ship nears it.
-- [ ] **C3 The cache in the ground.** A buried structure in the voxel
+- [x] **C3 The cache in the ground.** A buried structure in the voxel
       world to dig down to, holding parts and a blueprint.
 
 ### D — Marks from orbit

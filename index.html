@@ -331,6 +331,24 @@
       .flying .hint {
         animation: hint 6s ease forwards;
       }
+      /* The scope's word, under the hint, while a scope is fitted. */
+      .scope {
+        position: fixed;
+        right: max(16px, env(safe-area-inset-right));
+        top: calc(max(16px, env(safe-area-inset-top)) + 84px);
+        margin: 0;
+        padding: 6px 12px;
+        border-radius: 12px;
+        background: var(--glass);
+        border: 1px solid var(--edge);
+        font-size: 13px;
+        pointer-events: none;
+      }
+      .ship-clue {
+        margin: 0 0 10px;
+        font-size: 13px;
+        line-height: 1.4;
+      }
       @keyframes hint {
         0%,
         100% {
@@ -392,6 +410,8 @@
       <section class="dials ship" id="ship" hidden aria-label="Ship">
         <p class="ship-line"><span id="ship-fuel"></span> · <span id="ship-hold"></span></p>
         <div class="ship-modules" id="ship-modules"></div>
+        <p class="ship-heading">The cache</p>
+        <p class="ship-clue" id="ship-clue"></p>
         <p class="ship-heading">Next world</p>
         <div class="ship-worlds" id="ship-worlds"></div>
         <p class="ship-log" id="ship-log"></p>
@@ -414,6 +434,7 @@
     <div class="crosshair" aria-hidden="true"></div>
     <p class="hint" id="hint">Drag to steer and climb · pinch to change height</p>
     <p class="toast" id="toast" role="status" aria-live="polite"></p>
+    <p class="scope" id="scope" hidden></p>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

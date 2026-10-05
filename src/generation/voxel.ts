@@ -50,6 +50,7 @@ export const BLOCKS = [
   'leaves',
   'needles',
   'cactus',
+  'cache',
 ] as const
 export type Block = (typeof BLOCKS)[number]
 
@@ -69,7 +70,12 @@ export interface Landing extends Frame {
   readonly seaRow: number
   /** Blocks the features stamp into the air above the ground: trunks, crowns, stone. */
   readonly stamps: ReadonlyMap<number, Block>
+  /** Blocks cut into the ground below: the cache's chamber, if it lies in this area. */
+  readonly buried: ReadonlyMap<number, Block>
 }
+
+/** How many blocks under the ground the cache's chamber is cut. */
+export const CACHE_DEPTH = 5
 
 /** The row the sea's surface sits at, for a landing whose ground is at `base`. */
 export const seaRowOf = (base: number): number => BASE_ROW - Math.round((base - SEA_RADIUS) / BLOCK)
@@ -160,6 +166,10 @@ export function columnAt(landing: Landing, x: number, z: number): Column {
 /** The block at a row of a column. */
 export function blockAt(landing: Landing, x: number, z: number, column: Column, y: number): Block {
   if (y < 0 || y >= HEIGHT) return 'air'
+  if (landing.buried.size > 0) {
+    const cut = landing.buried.get(blockKey(x, y, z))
+    if (cut !== undefined) return cut
+  }
   if (y <= column.ground) {
     if (y === column.ground) return column.top
     if (y > column.ground - 1 - column.depth) return column.under
@@ -277,12 +287,35 @@ export function frameAt(direction: Vec3): Frame {
   return { origin, east, north }
 }
 
-export function landingAt(planet: Planet, direction: Vec3): Landing {
+export function landingAt(planet: Planet, direction: Vec3, cache?: Vec3): Landing {
   const { origin, east, north } = frameAt(direction)
   const stamps = new Map<number, Block>()
+  const buried = new Map<number, Block>()
   const base = groundRadiusAt(planet, origin)
   const seaRow = seaRowOf(base)
-  const landing: Landing = { planet, origin, east, north, base, seaRow, stamps }
+  const landing: Landing = { planet, origin, east, north, base, seaRow, stamps, buried }
+  if (cache !== undefined) {
+    // The cache: a hollow three blocks across, cut CACHE_DEPTH under the
+    // ground, the cache block at its heart. Only when it lies in this area;
+    // the ground above it is left whole, so it has to be dug down to.
+    // Only a cache on this side of the planet: `columnOf` projects through
+    // the centre, so the far side would land in the area too.
+    const [cx, cz] = columnOf(landing, cache)
+    const x = Math.round(cx)
+    const z = Math.round(cz)
+    if (dot(cache, origin) > 0.9 && x >= 2 && z >= 2 && x < AREA - 2 && z < AREA - 2) {
+      const ground = groundRowOf(floorRadiusAt(planet, directionOf(landing, x, z)), seaRow)
+      const heart = Math.max(2, ground - CACHE_DEPTH)
+      for (let dx = -1; dx <= 1; dx += 1) {
+        for (let dy = -1; dy <= 1; dy += 1) {
+          for (let dz = -1; dz <= 1; dz += 1) {
+            buried.set(blockKey(x + dx, heart + dy, z + dz), 'air')
+          }
+        }
+      }
+      buried.set(blockKey(x, heart, z), 'cache')
+    }
+  }
 
   const { face, u, v } = faceUvOf(origin)
   // Cells reaching a little past the area, so a crown rooted just outside

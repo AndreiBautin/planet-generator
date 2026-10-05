@@ -320,6 +320,29 @@ piece is in:
   plane is held inside the ship while it shows (`SHIP_LENGTH * 1.5`): the
   flight rule scales it with height and cut the hull away whole above
   about thirty ship lengths.
+- **A world is surveyed on a 180 × 90 grid** (`generation/landmarks.ts`):
+  the highest cell, the land cell deepest below its neighbours, and the
+  hearts of the widest sea, pack ice and land, each heart the cell of its
+  region farthest from the region's edge. About a tenth of a second, done
+  once per `Planet` object in a `WeakMap` — on the main thread for the
+  clue and the scope, and again in the worker for the chamber, because
+  the two never share a planet object. **A dial moves the cache**: the
+  survey reads `surfaceAt`, which reads the dials, so the memo is keyed
+  on the planet, never the seed.
+- **The cache is a rule over two landmarks** (`generation/cache.ts`): a
+  share along the great circle between them, walked ashore in rings if
+  it lands in the sea, and the clue is that rule in words. `landingAt`
+  takes the cache direction and cuts a 3 × 3 × 3 chamber `CACHE_DEPTH`
+  under the ground with the `cache` block at its heart — into
+  `Landing.buried`, which `blockAt` consults first, since the stamps map
+  only ever held things above ground. **`columnOf` projects through the
+  planet's centre**, so a cache on the far side also lands inside the
+  area's bounds; the chamber is cut only when the cache is on the
+  landing's own side. Digging the cache block opens it (`openCache`):
+  parts into the hold, two fuel, the seed recorded in `Ship.found`; the
+  block itself never enters the hold. The scope reads by angle in the air
+  and by blocks on foot (`scopeInFlight`, `scopeOnFoot`) — a landing area
+  is three degrees across, so one scale would go quiet once landed.
 
 ## Traps
 

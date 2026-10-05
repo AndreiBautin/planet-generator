@@ -65,6 +65,8 @@ export interface Ship {
   readonly expedition: string
   /** Jumps made so far on this expedition. */
   readonly jumps: number
+  /** The seeds of the worlds whose cache has been dug up. */
+  readonly found: readonly string[]
 }
 
 export const STARTING_FUEL = 6
@@ -75,6 +77,7 @@ export const newShip = (expedition: string): Ship => ({
   fuel: STARTING_FUEL,
   expedition,
   jumps: 0,
+  found: [],
 })
 
 export const hasModule = (ship: Ship, module: Module): boolean => ship.modules.includes(module)
@@ -151,3 +154,33 @@ export function jump(ship: Ship): Ship | undefined {
 }
 
 export const expeditionOver = (ship: Ship): boolean => ship.fuel <= 0
+
+/** What a cache holds: parts for the ship, and fuel for two more jumps. */
+export const CACHE_PARTS: Readonly<Partial<Record<Block, number>>> = {
+  stone: 12,
+  basalt: 8,
+  wood: 8,
+  sand: 8,
+  ice: 6,
+  snow: 6,
+}
+export const CACHE_FUEL = 2
+
+export const hasFound = (ship: Ship, world: string): boolean => ship.found.includes(world)
+
+/** Open a world's cache: the parts into the hold, the fuel into the tank. Once per world. */
+export function openCache(
+  ship: Ship,
+  hold: Hold,
+  world: string,
+): { readonly ship: Ship; readonly hold: Hold } {
+  if (hasFound(ship, world)) return { ship, hold }
+  const filled: Partial<Record<Block, number>> = { ...hold }
+  for (const [block, count] of Object.entries(CACHE_PARTS) as [Block, number][]) {
+    filled[block] = (filled[block] ?? 0) + count
+  }
+  return {
+    ship: { ...ship, fuel: ship.fuel + CACHE_FUEL, found: [...ship.found, world] },
+    hold: filled,
+  }
+}

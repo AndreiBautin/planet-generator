@@ -1,3 +1,4 @@
+import type { ScopeReading } from '@/generation/cache'
 import {
   fit,
   hasModule,
@@ -45,6 +46,9 @@ export interface ShipView {
   /** The kind of each offered world, once known; the names are the seeds. */
   readonly kinds: Readonly<Record<string, PlanetKind>>
   readonly logged: number
+  /** The clue to this world's cache, and whether it has been dug up. */
+  readonly clue: string
+  readonly found: boolean
 }
 
 export type Mode = 'orbit' | 'flying' | 'walking'
@@ -61,6 +65,8 @@ export interface Hud {
   readonly hold: (counts: Readonly<Partial<Record<Block, number>>>, held: Block | undefined) => void
   /** Show the ship: fuel, hold, modules to fit, worlds to jump to. */
   readonly ship: (view: ShipView) => void
+  /** What the scope reads, or nothing to show. */
+  readonly scope: (reading: ScopeReading | undefined) => void
 }
 
 const element = <T extends HTMLElement>(id: string, type: new () => T): T => {
@@ -93,6 +99,8 @@ export function attachHud(handlers: HudHandlers): Hud {
   const shipModules = element('ship-modules', HTMLElement)
   const shipWorlds = element('ship-worlds', HTMLElement)
   const shipLog = element('ship-log', HTMLElement)
+  const shipClue = element('ship-clue', HTMLElement)
+  const scopeLine = element('scope', HTMLElement)
   shipToggle.addEventListener('click', () => {
     shipPanel.hidden = !shipPanel.hidden
     shipToggle.setAttribute('aria-pressed', String(!shipPanel.hidden))
@@ -189,7 +197,8 @@ export function attachHud(handlers: HudHandlers): Hud {
     },
     jump,
     place,
-    ship: ({ ship, hold, kinds, logged }) => {
+    ship: ({ ship, hold, kinds, logged, clue, found }) => {
+      shipClue.textContent = found ? `Found. ${clue}` : clue
       shipFuel.textContent = `Fuel ${String(ship.fuel)}`
       shipHold.textContent = `Hold ${String(holdTotal(hold))} / ${String(holdCapacity(ship))}`
       shipModules.replaceChildren()
@@ -270,6 +279,10 @@ export function attachHud(handlers: HudHandlers): Hud {
         button.setAttribute('aria-pressed', String(block === held))
         hotbar.append(button)
       }
+    },
+    scope: (reading) => {
+      scopeLine.hidden = reading === undefined
+      if (reading !== undefined) scopeLine.textContent = `Scope · ${reading}`
     },
     toast: (message) => {
       toastLine.textContent = message

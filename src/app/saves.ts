@@ -119,11 +119,12 @@ export function saveHold(hold: Hold): Promise<void> {
 export async function loadShip(): Promise<Ship | undefined> {
   const raw = await read('ship')
   if (typeof raw !== 'object' || raw === null) return undefined
-  const { modules, fuel, expedition, jumps } = raw as {
+  const { modules, fuel, expedition, jumps, found } = raw as {
     modules?: unknown
     fuel?: unknown
     expedition?: unknown
     jumps?: unknown
+    found?: unknown
   }
   if (typeof fuel !== 'number' || typeof expedition !== 'string' || typeof jumps !== 'number')
     return undefined
@@ -134,16 +135,21 @@ export async function loadShip(): Promise<Ship | undefined> {
         kept.push(module as Module)
     }
   }
+  const worlds: string[] = []
+  if (Array.isArray(found)) {
+    for (const world of found as unknown[]) if (typeof world === 'string') worlds.push(world)
+  }
   return {
     modules: kept,
     fuel: Math.max(0, Math.floor(fuel)),
     expedition,
     jumps: Math.floor(jumps),
+    found: worlds,
   }
 }
 
 export function saveShip(ship: Ship): Promise<void> {
-  return write('ship', { ...ship, modules: [...ship.modules] })
+  return write('ship', { ...ship, modules: [...ship.modules], found: [...ship.found] })
 }
 
 /** One finished expedition, for the logbook. */

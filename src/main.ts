@@ -24,8 +24,19 @@ import {
   type LogEntry,
 } from '@/app/saves'
 import {
+  cacheOf,
+  scopeInFlight,
+  scopeOnFoot,
+  type Cache,
+  type ScopeReading,
+} from '@/generation/cache'
+import { angleBetween, surveyPlanet } from '@/generation/landmarks'
+import {
   fit,
+  hasFound,
+  hasModule,
   holdCapacity,
+  openCache,
   holdTotal,
   jump,
   landingGate,
@@ -37,7 +48,7 @@ import {
 } from '@/generation/expedition'
 import { pickKind } from '@/generation/kinds'
 import { createRng } from '@/generation/rng'
-import type { Block } from '@/generation/voxel'
+import { columnOf, type Block, type Frame } from '@/generation/voxel'
 import { shareLink } from '@/ui/share'
 
 /**
@@ -79,11 +90,41 @@ document.body.prepend(canvas)
 // The ground a glide flies over is the planet on screen: read through a
 // variable, because a dial moved mid-flight swaps the planet under it.
 let planet: Planet = createPlanet(seed, dials)
+// Where this world's cache is, and the clue to it; surveyed once per planet.
+const caches = new WeakMap<Planet, Cache>()
+const cacheFor = (world: Planet): Cache => {
+  const known = caches.get(world)
+  if (known !== undefined) return known
+  const cache = cacheOf(world, surveyPlanet(world))
+  caches.set(world, cache)
+  return cache
+}
+let cache: Cache = cacheFor(planet)
+// The scope's last word, so the HUD is only touched when it changes.
+let scope: ScopeReading | undefined
+const unit = (v: readonly [number, number, number]): readonly [number, number, number] => {
+  const length = Math.hypot(v[0], v[1], v[2]) || 1
+  return [v[0] / length, v[1] / length, v[2] / length]
+}
 const rig = createRig(systemClock, () => (direction) => groundRadiusAt(planet, direction))
 attachGestures(canvas, systemClock, rig.gestures)
 const scene = startScene(canvas, systemClock, rig.view, {
   quality,
   builder: createBuilder(navigator.hardwareConcurrency),
+  onView: (view) => {
+    let reading: ScopeReading | undefined
+    if (hasModule(ship, 'scope') && !hasFound(ship, seed)) {
+      if (view.walk !== undefined && plotFrame !== undefined) {
+        const [cx, cz] = columnOf(plotFrame, cache.direction)
+        reading = scopeOnFoot(Math.hypot(view.walk.x - cx, view.walk.z - cz))
+      } else if (view.surface !== undefined && view.walk === undefined) {
+        reading = scopeInFlight(angleBetween(unit(view.surface.eye), cache.direction))
+      }
+    }
+    if (reading === scope) return
+    scope = reading
+    hud.scope(reading)
+  },
   reducedMotion: window.matchMedia('(prefers-reduced-motion: reduce)').matches,
   assetBase: config.assetBase,
 })
@@ -96,7 +137,9 @@ const scene = startScene(canvas, systemClock, rig.view, {
 const show = async (born: boolean): Promise<void> => {
   const next = createPlanet(seed, dials)
   planet = next
+  cache = cacheFor(next)
   hud.render(next)
+  showShip()
   document.body.classList.add('forming')
   // False when a later planet was asked for first; that one will clear the
   // forming state when it arrives.
@@ -114,6 +157,7 @@ const modeOf = (): 'orbit' | 'flying' | 'walking' =>
 let hold: Partial<Record<Block, number>> = {}
 let held: Block | undefined
 let plot: string | undefined
+let plotFrame: Frame | undefined
 const showHold = (): void => {
   if (held !== undefined && (hold[held] ?? 0) <= 0) held = undefined
   if (held === undefined) {
@@ -141,7 +185,14 @@ const showShip = (): void => {
   for (const offered of offeredWorlds(ship.expedition, ship.jumps)) {
     kinds[offered] = pickKind(createRng(offered).fork('kind'))
   }
-  hud.ship({ ship, hold, kinds, logged: logbook.length })
+  hud.ship({
+    ship,
+    hold,
+    kinds,
+    logged: logbook.length,
+    clue: cache.clue,
+    found: hasFound(ship, seed),
+  })
   scene.setShip(ship)
   scene.setReach(reachOf(ship))
 }
@@ -165,6 +216,7 @@ const dropIn = async (): Promise<void> => {
   const saved = await loadPlot(seed, under.name)
   if (!rig.flying()) return
   plot = under.name
+  plotFrame = under.frame
   rig.drop(scene.landOn(under, saved.edits))
   hud.mode(modeOf())
   showHold()
@@ -265,6 +317,18 @@ attachWalkControls(canvas, hud.jump, hud.place, systemClock, rig.walking, rig.wa
     }
     const dug = scene.breakBlock()
     if (dug === undefined || dug === 'air') return
+    if (dug === 'cache') {
+      // The cache is never a block in the hold: it is opened where it lies.
+      const opened = openCache(ship, hold, seed)
+      ship = opened.ship
+      hold = { ...opened.hold }
+      void saveShip(ship)
+      hud.toast('The cache: parts for the ship, and fuel for two more jumps')
+      showShip()
+      showHold()
+      saveSoon()
+      return
+    }
     hold[dug] = (hold[dug] ?? 0) + 1
     showHold()
     saveSoon()

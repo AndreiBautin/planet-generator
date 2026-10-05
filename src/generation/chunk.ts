@@ -107,6 +107,7 @@ function looksOf(palette: Palette): Readonly<Record<Block, readonly [Look, Look,
   }
   const cactusLook: Look = { tile: GRASS, tint: [0.3, 0.55, 0.28] }
   const fluid: Look = { tile: STONE, tint: palette.shallow }
+  const cacheLook: Look = { tile: BASALT, tint: [0.95, 0.72, 0.2] }
   const same = (look: Look): readonly [Look, Look, Look] => [look, look, look]
   return {
     air: same(fluid),
@@ -124,6 +125,7 @@ function looksOf(palette: Palette): Readonly<Record<Block, readonly [Look, Look,
     leaves: same(leavesLook),
     needles: same(needlesLook),
     cactus: same(cactusLook),
+    cache: same(cacheLook),
   }
 }
 

@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  CACHE_FUEL,
   expeditionOver,
   fit,
+  openCache,
   holdCapacity,
   jump,
   lacking,
@@ -57,6 +59,18 @@ describe('the expedition', () => {
     expect(rich.hold).toEqual({ wood: 2, stone: 1 })
     // Fitting it again changes nothing.
     expect(fit(rich.ship, rich.hold, 'lamps')).toEqual({ ship: rich.ship, hold: rich.hold })
+  })
+
+  it("opens a world's cache once: parts into the hold, fuel into the tank", () => {
+    const ship = newShip('abc')
+    const opened = openCache(ship, { wood: 1 }, 'w1')
+    expect(opened.ship.fuel).toBe(ship.fuel + CACHE_FUEL)
+    expect(opened.ship.found).toEqual(['w1'])
+    expect(opened.hold.wood).toBeGreaterThan(1)
+    expect(opened.hold.stone).toBeGreaterThan(0)
+    const again = openCache(opened.ship, opened.hold, 'w1')
+    expect(again).toEqual({ ship: opened.ship, hold: opened.hold })
+    expect(openCache(opened.ship, opened.hold, 'w2').ship.found).toEqual(['w1', 'w2'])
   })
 
   it('has a spec for every module, and the modules change what the ship can do', () => {

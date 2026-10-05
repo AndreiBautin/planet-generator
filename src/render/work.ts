@@ -1,5 +1,7 @@
 import { chunkBlocks, meshChunk } from '@/generation/chunk'
 import { createPlanet, type Planet } from '@/generation/planet'
+import { cacheOf } from '@/generation/cache'
+import { surveyPlanet } from '@/generation/landmarks'
 import { blockKey, landingAt, type Landing } from '@/generation/voxel'
 
 import type { WorkRequest, WorkResult } from './build-protocol'
@@ -38,10 +40,20 @@ function planetFor(request: WorkRequest): Planet {
  */
 let held: { readonly name: string; readonly landing: Landing } | undefined
 
+/** Where each planet's cache is; surveyed once per planet, which is a tenth of a second. */
+const caches = new WeakMap<Planet, readonly [number, number, number]>()
+function cacheFor(planet: Planet): readonly [number, number, number] {
+  const known = caches.get(planet)
+  if (known !== undefined) return known
+  const direction = cacheOf(planet, surveyPlanet(planet)).direction
+  caches.set(planet, direction)
+  return direction
+}
+
 function landingFor(planet: Planet, origin: readonly [number, number, number]): Landing {
   const name = `${planet.seed}|${origin.map((n) => n.toFixed(9)).join(',')}`
   if (held?.name === name) return held.landing
-  const landing = landingAt(planet, origin)
+  const landing = landingAt(planet, origin, cacheFor(planet))
   held = { name, landing }
   return landing
 }
