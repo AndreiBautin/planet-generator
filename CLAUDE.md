@@ -280,6 +280,30 @@ piece is in:
   and the far plane 3: the depth buffer is spent on the blocks, not on a
   planet the blocks hide.
 
+- **Landings snap to plots, and a plot's edits are saved.** `plotUnder` in
+  scene.ts rounds the point under the glide to a grid on its cube face a
+  little under an area apart (`PLOT`), so landing near the same place again
+  gives the same frame and the same blocks — which is the only way edits
+  there can be laid back over the ground. `app/saves.ts` keeps each plot's
+  edits and the world's hold in IndexedDB, read as `unknown` and checked;
+  an unreadable save degrades to an empty one with a warning. Digging is
+  `generation/raycast.ts` (Amanatides & Woo, tested) against the landing's
+  blocks; `LandingView.setBlock` edits the chunk and the halos of any
+  neighbour sharing the edge and re-meshes those on the page in the same
+  frame. A tap digs, Place or a right click builds, the hotbar is the hold.
+- **Rows are anchored to the ground at the landing point, not the sea.**
+  A landing in the mountains stands far above the sea and ran out of rows
+  — the blocks clamped at the top of the column and the planet's own
+  slabs towered over the camera. `BASE_ROW` is the ground at the origin;
+  `seaRowOf` says where the sea is from there, below the floor on a high
+  landing.
+- **The agent's preview pane draws a frame only when it takes a
+  screenshot**, so a landing streams in one chunk per screenshot and the
+  walker does not step between them. A drop that "shows no blocks" there
+  is the harness: take a burst of tiny screenshots to pump frames before
+  judging. The planet turns once in twelve minutes now (`TURN_MS`), so a
+  day on the ground is long enough to build something in.
+
 ## Traps
 
 - **Every patch geometry wraps the shared index array in its own

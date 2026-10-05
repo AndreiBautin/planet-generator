@@ -28,7 +28,9 @@ import { Terrain } from './patches/terrain'
 import { nextPixelRatio, typicalFrame, type Quality } from './quality'
 import { groundTextures } from './textures'
 import { groundRadiusAt } from '@/generation/ground'
-import { AREA, BLOCK, directionOf, frameAt, groundRowOf, type Frame } from '@/generation/voxel'
+import { AREA, BLOCK, BASE_ROW, frameAt, type Block, type Frame } from '@/generation/voxel'
+import { castBlocks } from '@/generation/raycast'
+import { directionOn, faceUvOf } from '@/generation/cube'
 import type { Hole } from './patches/lod'
 import { waterMaterial } from './water'
 
@@ -52,11 +54,19 @@ export interface Scene {
    * the picture the person was looking at.
    */
   readonly diveFrom: () => { readonly position: Vec3; readonly heading: Vec3 }
+  /** The landing plot under the camera: its frame and its name, for the save. */
+  readonly plotUnder: () => Plot | undefined
   /**
-   * Cut the ground under the camera into blocks and stream it in: the
-   * landing's frame, the row to stand on, and what is at any block.
+   * Cut the ground of a plot into blocks and stream it in, with the saved
+   * edits laid over: the row to stand on, and what is at any block.
    */
-  readonly landOn: () => Landed | undefined
+  readonly landOn: (plot: Plot, edits: readonly (readonly [number, Block])[]) => Landed
+  /** Dig the block looked at, within reach: what it was, or nothing. */
+  readonly breakBlock: () => Block | undefined
+  /** Set a block against the face looked at, within reach, if it would not stand in the surveyor. */
+  readonly placeBlock: (block: Block) => boolean
+  /** Every block changed by hand on the current landing. */
+  readonly changes: () => readonly (readonly [number, Block])[]
   /** Let the landing go, and draw the planet's own ground there again. */
   readonly takeOff: () => void
   /** The orbit angles that look straight down on a point of the planet, as it is turned now. */
@@ -104,6 +114,22 @@ export interface SceneOptions {
   readonly assetBase: string
 }
 
+/**
+ * Landings snap to a grid of plots on each cube face, a little under an
+ * area apart, so landing near the same place again gives the same frame
+ * and the same blocks — which is what lets the edits there be saved.
+ */
+export interface Plot {
+  readonly name: string
+  readonly frame: Frame
+}
+const PLOT = (AREA * BLOCK * 0.85) / (Math.PI / 4)
+/** How far the surveyor can dig or build, in blocks. */
+const REACH = 6
+/** The surveyor's body, as the walker has it, for not building into it. */
+const EYE_HEIGHT = 1.6
+const BODY_HEIGHT = 1.75
+
 /** A landing on screen, for the rig to stand a surveyor on. */
 export interface Landed {
   readonly frame: Frame
@@ -138,8 +164,8 @@ interface Coming {
 
 /** Frames measured before the governor judges the device. */
 const FRAME_WINDOW = 90
-/** One slow turn every two minutes. */
-const TURN_MS = 120_000
+/** One slow turn every twelve minutes: a day on the ground is long enough to build something in. */
+const TURN_MS = 720_000
 
 export function startScene(
   canvas: HTMLCanvasElement,
@@ -197,6 +223,7 @@ export function startScene(
   const walkUp = new THREE.Vector3()
   const walkForward = new THREE.Vector3()
   const walkQuat = new THREE.Quaternion()
+  let lastView: CameraView | undefined
 
   const { quality, builder } = options
   let shown: Shown | undefined
@@ -478,6 +505,7 @@ export function startScene(
     DETAIL_CLOUD_SPIN.value = -0.15 * turn
     DETAIL_CLOUD_SUN.value.set(...inPlanetFrame(sunDirection, turn, 1))
     const current = view()
+    lastView = current
     place(current, turn)
     if (coming !== undefined) {
       coming.terrain.update(inPlanetFrame(camera.position, turn, 1), viewCone(turn))
@@ -531,22 +559,38 @@ export function startScene(
 
   return {
     show,
-    landOn: () => {
+    plotUnder: () => {
       if (shown === undefined) return undefined
+      const under = unit(inPlanetFrame(camera.position, lastTurn, 1))
+      const { face, u, v } = faceUvOf(under)
+      const iu = Math.round(u / PLOT)
+      const iv = Math.round(v / PLOT)
+      return {
+        name: `${String(face)}/${String(iu)}/${String(iv)}`,
+        frame: frameAt(directionOn(face, iu * PLOT, iv * PLOT)),
+      }
+    },
+    landOn: (plot, edits) => {
+      if (shown === undefined) throw new Error('no planet to land on')
       const world = shown.world
-      const direction = unit(inPlanetFrame(camera.position, lastTurn, 1))
-      const frame = frameAt(direction)
+      const { frame } = plot
       if (landing !== undefined) {
-        shown.terrain.group.remove(landing.view.group)
+        landing.view.group.removeFromParent()
         landing.view.dispose()
       }
-      const view = new LandingView(world, frame, builder, ground, {
-        reach: quality.chunkReach,
-        inFlight: quality.inFlight,
-      })
+      const base = groundRadiusAt(world, frame.origin)
+      const view = new LandingView(
+        world,
+        frame,
+        base,
+        builder,
+        ground,
+        { reach: quality.chunkReach, inFlight: quality.inFlight },
+        new Map(edits),
+      )
       shown.terrain.group.add(view.group)
       landing = { view, hole: { centre: frame.origin, radius: (AREA / 2) * BLOCK * 0.92 } }
-      const startY = groundRowOf(groundRadiusAt(world, directionOf(frame, AREA / 2, AREA / 2))) + 2
+      const startY = BASE_ROW + 2
       return {
         frame,
         startY,
@@ -554,6 +598,47 @@ export function startScene(
         ready: (x, z) => view.ready(x, z),
       }
     },
+    breakBlock: () => {
+      const walk = lastView?.walk
+      if (landing === undefined || walk === undefined) return undefined
+      const view = landing.view
+      const hit = castBlocks(
+        walk.eye,
+        walk.forward,
+        REACH,
+        (x, y, z) => view.stuffAt(x, y, z) === 'solid',
+      )
+      if (hit === undefined) return undefined
+      const was = view.blockAt(hit.x, hit.y, hit.z)
+      view.setBlock(hit.x, hit.y, hit.z, 'air')
+      return was
+    },
+    placeBlock: (block) => {
+      const walk = lastView?.walk
+      if (landing === undefined || walk === undefined) return false
+      const view = landing.view
+      const hit = castBlocks(
+        walk.eye,
+        walk.forward,
+        REACH,
+        (x, y, z) => view.stuffAt(x, y, z) === 'solid',
+      )
+      if (hit === undefined) return false
+      const [x, y, z] = hit.before
+      // Not into the surveyor's own body.
+      const feetY = walk.eye[1] - EYE_HEIGHT
+      if (
+        Math.abs(x + 0.5 - walk.x) < 0.3 + 0.5 &&
+        Math.abs(z + 0.5 - walk.z) < 0.3 + 0.5 &&
+        y + 1 > feetY &&
+        y < feetY + BODY_HEIGHT
+      ) {
+        return false
+      }
+      view.setBlock(x, y, z, block)
+      return true
+    },
+    changes: () => landing?.view.changes() ?? [],
     takeOff: () => {
       if (landing === undefined) return
       landing.view.group.removeFromParent()

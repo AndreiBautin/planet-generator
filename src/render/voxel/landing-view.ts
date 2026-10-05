@@ -1,10 +1,21 @@
 import * as THREE from 'three'
 
-import { at, blockOf, CHUNK, FLUID, SOLID, type ChunkMesh } from '@/generation/chunk'
+import {
+  at,
+  blockId,
+  blockOf,
+  CHUNK,
+  FLUID,
+  meshChunk,
+  SOLID,
+  type ChunkMesh,
+  type Palette,
+} from '@/generation/chunk'
 import type { Vec3 } from '@/generation/cube'
-import { SEA_RADIUS } from '@/generation/ground'
 import type { Planet } from '@/generation/planet'
-import { AREA, BLOCK, HEIGHT, SEA_LEVEL, type Block } from '@/generation/voxel'
+import { AREA, BASE_ROW, BLOCK, blockKey, HEIGHT, type Block } from '@/generation/voxel'
+
+import { fromPalette } from '../colour'
 
 import type { Builder } from '../builder'
 import type { GroundTextures } from '../textures'
@@ -52,7 +63,8 @@ export class LandingView {
   private readonly options: LandingViewOptions
   private readonly solid: THREE.Material
   private readonly fluid: THREE.Material
-  private readonly edits = new Map<number, Block>()
+  private readonly edits: Map<number, Block>
+  private readonly palette: Palette
   private waiting = 0
   private frame = 0
   private disposed = false
@@ -60,11 +72,27 @@ export class LandingView {
   constructor(
     planet: Planet,
     frame: { readonly origin: Vec3; readonly east: Vec3; readonly north: Vec3 },
+    /** The radius of the ground at the landing point, which row BASE_ROW sits at. */
+    base: number,
     builder: Builder,
     textures: GroundTextures,
     options: LandingViewOptions,
+    edits: ReadonlyMap<number, Block>,
   ) {
     this.planet = planet
+    this.edits = new Map(edits)
+    const linear = (rgb: readonly [number, number, number]): readonly [number, number, number] => {
+      const c = fromPalette(rgb)
+      return [c.r, c.g, c.b]
+    }
+    this.palette = {
+      lush: linear(planet.palette.lush),
+      dry: linear(planet.palette.dry),
+      highland: linear(planet.palette.highland),
+      peak: linear(planet.palette.peak),
+      ice: linear(planet.palette.ice),
+      shallow: linear(planet.palette.shallow),
+    }
     this.origin = frame.origin
     this.east = frame.east
     this.north = frame.north
@@ -81,9 +109,9 @@ export class LandingView {
     const basis = new THREE.Matrix4().set(ex, ox, nx, 0, ey, oy, ny, 0, ez, oz, nz, 0, 0, 0, 0, 1)
     this.group.quaternion.setFromRotationMatrix(basis)
     this.group.scale.setScalar(BLOCK)
-    const shift = new THREE.Vector3(-AREA / 2, -SEA_LEVEL, -AREA / 2).multiplyScalar(BLOCK)
+    const shift = new THREE.Vector3(-AREA / 2, -BASE_ROW, -AREA / 2).multiplyScalar(BLOCK)
     shift.applyQuaternion(this.group.quaternion)
-    this.group.position.set(ox * SEA_RADIUS, oy * SEA_RADIUS, oz * SEA_RADIUS).add(shift)
+    this.group.position.set(ox * base, oy * base, oz * base).add(shift)
   }
 
   /** The chunk coordinates of a block column. */
@@ -105,6 +133,49 @@ export class LandingView {
     if (SOLID.has(block)) return 'solid'
     if (FLUID.has(block)) return 'liquid'
     return 'air'
+  }
+
+  /** Every block changed by hand, as [key, block] pairs, for saving. */
+  changes(): readonly (readonly [number, Block])[] {
+    return [...this.edits]
+  }
+
+  /**
+   * Change one block: in the edits, in the chunk that holds it and in the
+   * halos of any neighbours that share its edge, and re-mesh those on the
+   * page — one chunk is a few milliseconds, and a dig should land on the
+   * same frame as the tap.
+   */
+  setBlock(x: number, y: number, z: number, block: Block): void {
+    if (y < 0 || y >= HEIGHT) return
+    this.edits.set(blockKey(x, y, z), block)
+    const touched = new Set<string>()
+    const [cx, cz] = LandingView.chunkOf(x, z)
+    // The chunk itself and, where the block lies on an edge, the neighbour
+    // whose halo holds a copy of it.
+    for (let dx = -1; dx <= 1; dx += 1) {
+      for (let dz = -1; dz <= 1; dz += 1) {
+        const ox = cx + dx
+        const oz = cz + dz
+        const lx = x - ox * CHUNK
+        const lz = z - oz * CHUNK
+        if (lx < -1 || lx > CHUNK || lz < -1 || lz > CHUNK) continue
+        const chunk = this.held.get(keyOf(ox, oz))
+        if (chunk?.blocks === undefined) continue
+        chunk.blocks[at(lx, y, lz)] = blockId(block)
+        touched.add(keyOf(ox, oz))
+      }
+    }
+    for (const name of touched) {
+      const chunk = this.held.get(name)
+      if (chunk?.blocks === undefined) continue
+      if (chunk.node !== undefined) {
+        this.group.remove(chunk.node)
+        free(chunk.node)
+      }
+      chunk.node = this.nodeFor(meshChunk(chunk.blocks, this.palette), chunk.cx, chunk.cz)
+      this.group.add(chunk.node)
+    }
   }
 
   /** Whether the chunk under a column is in, so the walker has ground to stand on. */

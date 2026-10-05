@@ -11,7 +11,6 @@ import {
   directionOf,
   HEIGHT,
   landingAt,
-  SEA_LEVEL,
   type Block,
   type Landing,
 } from './voxel'
@@ -57,7 +56,7 @@ describe('a landing', () => {
     const landing = landingAt(temperate, spot)
     const col = columnAt(landing, AREA / 2, AREA / 2)
     const blocks = column(landing, AREA / 2, AREA / 2)
-    expect(col.ground).toBeGreaterThan(SEA_LEVEL)
+    expect(col.ground).toBeGreaterThan(landing.seaRow)
     expect(blocks[col.ground]).toBe('grass')
     expect(blocks[col.ground - 1]).toBe('earth')
     expect(blocks[col.ground - 5]).toBe('stone')
@@ -73,10 +72,10 @@ describe('a landing', () => {
     const landing = landingAt(temperate, spot)
     const col = columnAt(landing, AREA / 2, AREA / 2)
     const blocks = column(landing, AREA / 2, AREA / 2)
-    expect(col.ground).toBeLessThan(SEA_LEVEL)
+    expect(col.ground).toBeLessThan(landing.seaRow)
     expect(blocks[col.ground]).toBe('sand')
-    expect(blocks[SEA_LEVEL]).toBe('water')
-    expect(blocks[SEA_LEVEL + 1]).toBe('air')
+    expect(blocks[landing.seaRow]).toBe('water')
+    expect(blocks[landing.seaRow + 1]).toBe('air')
   })
 
   it('cuts a molten world as basalt, with a sea of lava', () => {
@@ -85,7 +84,7 @@ describe('a landing', () => {
       spotWhere(volcanic, (s) => s.height < -0.05),
     )
     const blocks = column(landing, AREA / 2, AREA / 2)
-    expect(blocks[SEA_LEVEL]).toBe('lava')
+    expect(blocks[landing.seaRow]).toBe('lava')
     const land = landingAt(
       volcanic,
       spotWhere(volcanic, (s) => s.height > 0.08),
@@ -123,6 +122,16 @@ describe('a landing', () => {
       if (y === col.ground + 1) trunks += 1
     }
     expect(trunks).toBeGreaterThan(0)
+  })
+
+  it('anchors its rows to the ground at the landing point, so a mountain landing has headroom', () => {
+    const high = landingAt(
+      temperate,
+      spotWhere(temperate, (s) => s.height > 0.5),
+    )
+    const col = columnAt(high, AREA / 2, AREA / 2)
+    expect(col.ground).toBe(96)
+    expect(high.seaRow).toBeLessThan(96)
   })
 
   it('maps a column to a direction and back', () => {

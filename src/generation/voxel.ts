@@ -1,5 +1,5 @@
 import { faceUvOf, type Vec3 } from './cube'
-import { floorRadiusAt, SEA_RADIUS } from './ground'
+import { floorRadiusAt, groundRadiusAt, SEA_RADIUS } from './ground'
 import { CELL, featureWord, placementsIn, type Placement } from './placement'
 import { surfaceAt, type Planet, type Surface } from './planet'
 
@@ -25,9 +25,14 @@ export const BLOCK = 0.0002
 /** Blocks across a landing area, each way. */
 export const AREA = 256
 /** Blocks a column stands tall. */
-export const HEIGHT = 192
-/** The row the sea's surface sits at. */
-export const SEA_LEVEL = 64
+export const HEIGHT = 256
+/**
+ * The row the ground at the landing point sits on. Rows are anchored to
+ * that ground rather than to the sea, because a landing in the mountains
+ * stands far above the sea and would otherwise run out of rows; the sea's
+ * own row follows from how high the landing is (`seaRowOf`).
+ */
+export const BASE_ROW = 96
 
 export const BLOCKS = [
   'air',
@@ -58,9 +63,16 @@ export interface Frame {
 
 export interface Landing extends Frame {
   readonly planet: Planet
+  /** The radius of the ground at the landing point, which row `BASE_ROW` sits at. */
+  readonly base: number
+  /** The row the sea's surface sits at here; below the world's floor on a high landing. */
+  readonly seaRow: number
   /** Blocks the features stamp into the air above the ground: trunks, crowns, stone. */
   readonly stamps: ReadonlyMap<number, Block>
 }
+
+/** The row the sea's surface sits at, for a landing whose ground is at `base`. */
+export const seaRowOf = (base: number): number => BASE_ROW - Math.round((base - SEA_RADIUS) / BLOCK)
 
 const dot = (a: Vec3, b: Vec3): number => a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
 const cross = (a: Vec3, b: Vec3): Vec3 => [
@@ -98,8 +110,8 @@ export function columnOf(landing: Frame, direction: Vec3): readonly [number, num
 }
 
 /** The row the ground's top block sits on, from the radius of the drawn ground. */
-export function groundRowOf(radius: number): number {
-  return Math.max(1, Math.min(HEIGHT - 2, SEA_LEVEL + Math.round((radius - SEA_RADIUS) / BLOCK)))
+export function groundRowOf(radius: number, seaRow: number): number {
+  return Math.max(1, Math.min(HEIGHT - 2, seaRow + Math.round((radius - SEA_RADIUS) / BLOCK)))
 }
 
 export interface Column {
@@ -141,7 +153,7 @@ function layersOf(
 export function columnAt(landing: Landing, x: number, z: number): Column {
   const direction = directionOf(landing, x, z)
   const surface = surfaceAt(landing.planet, direction[0], direction[1], direction[2])
-  const ground = groundRowOf(floorRadiusAt(landing.planet, direction))
+  const ground = groundRowOf(floorRadiusAt(landing.planet, direction), landing.seaRow)
   return { surface, ground, ...layersOf(landing.planet, surface) }
 }
 
@@ -155,9 +167,9 @@ export function blockAt(landing: Landing, x: number, z: number, column: Column, 
   }
   const stamped = landing.stamps.get(blockKey(x, y, z))
   if (stamped !== undefined) return stamped
-  if (y <= SEA_LEVEL) {
+  if (y <= landing.seaRow) {
     if (landing.planet.molten) return 'lava'
-    if (column.surface.biome === 'sea-ice' && y === SEA_LEVEL) return 'ice'
+    if (column.surface.biome === 'sea-ice' && y === landing.seaRow) return 'ice'
     return 'water'
   }
   return 'air'
@@ -174,6 +186,7 @@ function stamp(
   x: number,
   z: number,
   ground: number,
+  seaRow: number,
 ): void {
   const roll = placed.rolls[0]
   const put = (dx: number, dy: number, dz: number, block: Block): void => {
@@ -238,7 +251,7 @@ function stamp(
       const r = 1 + Math.round(roll * 2)
       for (let dx = -r; dx <= r; dx += 1) {
         for (let dz = -r; dz <= r; dz += 1) {
-          if (dx * dx + dz * dz <= r * r) stamps.set(blockKey(x + dx, SEA_LEVEL, z + dz), 'ice')
+          if (dx * dx + dz * dz <= r * r) stamps.set(blockKey(x + dx, seaRow, z + dz), 'ice')
         }
       }
       return
@@ -267,7 +280,9 @@ export function frameAt(direction: Vec3): Frame {
 export function landingAt(planet: Planet, direction: Vec3): Landing {
   const { origin, east, north } = frameAt(direction)
   const stamps = new Map<number, Block>()
-  const landing: Landing = { planet, origin, east, north, stamps }
+  const base = groundRadiusAt(planet, origin)
+  const seaRow = seaRowOf(base)
+  const landing: Landing = { planet, origin, east, north, base, seaRow, stamps }
 
   const { face, u, v } = faceUvOf(origin)
   // Cells reaching a little past the area, so a crown rooted just outside
@@ -286,9 +301,9 @@ export function landingAt(planet: Planet, direction: Vec3): Landing {
         if (x < -4 || z < -4 || x >= AREA + 4 || z >= AREA + 4) continue
         const ground =
           placed.feature === 'floe'
-            ? SEA_LEVEL
-            : groundRowOf(floorRadiusAt(planet, directionOf(landing, x, z)))
-        stamp(stamps, placed, x, z, ground)
+            ? seaRow
+            : groundRowOf(floorRadiusAt(planet, directionOf(landing, x, z)), seaRow)
+        stamp(stamps, placed, x, z, ground, seaRow)
       }
     }
   }

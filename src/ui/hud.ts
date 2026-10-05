@@ -1,4 +1,5 @@
 import { KINDS } from '@/generation/kinds'
+import type { Block } from '@/generation/voxel'
 import type { Dials, Planet } from '@/generation/planet'
 
 /**
@@ -14,6 +15,8 @@ export interface HudHandlers {
   readonly onFly: () => void
   /** Back to orbit from a glide or a walk. */
   readonly onOrbit: () => void
+  /** A block kind chosen on the hotbar. */
+  readonly onHold: (block: Block) => void
 }
 
 export type Mode = 'orbit' | 'flying' | 'walking'
@@ -23,8 +26,11 @@ export interface Hud {
   readonly toast: (message: string) => void
   /** Say what the camera is doing: the buttons' words, and the hint. */
   readonly mode: (mode: Mode) => void
-  /** The Jump button, for the walk controls to listen to. */
+  /** The Jump and Place buttons, for the walk controls to listen to. */
   readonly jump: HTMLElement
+  readonly place: HTMLElement
+  /** Show what is in the hold and which block is held. */
+  readonly hold: (counts: Readonly<Partial<Record<Block, number>>>, held: Block | undefined) => void
 }
 
 const element = <T extends HTMLElement>(id: string, type: new () => T): T => {
@@ -57,6 +63,14 @@ export function attachHud(handlers: HudHandlers): Hud {
   orbit.addEventListener('click', handlers.onOrbit)
   const hint = element('hint', HTMLElement)
   const jump = element('jump', HTMLButtonElement)
+  const place = element('place', HTMLButtonElement)
+  const hotbar = element('hotbar', HTMLElement)
+  hotbar.addEventListener('click', (event) => {
+    const target = event.target
+    if (!(target instanceof HTMLButtonElement)) return
+    const block = target.dataset.block
+    if (block !== undefined) handlers.onHold(block as Block)
+  })
   tune.addEventListener('click', () => {
     panel.hidden = !panel.hidden
     tune.setAttribute('aria-pressed', String(!panel.hidden))
@@ -95,9 +109,11 @@ export function attachHud(handlers: HudHandlers): Hud {
       fly.setAttribute('aria-pressed', String(mode !== 'orbit'))
       orbit.hidden = mode === 'orbit'
       jump.hidden = mode !== 'walking'
+      place.hidden = mode !== 'walking'
+      hotbar.hidden = mode !== 'walking'
       hint.textContent =
         mode === 'walking'
-          ? 'Left side moves · right side looks · Jump to jump'
+          ? 'Left moves · right looks · tap to dig · Place to build'
           : 'Drag to steer and climb · pinch to change height'
       document.body.classList.toggle('flying', mode !== 'orbit')
       document.body.classList.toggle('walking', mode === 'walking')
@@ -107,6 +123,19 @@ export function attachHud(handlers: HudHandlers): Hud {
       hint.style.animation = ''
     },
     jump,
+    place,
+    hold: (counts, held) => {
+      hotbar.replaceChildren()
+      for (const [block, count] of Object.entries(counts)) {
+        if (count <= 0) continue
+        const button = document.createElement('button')
+        button.type = 'button'
+        button.dataset.block = block
+        button.textContent = `${block} ${String(count)}`
+        button.setAttribute('aria-pressed', String(block === held))
+        hotbar.append(button)
+      }
+    },
     toast: (message) => {
       toastLine.textContent = message
       toastLine.classList.add('shown')

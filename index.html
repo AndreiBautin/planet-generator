@@ -148,6 +148,57 @@
       .jump[hidden] {
         display: none;
       }
+      .place {
+        position: fixed;
+        right: calc(var(--gutter) + 84px);
+        bottom: calc(max(16px, env(safe-area-inset-bottom)) + 84px);
+        width: 64px;
+        height: 64px;
+        border-radius: 50%;
+        font-size: 14px;
+        touch-action: none;
+        user-select: none;
+        -webkit-user-select: none;
+      }
+      .place[hidden] {
+        display: none;
+      }
+      /* What is in the hold, as a row above the actions: tap one to hold it. */
+      .hotbar {
+        position: fixed;
+        left: var(--gutter);
+        bottom: calc(max(16px, env(safe-area-inset-bottom)) + 84px);
+        display: flex;
+        gap: 6px;
+        max-width: calc(100% - 180px);
+        overflow-x: auto;
+        scrollbar-width: none;
+      }
+      .hotbar[hidden] {
+        display: none;
+      }
+      .hotbar button {
+        font-size: 12px;
+        padding: 0 10px;
+        white-space: nowrap;
+        text-transform: capitalize;
+      }
+      .walking .crosshair {
+        display: block;
+      }
+      .crosshair {
+        display: none;
+        position: fixed;
+        left: 50%;
+        top: 50%;
+        width: 14px;
+        height: 14px;
+        margin: -7px 0 0 -7px;
+        border: 1.5px solid rgba(255, 255, 255, 0.75);
+        border-radius: 50%;
+        pointer-events: none;
+        mix-blend-mode: difference;
+      }
       .walking canvas {
         cursor: crosshair;
       }
@@ -294,6 +345,9 @@
     </div>
 
     <button type="button" id="jump" class="jump" hidden aria-label="Jump">Jump</button>
+    <button type="button" id="place" class="place" hidden aria-label="Place a block">Place</button>
+    <nav class="hotbar" id="hotbar" hidden aria-label="Hold"></nav>
+    <div class="crosshair" aria-hidden="true"></div>
     <p class="hint" id="hint">Drag to steer and climb · pinch to change height</p>
     <p class="toast" id="toast" role="status" aria-live="polite"></p>
     <script type="module" src="/src/main.ts"></script>

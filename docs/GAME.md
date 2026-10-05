@@ -51,7 +51,7 @@ it can be. Checked when live.
 - [x] **A3 The walker.** Touch: left thumb moves, right thumb looks, jump
       button. Desktop: WASD, mouse look, space. Gravity, collision,
       step-up, swimming in water.
-- [ ] **A4 Dig and build.** Raycast to the block looked at; tap to break,
+- [x] **A4 Dig and build.** Raycast to the block looked at; tap to break,
       tap a face to place; a hotbar of what is held. Edits saved per seed
       as a diff and applied over the sampler on load.
 - [x] **A5 Land and take off.** From a glide, Land drops the ship's

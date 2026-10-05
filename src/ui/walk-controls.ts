@@ -1,3 +1,5 @@
+import type { Clock } from '@/app/clock'
+
 import type { WalkInput } from './walker'
 
 /**
@@ -16,18 +18,26 @@ import type { WalkInput } from './walker'
 const STICK_REACH = 56
 const LOOK_PER_PIXEL = 0.0042
 
+const TAP_MS = 260
+const TAP_PIXELS = 9
+
 export function attachWalkControls(
   target: HTMLElement,
   jump: HTMLElement,
+  place: HTMLElement,
+  clock: Clock,
   walking: () => boolean,
   send: (input: Partial<WalkInput>) => void,
+  acts: { readonly dig: () => void; readonly build: () => void },
 ): () => void {
   interface Touch {
     readonly role: 'stick' | 'look'
     readonly x0: number
     readonly y0: number
+    readonly at: number
     x: number
     y: number
+    moved: boolean
   }
   const touches = new Map<number, Touch>()
   const keys = new Set<string>()
@@ -51,14 +61,22 @@ export function attachWalkControls(
     if (!walking()) return
     event.stopImmediatePropagation()
     target.setPointerCapture(event.pointerId)
+    // A mouse's right button builds; everything else is a look, a stick,
+    // or — lifted quickly without moving — a tap that digs.
+    if (event.pointerType === 'mouse' && event.button === 2) {
+      acts.build()
+      return
+    }
     const role =
       event.pointerType === 'mouse' || event.clientX > window.innerWidth / 2 ? 'look' : 'stick'
     touches.set(event.pointerId, {
       role,
       x0: event.clientX,
       y0: event.clientY,
+      at: clock.now(),
       x: event.clientX,
       y: event.clientY,
+      moved: false,
     })
     push()
   }
@@ -74,12 +92,23 @@ export function attachWalkControls(
     }
     touch.x = event.clientX
     touch.y = event.clientY
+    if (Math.hypot(touch.x - touch.x0, touch.y - touch.y0) > TAP_PIXELS) touch.moved = true
     push()
   }
   const up = (event: PointerEvent): void => {
-    if (!touches.delete(event.pointerId)) return
+    const touch = touches.get(event.pointerId)
+    if (touch === undefined) return
+    touches.delete(event.pointerId)
     event.stopImmediatePropagation()
+    if (!touch.moved && clock.now() - touch.at < TAP_MS) acts.dig()
     push()
+  }
+  const noMenu = (event: Event): void => {
+    if (walking()) event.preventDefault()
+  }
+  const placeDown = (event: PointerEvent): void => {
+    event.preventDefault()
+    acts.build()
   }
   const keyDown = (event: KeyboardEvent): void => {
     if (!walking() || event.target instanceof HTMLInputElement) return
@@ -116,7 +145,11 @@ export function attachWalkControls(
   jump.addEventListener('pointerdown', jumpDown)
   jump.addEventListener('pointerup', jumpUp)
   jump.addEventListener('pointercancel', jumpUp)
+  place.addEventListener('pointerdown', placeDown)
+  target.addEventListener('contextmenu', noMenu)
   return () => {
+    place.removeEventListener('pointerdown', placeDown)
+    target.removeEventListener('contextmenu', noMenu)
     target.removeEventListener('pointerdown', down, { capture: true })
     target.removeEventListener('pointermove', move, { capture: true })
     target.removeEventListener('pointerup', up, { capture: true })

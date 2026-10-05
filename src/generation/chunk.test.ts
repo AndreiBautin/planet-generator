@@ -4,7 +4,7 @@ import { at, blockId, blockOf, CHUNK, chunkBlocks, meshChunk, SOLID, type Palett
 import { directionOn } from './cube'
 import { createPlanet, surfaceAt, type Planet } from './planet'
 import { parseSeed, type Seed } from './seed'
-import { AREA, HEIGHT, landingAt, SEA_LEVEL } from './voxel'
+import { AREA, HEIGHT, landingAt } from './voxel'
 
 const seedOf = (text: string): Seed => {
   const parsed = parseSeed(text)
@@ -97,7 +97,7 @@ describe('a chunk', () => {
     for (let v = 0; v < wet.fluid.positions.length / 3; v += 1) {
       highest = Math.max(highest, wet.fluid.positions[v * 3 + 1] ?? 0)
     }
-    expect(highest).toBeCloseTo(SEA_LEVEL + 0.88, 4)
+    expect(highest).toBeCloseTo(sea.seaRow + 0.88, 4)
     expect(blockId('water')).toBe(1)
   })
 })

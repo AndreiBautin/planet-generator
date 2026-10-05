@@ -12,6 +12,8 @@ import { attachGestures } from '@/ui/controls'
 import { attachHud } from '@/ui/hud'
 import { createRig } from '@/ui/rig'
 import { attachWalkControls } from '@/ui/walk-controls'
+import { loadHold, loadPlot, saveHold, savePlot } from '@/app/saves'
+import type { Block } from '@/generation/voxel'
 import { shareLink } from '@/ui/share'
 
 /**
@@ -82,6 +84,42 @@ const show = async (born: boolean): Promise<void> => {
 const modeOf = (): 'orbit' | 'flying' | 'walking' =>
   rig.walking() ? 'walking' : rig.flying() ? 'flying' : 'orbit'
 
+// The hold: what has been dug on this world, and which block is held to
+// build with. Saved per world, like the edits at each plot.
+let hold: Partial<Record<Block, number>> = {}
+let held: Block | undefined
+let plot: string | undefined
+const showHold = (): void => {
+  if (held !== undefined && (hold[held] ?? 0) <= 0) held = undefined
+  if (held === undefined) {
+    const first = Object.entries(hold).find(([, count]) => count > 0)
+    held = first?.[0] as Block | undefined
+  }
+  hud.hold(hold, held)
+}
+let saving: ReturnType<typeof setTimeout> | undefined
+const saveSoon = (): void => {
+  if (saving !== undefined) clearTimeout(saving)
+  saving = setTimeout(() => {
+    saving = undefined
+    if (plot !== undefined) void savePlot(seed, plot, { edits: scene.changes() })
+    void saveHold(seed, { counts: hold })
+  }, 400)
+}
+
+/** Land on the plot under the glide, with whatever was dug there before laid back over it. */
+const dropIn = async (): Promise<void> => {
+  const under = scene.plotUnder()
+  if (under === undefined) return
+  const [saved, theHold] = await Promise.all([loadPlot(seed, under.name), loadHold(seed)])
+  if (!rig.flying()) return
+  hold = { ...theHold.counts }
+  plot = under.name
+  rig.drop(scene.landOn(under, saved.edits))
+  hud.mode(modeOf())
+  showHold()
+}
+
 const hud = attachHud({
   onNew: () => {
     // A new world is born in orbit: rising over the old one first would be
@@ -104,12 +142,15 @@ const hud = attachHud({
       rig.takeOff()
       scene.takeOff()
     } else if (rig.flying()) {
-      const landed = scene.landOn()
-      if (landed !== undefined) rig.drop(landed)
+      void dropIn()
     } else {
       rig.fly(scene.diveFrom())
     }
     hud.mode(modeOf())
+  },
+  onHold: (block) => {
+    held = block
+    showHold()
   },
   onOrbit: () => {
     if (rig.walking()) scene.takeOff()
@@ -125,7 +166,22 @@ const hud = attachHud({
   },
 })
 
-attachWalkControls(canvas, hud.jump, rig.walking, rig.walk)
+attachWalkControls(canvas, hud.jump, hud.place, systemClock, rig.walking, rig.walk, {
+  dig: () => {
+    const dug = scene.breakBlock()
+    if (dug === undefined || dug === 'air') return
+    hold[dug] = (hold[dug] ?? 0) + 1
+    showHold()
+    saveSoon()
+  },
+  build: () => {
+    if (held === undefined || (hold[held] ?? 0) <= 0) return
+    if (!scene.placeBlock(held)) return
+    hold[held] = (hold[held] ?? 0) - 1
+    showHold()
+    saveSoon()
+  },
+})
 
 // Arrow keys steer a glide on a keyboard, and Escape lands.
 window.addEventListener('keydown', (event) => {
