@@ -19,6 +19,8 @@ export function buildAtmosphere(planet: Planet, sun: THREE.Vector3): THREE.Mesh 
     uniforms: {
       glow: { value: fromPalette(KINDS[planet.kind].atmosphere) },
       sun: { value: sun.clone().normalize() },
+      /** 0 to 1: how far the glow has come up, for a planet being born. */
+      strength: { value: 1 },
     },
     vertexShader: /* glsl */ `
       varying vec3 vNormal;
@@ -35,6 +37,7 @@ export function buildAtmosphere(planet: Planet, sun: THREE.Vector3): THREE.Mesh 
     fragmentShader: /* glsl */ `
       uniform vec3 glow;
       uniform vec3 sun;
+      uniform float strength;
       varying vec3 vNormal;
       varying vec3 vWorldNormal;
       varying vec3 vToCamera;
@@ -48,7 +51,7 @@ export function buildAtmosphere(planet: Planet, sun: THREE.Vector3): THREE.Mesh 
         float facing = dot(vNormal, normalize(vToCamera));
         float rim = min(1.0, pow(max(0.0, 0.5 - facing), 3.0));
         float lit = clamp(dot(vWorldNormal, sun) * 0.9 + 0.3, 0.0, 1.0);
-        gl_FragColor = vec4(glow * rim * lit * 1.6, rim * lit);
+        gl_FragColor = vec4(glow * rim * lit * 1.6 * strength, rim * lit * strength);
       }
     `,
     side: THREE.BackSide,

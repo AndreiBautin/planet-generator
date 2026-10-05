@@ -6,8 +6,11 @@ import { createRng } from '@/generation/rng'
 import { starField } from '@/generation/stars'
 
 import { buildAtmosphere } from './atmosphere'
-import { buildClouds } from './clouds'
-import { buildPlanetMesh } from './planet-mesh'
+import { BORN, birthAt, type Birth } from './birth'
+import type { Built } from './build-protocol'
+import { CLOUD_OPACITY, cloudsFromTexture } from './clouds'
+import { meshFromSurface } from './planet-mesh'
+import { nextPixelRatio, typicalFrame, type Quality } from './quality'
 import { buildWater } from './water'
 
 /**
@@ -17,10 +20,13 @@ import { buildWater } from './water'
  *
  * The renderer, camera and sun live for the page; a planet is shown, and
  * replaced by the next one shown, with everything the old one allocated on
- * the GPU released.
+ * the GPU released. The slow part — sampling the surface — happens before
+ * `show`, in the builder, so showing is only uploading.
  */
 export interface Scene {
-  readonly show: (planet: Planet) => void
+  /** Whether a planet's clouds are already on screen and can be kept. */
+  readonly hasCloudsFor: (planet: Planet) => boolean
+  readonly show: (planet: Planet, built: Built, options: { readonly born: boolean }) => void
   readonly dispose: () => void
 }
 
@@ -34,6 +40,12 @@ export interface CameraView {
   readonly distance: number
 }
 
+export interface SceneOptions {
+  readonly quality: Quality
+  /** Skip the birth animation: the planet simply appears. */
+  readonly reducedMotion: boolean
+}
+
 /** What belongs to one planet and goes when the next is shown. */
 interface Shown {
   readonly seed: string
@@ -42,11 +54,21 @@ interface Shown {
   readonly clouds: THREE.Mesh
   readonly air: THREE.Mesh
   readonly sky: THREE.Points
+  /** Clock time the planet appeared, for the birth animation; absent if it simply appeared. */
+  readonly bornAt: number | undefined
 }
 
-export function startScene(canvas: HTMLCanvasElement, clock: Clock, view: () => CameraView): Scene {
+/** Frames measured before the governor judges the device. */
+const FRAME_WINDOW = 90
+
+export function startScene(
+  canvas: HTMLCanvasElement,
+  clock: Clock,
+  view: () => CameraView,
+  options: SceneOptions,
+): Scene {
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true })
-  const pixelRatio = Math.min(window.devicePixelRatio, 2)
+  let pixelRatio = options.quality.pixelRatio
   renderer.setPixelRatio(pixelRatio)
   renderer.toneMapping = THREE.ACESFilmicToneMapping
   renderer.toneMappingExposure = 1.15
@@ -67,33 +89,44 @@ export function startScene(canvas: HTMLCanvasElement, clock: Clock, view: () => 
   sun.position.set(5, 1.5, 2.5)
   scene.add(sun, new THREE.AmbientLight(0x1a2438, 0.35))
 
-  // Finer on a large screen, lighter on a phone: the triangle count grows
-  // with the square of the detail.
-  const detail = Math.min(window.innerWidth, window.innerHeight) >= 700 ? 96 : 64
+  const { detail, cloudWidth } = options.quality
   let shown: Shown | undefined
 
-  const show = (world: Planet): void => {
+  const hasCloudsFor = (world: Planet): boolean =>
+    shown !== undefined && shown.seed === world.seed && shown.kind === world.kind
+
+  const show = (world: Planet, built: Built, { born }: { readonly born: boolean }): void => {
     // The sky, the clouds and the air depend on the seed and the kind, not
     // on the dials, so moving a dial rebuilds only the ground and the sea —
     // the clouds are the slowest thing here to bake.
-    const same = shown !== undefined && shown.seed === world.seed && shown.kind === world.kind
     const previous = shown
+    const keep = previous !== undefined && hasCloudsFor(world) && built.clouds === undefined
 
     // Land and sea turn together, as one body; the clouds drift a little
     // faster than the ground beneath them, and the air does not turn at all.
     const body = new THREE.Group()
-    body.add(buildPlanetMesh(world, detail), buildWater(world, detail))
-    const clouds =
-      same && previous !== undefined
-        ? previous.clouds
-        : buildClouds(world, detail >= 96 ? 1024 : 512)
-    const air = same && previous !== undefined ? previous.air : buildAtmosphere(world, sun.position)
-    const sky = same && previous !== undefined ? previous.sky : buildSky(world, pixelRatio)
+    body.add(meshFromSurface(built.surface), buildWater(world, detail))
+
+    let clouds: THREE.Mesh
+    let air: THREE.Mesh
+    let sky: THREE.Points
+    if (keep) {
+      ;({ clouds, air, sky } = previous)
+    } else {
+      // Clouds are only left out of a build when the scene said it could keep
+      // them; should that ever disagree, a clear sky beats a crash.
+      clouds =
+        built.clouds === undefined
+          ? cloudsFromTexture(world, new Uint8Array(8), 2)
+          : cloudsFromTexture(world, built.clouds, cloudWidth)
+      air = buildAtmosphere(world, sun.position)
+      sky = buildSky(world, pixelRatio)
+    }
 
     if (previous !== undefined) {
       scene.remove(previous.body)
       release(previous.body)
-      if (!same) {
+      if (!keep) {
         scene.remove(previous.clouds, previous.air, previous.sky)
         release(previous.clouds)
         release(previous.air)
@@ -101,9 +134,22 @@ export function startScene(canvas: HTMLCanvasElement, clock: Clock, view: () => 
       }
     }
     scene.add(body)
-    if (!same) scene.add(clouds, air, sky)
-    shown = { seed: world.seed, kind: world.kind, body, clouds, air, sky }
+    if (!keep) scene.add(clouds, air, sky)
+    const animate = born && !options.reducedMotion
+    shown = {
+      seed: world.seed,
+      kind: world.kind,
+      body,
+      clouds,
+      air,
+      sky,
+      bornAt: animate ? clock.now() : keep ? previous.bornAt : undefined,
+    }
+    pose(shown, animate ? birthAt(0) : stageOf(shown))
   }
+
+  const stageOf = (planet: Shown): Birth =>
+    planet.bornAt === undefined ? BORN : birthAt((clock.now() - planet.bornAt) / 1000)
 
   const resize = (): void => {
     frame()
@@ -111,9 +157,28 @@ export function startScene(canvas: HTMLCanvasElement, clock: Clock, view: () => 
   }
   window.addEventListener('resize', resize)
 
+  // The governor: watch how long frames take and, if the device is
+  // struggling, render at a lower resolution. Judged over a window of frames
+  // rather than reacting to one, and only ever downward.
+  const frames: number[] = []
+  let lastFrameAt = clock.now()
+
   // One slow turn every two minutes, from the clock rather than per frame,
   // so a dropped frame does not slow the planet down.
   renderer.setAnimationLoop(() => {
+    const now = clock.now()
+    frames.push(now - lastFrameAt)
+    lastFrameAt = now
+    if (frames.length >= FRAME_WINDOW) {
+      const next = nextPixelRatio(pixelRatio, typicalFrame(frames))
+      frames.length = 0
+      if (next !== pixelRatio) {
+        pixelRatio = next
+        renderer.setPixelRatio(pixelRatio)
+        renderer.setSize(window.innerWidth, window.innerHeight)
+      }
+    }
+
     const { yaw, pitch, distance } = view()
     camera.position.set(
       distance * Math.cos(pitch) * Math.sin(yaw),
@@ -122,14 +187,16 @@ export function startScene(canvas: HTMLCanvasElement, clock: Clock, view: () => 
     )
     camera.lookAt(0, 0, 0)
     if (shown !== undefined) {
-      const turns = clock.now() / 120_000
+      const turns = now / 120_000
       shown.body.rotation.y = turns * Math.PI * 2
       shown.clouds.rotation.y = turns * 1.15 * Math.PI * 2
+      pose(shown, stageOf(shown))
     }
     renderer.render(scene, camera)
   })
 
   return {
+    hasCloudsFor,
     show,
     dispose: () => {
       renderer.setAnimationLoop(null)
@@ -145,13 +212,27 @@ export function startScene(canvas: HTMLCanvasElement, clock: Clock, view: () => 
   }
 }
 
+/** Apply a stage of the birth animation to a shown planet. */
+function pose(planet: Shown, stage: Birth): void {
+  planet.body.scale.setScalar(stage.scale)
+  planet.clouds.scale.setScalar(stage.scale)
+  planet.air.scale.setScalar(stage.scale)
+  const clouds: unknown = planet.clouds.material
+  if (clouds instanceof THREE.MeshStandardMaterial) clouds.opacity = CLOUD_OPACITY * stage.clouds
+  const air: unknown = planet.air.material
+  if (air instanceof THREE.ShaderMaterial) {
+    const strength = air.uniforms.strength
+    if (strength !== undefined) strength.value = stage.air
+  }
+}
+
 /** The narrower of the two angles the view spans, in degrees. */
 const FIELD_OF_VIEW = 45
 
 /**
- * The vertical field of view that keeps the narrower side at 45�. Three's
- * fov is vertical, so a phone held upright kept 45� top to bottom and had
- * barely half that across: the planet ran off both sides of the screen.
+ * The vertical field of view that keeps the narrower side at 45 degrees.
+ * Three's fov is vertical, so a phone held upright kept 45 degrees top to
+ * bottom and barely half that across: the planet ran off both sides.
  */
 function fieldOfView(aspect: number): number {
   if (aspect >= 1) return FIELD_OF_VIEW

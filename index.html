@@ -173,6 +173,24 @@
       .toast.shown {
         opacity: 1;
       }
+      /* While a world is being made, its name breathes so the wait reads as
+         work rather than as a frozen page. */
+      .forming .title h1 {
+        animation: forming 1.2s ease-in-out infinite alternate;
+      }
+      @keyframes forming {
+        from {
+          opacity: 1;
+        }
+        to {
+          opacity: 0.45;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .forming .title h1 {
+          animation: none;
+        }
+      }
     </style>
   </head>
   <body>
