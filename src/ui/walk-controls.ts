@@ -7,9 +7,11 @@ import type { WalkInput } from './walker'
  *
  * On a touch screen the left half of the screen is a stick — press and
  * drag, and the drag from where the finger landed is the push — and the
- * right half looks, dragging the view the way the finger goes. A Jump
- * button sits above the actions. On a keyboard it is W A S D, Space to
- * jump, and the mouse drags the look.
+ * right half looks, dragging the view the way the finger goes. A finger
+ * held still digs the block under the crosshair; a tap does nothing, so
+ * a look around never takes a block out of a wall. A Jump button sits
+ * above the actions. On a keyboard it is W A S D, Space to jump, the
+ * mouse drags the look and a click digs.
  *
  * Installed in the capture phase and stopping the event while walking, so
  * the orbit and glide gestures on the same canvas never see a walking
@@ -20,6 +22,8 @@ const LOOK_PER_PIXEL = 0.0042
 
 const TAP_MS = 260
 const TAP_PIXELS = 9
+/** How long a finger holds still to dig. */
+const HOLD_MS = 420
 
 export function attachWalkControls(
   target: HTMLElement,
@@ -38,6 +42,8 @@ export function attachWalkControls(
     x: number
     y: number
     moved: boolean
+    /** The hold timer, on a touch: fires a dig if the finger stays put. */
+    hold: ReturnType<typeof setTimeout> | undefined
   }
   const touches = new Map<number, Touch>()
   const keys = new Set<string>()
@@ -69,7 +75,7 @@ export function attachWalkControls(
     }
     const role =
       event.pointerType === 'mouse' || event.clientX > window.innerWidth / 2 ? 'look' : 'stick'
-    touches.set(event.pointerId, {
+    const touch: Touch = {
       role,
       x0: event.clientX,
       y0: event.clientY,
@@ -77,7 +83,15 @@ export function attachWalkControls(
       x: event.clientX,
       y: event.clientY,
       moved: false,
-    })
+      hold: undefined,
+    }
+    if (event.pointerType !== 'mouse') {
+      touch.hold = setTimeout(() => {
+        touch.hold = undefined
+        if (!touch.moved && touches.get(event.pointerId) === touch) acts.dig()
+      }, HOLD_MS)
+    }
+    touches.set(event.pointerId, touch)
     push()
   }
   const move = (event: PointerEvent): void => {
@@ -92,7 +106,13 @@ export function attachWalkControls(
     }
     touch.x = event.clientX
     touch.y = event.clientY
-    if (Math.hypot(touch.x - touch.x0, touch.y - touch.y0) > TAP_PIXELS) touch.moved = true
+    if (Math.hypot(touch.x - touch.x0, touch.y - touch.y0) > TAP_PIXELS) {
+      touch.moved = true
+      if (touch.hold !== undefined) {
+        clearTimeout(touch.hold)
+        touch.hold = undefined
+      }
+    }
     push()
   }
   const up = (event: PointerEvent): void => {
@@ -100,7 +120,9 @@ export function attachWalkControls(
     if (touch === undefined) return
     touches.delete(event.pointerId)
     event.stopImmediatePropagation()
-    if (!touch.moved && clock.now() - touch.at < TAP_MS) acts.dig()
+    if (touch.hold !== undefined) clearTimeout(touch.hold)
+    // A mouse click digs; a finger has to be held.
+    if (event.pointerType === 'mouse' && !touch.moved && clock.now() - touch.at < TAP_MS) acts.dig()
     push()
   }
   const noMenu = (event: Event): void => {

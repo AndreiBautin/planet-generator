@@ -278,6 +278,75 @@ export function startScene(
   let markPlots: readonly Omit<PlotMarks, 'base'>[] = []
   let marks: THREE.Group | undefined
   let walkedPlot: string | undefined
+  // A puff of dust where the surveyor lands, in the landing's own frame,
+  // gone in a couple of seconds.
+  let dust: { readonly points: THREE.Points; readonly bornAt: number } | undefined
+  const DUST_MS = 1800
+  const DUST_COUNT = 90
+  const dustAt = (group: THREE.Object3D, x: number, y: number, z: number): void => {
+    clearDust()
+    const positions = new Float32Array(DUST_COUNT * 3)
+    const spread = new Float32Array(DUST_COUNT * 3)
+    for (let i = 0; i < DUST_COUNT; i += 1) {
+      const turn = (i / DUST_COUNT) * Math.PI * 2 + ((i * 7919) % 13) / 13
+      const speed = 2 + (((i * 104729) % 17) / 17) * 4
+      spread[i * 3] = Math.cos(turn) * speed
+      spread[i * 3 + 1] = 1 + (((i * 15485863) % 11) / 11) * 2.5
+      spread[i * 3 + 2] = Math.sin(turn) * speed
+      positions[i * 3] = x
+      positions[i * 3 + 1] = y
+      positions[i * 3 + 2] = z
+    }
+    const geometry = new THREE.BufferGeometry()
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3))
+    geometry.setAttribute('spread', new THREE.BufferAttribute(spread, 3))
+    geometry.userData['origin'] = [x, y, z]
+    const points = new THREE.Points(
+      geometry,
+      new THREE.PointsMaterial({
+        color: 0xc9b89a,
+        size: 0.5,
+        transparent: true,
+        opacity: 0.7,
+        depthWrite: false,
+      }),
+    )
+    group.add(points)
+    dust = { points, bornAt: clock.now() }
+  }
+  const clearDust = (): void => {
+    if (dust === undefined) return
+    dust.points.removeFromParent()
+    dust.points.geometry.dispose()
+    if (dust.points.material instanceof THREE.Material) dust.points.material.dispose()
+    dust = undefined
+  }
+  const settleDust = (now: number): void => {
+    if (dust === undefined) return
+    const t = (now - dust.bornAt) / DUST_MS
+    if (t >= 1) {
+      clearDust()
+      return
+    }
+    const geometry = dust.points.geometry
+    const position = geometry.getAttribute('position')
+    const spread = geometry.getAttribute('spread')
+    const origin = geometry.userData['origin'] as readonly [number, number, number]
+    // Out fast and slowing, up and then settling, like dust does.
+    const out = 1 - (1 - t) * (1 - t)
+    const lift = Math.sin(t * Math.PI)
+    for (let i = 0; i < DUST_COUNT; i += 1) {
+      position.setXYZ(
+        i,
+        origin[0] + spread.getX(i) * out,
+        origin[1] + spread.getY(i) * lift,
+        origin[2] + spread.getZ(i) * out,
+      )
+    }
+    position.needsUpdate = true
+    const material = dust.points.material
+    if (material instanceof THREE.PointsMaterial) material.opacity = 0.7 * (1 - t)
+  }
   const rebuildMarks = (): void => {
     if (marks !== undefined) {
       marks.removeFromParent()
@@ -618,6 +687,7 @@ export function startScene(
     const turn = (now / TURN_MS) * Math.PI * 2
     lastTurn = turn
     DETAIL_TIME.value = now / 1000
+    settleDust(now)
     DETAIL_RANGE.value = quality.featureRange
     // The clouds drift ahead of the ground by a sixth of its turn, and their
     // shadows fall from the sun's side.
@@ -712,6 +782,7 @@ export function startScene(
       landing = { view, hole: { centre: frame.origin, radius: (AREA / 2) * BLOCK * 0.92 } }
       walkedPlot = plot.name
       for (const group of marks?.children ?? []) group.visible = group.name !== plot.name
+      dustAt(view.group, AREA / 2, BASE_ROW + 0.5, AREA / 2)
       const startY = BASE_ROW + 2
       return {
         frame,
@@ -788,6 +859,7 @@ export function startScene(
       landing.view.dispose()
       landing = undefined
       walkedPlot = undefined
+      clearDust()
       for (const group of marks?.children ?? []) group.visible = true
     },
     diveFrom: () => {

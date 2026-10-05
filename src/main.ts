@@ -53,6 +53,7 @@ import {
 import { pickKind } from '@/generation/kinds'
 import { createRng } from '@/generation/rng'
 import { columnOf, type Block, type Frame } from '@/generation/voxel'
+import { createEngine } from '@/ui/engine'
 import { shareLink } from '@/ui/share'
 
 /**
@@ -186,11 +187,16 @@ const timedChanges = (): readonly TimedEdit[] =>
     const at = planted.get(key)
     return block === 'sapling' && at !== undefined ? [key, block, at] : [key, block]
   })
-/** Draw every mark left on this world from the air. */
+const engine = createEngine()
+/** The dials are set once a world has been landed on: the ground was cut from them. */
+const DIALS_LOCKED =
+  'Set, now that this world has been landed on: its ground was cut from these dials, and moving them would move it out from under what was built.'
+/** Draw every mark left on this world from the air, and lock the dials once there are any. */
 const showMarks = async (): Promise<void> => {
   const world = seed
   const plots = await loadPlots(world)
   if (world !== seed) return
+  hud.lockDials(plots.length > 0 || plot !== undefined ? DIALS_LOCKED : undefined)
   scene.setMarks(
     plots.flatMap(({ name, save }) => {
       const frame = plotFrameOf(name)
@@ -227,6 +233,7 @@ const saveSoon = (): void => {
 /** Leave the ground: the plot saved first, so the marks drawn from the air are the ones left. */
 const leaveGround = (): void => {
   if (plot === undefined) return
+  engine.liftOff()
   void saveNow().then(() => showMarks())
   // Forgotten before the ground goes: a save after take-off would read an
   // empty landing and write the plot as empty.
@@ -284,6 +291,8 @@ const dropIn = async (): Promise<void> => {
   )
   plot = under.name
   plotFrame = under.frame
+  hud.lockDials(DIALS_LOCKED)
+  engine.setDown()
   rig.drop(
     scene.landOn(
       under,

@@ -349,6 +349,15 @@
         font-size: 13px;
         line-height: 1.4;
       }
+      .dials-locked {
+        margin: 4px 0 0;
+        font-size: 12px;
+        line-height: 1.4;
+        color: var(--dim);
+      }
+      .dial input:disabled {
+        opacity: 0.4;
+      }
       @keyframes hint {
         0%,
         100% {
@@ -406,6 +415,7 @@
           Roughness
           <input id="dial-roughness" type="range" min="0" max="100" step="1" />
         </label>
+        <p class="dials-locked" id="dials-locked" hidden></p>
       </section>
       <section class="dials ship" id="ship" hidden aria-label="Ship">
         <p class="ship-line"><span id="ship-fuel"></span> · <span id="ship-hold"></span></p>

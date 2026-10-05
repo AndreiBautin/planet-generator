@@ -67,6 +67,8 @@ export interface Hud {
   readonly ship: (view: ShipView) => void
   /** What the scope reads, or nothing to show. */
   readonly scope: (reading: ScopeReading | undefined) => void
+  /** Lock the dials, with the reason shown, or free them. */
+  readonly lockDials: (reason: string | undefined) => void
 }
 
 const element = <T extends HTMLElement>(id: string, type: new () => T): T => {
@@ -101,6 +103,7 @@ export function attachHud(handlers: HudHandlers): Hud {
   const shipLog = element('ship-log', HTMLElement)
   const shipClue = element('ship-clue', HTMLElement)
   const scopeLine = element('scope', HTMLElement)
+  const dialsLocked = element('dials-locked', HTMLElement)
   shipToggle.addEventListener('click', () => {
     shipPanel.hidden = !shipPanel.hidden
     shipToggle.setAttribute('aria-pressed', String(!shipPanel.hidden))
@@ -186,7 +189,7 @@ export function attachHud(handlers: HudHandlers): Hud {
       hotbar.hidden = mode !== 'walking'
       hint.textContent =
         mode === 'walking'
-          ? 'Left moves · right looks · tap to dig · Place to build'
+          ? 'Left moves · right looks · hold to dig · Place to build'
           : 'Drag to steer and climb · pinch to change height'
       document.body.classList.toggle('flying', mode !== 'orbit')
       document.body.classList.toggle('walking', mode === 'walking')
@@ -279,6 +282,11 @@ export function attachHud(handlers: HudHandlers): Hud {
         button.setAttribute('aria-pressed', String(block === held))
         hotbar.append(button)
       }
+    },
+    lockDials: (reason) => {
+      for (const input of Object.values(dials)) input.disabled = reason !== undefined
+      dialsLocked.hidden = reason === undefined
+      if (reason !== undefined) dialsLocked.textContent = reason
     },
     scope: (reading) => {
       scopeLine.hidden = reading === undefined

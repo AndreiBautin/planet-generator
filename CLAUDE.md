@@ -384,6 +384,18 @@ piece is in:
 - **The Place and Jump buttons listen to pointer events**, so a
   scripted `.click()` on them in the preview does nothing; press them
   with a real click when checking a build on the ground.
+- **A finger digs by holding still (`HOLD_MS`), a mouse by clicking.**
+  A tap used to dig, and a look around on a phone took blocks out of
+  whatever the crosshair crossed. The hold timer is cleared the moment
+  the finger moves past `TAP_PIXELS`. The engine (`ui/engine.ts`) is two
+  detuned saws through a low-pass, made on the first press that asks for
+  it; the landing puffs dust (`dustAt` in the scene, settled every frame
+  from the clock) in the landing group's own frame. **The dials lock once
+  a world has been landed on** — `hud.lockDials` with the reason shown —
+  because the ground was cut from them and moving them would move it out
+  from under what was built; `showMarks` decides from the saved plots.
+  The engine and the dust were not heard or seen in the preview: the
+  pane plays no audio, and the one landing checked was on the night side.
 
 ## Traps
 

@@ -98,7 +98,7 @@ it can be. Checked when live.
 
 ### E — Phone and polish
 
-- [ ] **E1** One-thumb everything; block targets big; long-press to break.
-- [ ] **E2** Landing and take-off as a moment: dust, the ship's shadow,
+- [x] **E1** One-thumb everything; block targets big; long-press to break.
+- [x] **E2** Landing and take-off as a moment: dust, the ship's shadow,
       the sound of the engine.
-- [ ] **E3** The Tune dials lock once a world has been landed on.
+- [x] **E3** The Tune dials lock once a world has been landed on.
