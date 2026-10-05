@@ -62,6 +62,8 @@ export interface Scene {
   readonly diveFrom: () => { readonly position: Vec3; readonly heading: Vec3 }
   /** The orbit angles that look straight down on a point of the planet, as it is turned now. */
   readonly orbitOver: (position: Vec3) => { readonly yaw: number; readonly pitch: number }
+  /** Draw one frame now: for the development recorder, with `manual` set. */
+  readonly step: () => void
   readonly dispose: () => void
 }
 
@@ -94,6 +96,11 @@ export interface SceneOptions {
   readonly reducedMotion: boolean
   /** Where `public/` is served from, for the ground's photographs. */
   readonly assetBase: string
+  /**
+   * Draw only when `step` is called, never on the display's own beat: the
+   * development recorder's way of rendering an exact run of frames.
+   */
+  readonly manual?: boolean
 }
 
 /** What belongs to one planet and goes when the next is shown. */
@@ -624,11 +631,12 @@ export function startScene(
     if (stars instanceof THREE.PointsMaterial) stars.opacity = 1 - low * day * 0.92
   }
 
-  renderer.setAnimationLoop(() => {
+  const tick = (): void => {
     const now = clock.now()
     frames.push(now - lastFrameAt)
     lastFrameAt = now
-    if (frames.length >= FRAME_WINDOW) {
+    // Not while recording: frames there take whatever time they are told to.
+    if (options.manual !== true && frames.length >= FRAME_WINDOW) {
       const next = nextPixelRatio(pixelRatio, typicalFrame(frames))
       frames.length = 0
       if (next !== pixelRatio) {
@@ -676,7 +684,8 @@ export function startScene(
     }
     if (composer === undefined) renderer.render(scene, camera)
     else composer.render()
-  })
+  }
+  if (options.manual !== true) renderer.setAnimationLoop(tick)
 
   /** How heavy a shower falls on the eye: the cloud over it, only low down. */
   const rainOver = (clouds: THREE.Mesh, turn: number): number => {
@@ -714,6 +723,7 @@ export function startScene(
       const position = landNear(shown.world, under, unit(heading))
       return { position, heading: alongTheLand(shown.world, position, unit(heading)) }
     },
+    step: tick,
     orbitOver: (position) => {
       const [x, y, z] = intoRoom(position, lastTurn)
       return { yaw: Math.atan2(x, z), pitch: Math.asin(Math.max(-1, Math.min(1, y))) }

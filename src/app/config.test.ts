@@ -10,7 +10,7 @@ describe('configuration', () => {
 
   it('takes a known level', () => {
     expect(parseConfig({ VITE_LOG_LEVEL: 'error' }, false)).toEqual({
-      config: { logLevel: 'error', serviceWorker: true, assetBase: '/' },
+      config: { logLevel: 'error', serviceWorker: true, assetBase: '/', developer: false },
       warnings: [],
     })
   })

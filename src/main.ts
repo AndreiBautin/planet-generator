@@ -1,4 +1,4 @@
-import { systemClock } from '@/app/clock'
+import { fixedClock, systemClock } from '@/app/clock'
 import { readConfig } from '@/app/config'
 import { linkFor, parseLink } from '@/app/link'
 import { createPlanet, DEFAULT_DIALS, type Dials, type Planet } from '@/generation/planet'
@@ -52,9 +52,18 @@ document.body.prepend(canvas)
 // The ground a glide flies over is the planet on screen: read through a
 // variable, because a dial moved mid-flight swaps the planet under it.
 let planet: Planet = createPlanet(seed, dials)
-const rig = createRig(systemClock, () => (direction) => groundRadiusAt(planet, direction))
-attachGestures(canvas, systemClock, rig.gestures)
-const scene = startScene(canvas, systemClock, rig.view, {
+// Development only: `?record` drives time and frames by hand, so a run of
+// frames can be rendered exactly and compared — the only way to see flicker
+// in a preview that draws nothing on its own.
+const recording = config.developer && new URLSearchParams(window.location.search).has('record')
+// `?record=120000` starts the clock that far in, for a different time of day.
+const recordStart = Number(new URLSearchParams(window.location.search).get('record'))
+const recordClock = fixedClock(Number.isFinite(recordStart) && recordStart > 0 ? recordStart : 1000)
+const clock = recording ? recordClock : systemClock
+const rig = createRig(clock, () => (direction) => groundRadiusAt(planet, direction))
+attachGestures(canvas, clock, rig.gestures)
+const scene = startScene(canvas, clock, rig.view, {
+  manual: recording,
   quality,
   builder: createBuilder(navigator.hardwareConcurrency),
   reducedMotion: window.matchMedia('(prefers-reduced-motion: reduce)').matches,
@@ -150,5 +159,22 @@ void show(true)
 if (config.serviceWorker && 'serviceWorker' in navigator) {
   navigator.serviceWorker.register(new URL('sw.js', document.baseURI)).catch(() => {
     logger.warn('service-worker.failed')
+  })
+}
+
+if (recording) {
+  Object.assign(window, {
+    recorder: {
+      /** Move time on by `ms` and draw one frame. */
+      step: (ms: number) => {
+        recordClock.advance(ms)
+        scene.step()
+      },
+      /** Turn and climb as the keyboard does. */
+      nudge: (turn: number, climb: number) => {
+        rig.nudge(turn, climb)
+      },
+      canvas,
+    },
   })
 }

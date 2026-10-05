@@ -17,6 +17,8 @@ export interface Config {
   readonly serviceWorker: boolean
   /** Where the build's public files are served from, with its trailing slash: `/` or `/planet-generator/`. */
   readonly assetBase: string
+  /** A development build: the tools that are never shipped, such as the frame recorder, may run. */
+  readonly developer: boolean
 }
 
 export interface ConfigResult {
@@ -24,7 +26,12 @@ export interface ConfigResult {
   readonly warnings: readonly string[]
 }
 
-export const DEFAULT_CONFIG: Config = { logLevel: 'warn', serviceWorker: true, assetBase: '/' }
+export const DEFAULT_CONFIG: Config = {
+  logLevel: 'warn',
+  serviceWorker: true,
+  assetBase: '/',
+  developer: false,
+}
 
 export function parseConfig(env: Readonly<Record<string, unknown>>, dev: boolean): ConfigResult {
   const warnings: string[] = []
@@ -45,7 +52,12 @@ export function parseConfig(env: Readonly<Record<string, unknown>>, dev: boolean
         : `${base}/`
       : DEFAULT_CONFIG.assetBase
   return {
-    config: { logLevel, serviceWorker: !dev && DEFAULT_CONFIG.serviceWorker, assetBase },
+    config: {
+      logLevel,
+      serviceWorker: !dev && DEFAULT_CONFIG.serviceWorker,
+      assetBase,
+      developer: dev,
+    },
     warnings,
   }
 }
