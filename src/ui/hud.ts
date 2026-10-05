@@ -10,15 +10,21 @@ export interface HudHandlers {
   readonly onNew: () => void
   readonly onShare: () => void
   readonly onDials: (dials: Dials) => void
-  /** Fly when orbiting, land when flying. */
+  /** Fly when orbiting, drop in when flying, take off when walking. */
   readonly onFly: () => void
+  /** Back to orbit from a glide or a walk. */
+  readonly onOrbit: () => void
 }
+
+export type Mode = 'orbit' | 'flying' | 'walking'
 
 export interface Hud {
   readonly render: (planet: Planet) => void
   readonly toast: (message: string) => void
-  /** Say whether the camera is flying: the button's word, and the hint. */
-  readonly flying: (flying: boolean) => void
+  /** Say what the camera is doing: the buttons' words, and the hint. */
+  readonly mode: (mode: Mode) => void
+  /** The Jump button, for the walk controls to listen to. */
+  readonly jump: HTMLElement
 }
 
 const element = <T extends HTMLElement>(id: string, type: new () => T): T => {
@@ -47,6 +53,10 @@ export function attachHud(handlers: HudHandlers): Hud {
   element('share', HTMLButtonElement).addEventListener('click', handlers.onShare)
   const fly = element('fly', HTMLButtonElement)
   fly.addEventListener('click', handlers.onFly)
+  const orbit = element('orbit', HTMLButtonElement)
+  orbit.addEventListener('click', handlers.onOrbit)
+  const hint = element('hint', HTMLElement)
+  const jump = element('jump', HTMLButtonElement)
   tune.addEventListener('click', () => {
     panel.hidden = !panel.hidden
     tune.setAttribute('aria-pressed', String(!panel.hidden))
@@ -80,11 +90,23 @@ export function attachHud(handlers: HudHandlers): Hud {
       dials.temperature.value = String(Math.round(planet.dials.temperature * 100))
       dials.roughness.value = String(Math.round(planet.dials.roughness * 100))
     },
-    flying: (flying) => {
-      fly.textContent = flying ? 'Land' : 'Fly'
-      fly.setAttribute('aria-pressed', String(flying))
-      document.body.classList.toggle('flying', flying)
+    mode: (mode) => {
+      fly.textContent = mode === 'orbit' ? 'Fly' : mode === 'flying' ? 'Drop in' : 'Take off'
+      fly.setAttribute('aria-pressed', String(mode !== 'orbit'))
+      orbit.hidden = mode === 'orbit'
+      jump.hidden = mode !== 'walking'
+      hint.textContent =
+        mode === 'walking'
+          ? 'Left side moves · right side looks · Jump to jump'
+          : 'Drag to steer and climb · pinch to change height'
+      document.body.classList.toggle('flying', mode !== 'orbit')
+      document.body.classList.toggle('walking', mode === 'walking')
+      // Restart the hint's fade for the new words.
+      hint.style.animation = 'none'
+      void hint.getBoundingClientRect()
+      hint.style.animation = ''
     },
+    jump,
     toast: (message) => {
       toastLine.textContent = message
       toastLine.classList.add('shown')

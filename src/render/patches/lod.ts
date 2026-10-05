@@ -46,6 +46,21 @@ export interface ViewCone {
   readonly halfAngle: number
 }
 
+/** A cap of the planet nothing is drawn in: where a landing's blocks stand instead. */
+export interface Hole {
+  readonly centre: Vec3
+  /** Angular radius, radians. */
+  readonly radius: number
+}
+
+/** Whether a patch lies wholly inside a hole. */
+export function insideHole(key: PatchKey, hole: Hole): boolean {
+  const centre = centreOf(key)
+  const cos = centre[0] * hole.centre[0] + centre[1] * hole.centre[1] + centre[2] * hole.centre[2]
+  const off = Math.acos(Math.max(-1, Math.min(1, cos)))
+  return off + patchAngle(key.level) * 0.75 < hole.radius
+}
+
 /** Ground out of view is split no further than this. */
 export const UNSEEN_LEVEL = 3
 

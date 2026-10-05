@@ -254,6 +254,32 @@ piece is in:
   the edge**: features are read off the landing point's face only. Twelve
   edges on a planet; accepted until it is seen.
 
+- **A chunk is meshed in the worker and placed by one matrix.**
+  `generation/chunk.ts` (pure, tested) turns a landing's 16 × 16 columns
+  into the visible faces only, with a one-block halo so edges are decided
+  without the neighbour, ambient occlusion baked per corner, and per
+  vertex which ground photograph the face wears and where on it; water and
+  lava are a second mesh. `render/voxel/landing-view.ts` streams chunks
+  around the surveyor through the builder's `chunk` request (the worker
+  keeps the last landing, since stamping its features costs more than most
+  chunks) and places the whole group with one matrix — moved to the
+  landing point at sea level, turned so y is the local up, scaled by
+  `BLOCK` — as a child of the terrain group, so it turns with the planet.
+  A `Hole` (lod.ts) keeps the planet's own patches and features from being
+  drawn under the blocks.
+- **Walking is a third camera, on top of the glide.** `ui/walker.ts`
+  (pure, tested): gravity, a body of 0.3 × 1.75 blocks, collision one axis
+  at a time so a wall is slid along and a one-block step is climbed,
+  swimming in fluid. `rig.drop` freezes the glide where it is and stands
+  the surveyor at the landing's middle; it does not step until the chunk
+  under the feet is in, or it would fall through the world. `takeOff` puts
+  the glide back over the column walked to. `ui/walk-controls.ts` is
+  installed in the capture phase and stops the event while walking, so the
+  orbit and glide gestures on the same canvas never see a walking finger.
+  Walking, the camera's near plane is a hand's breadth (`BLOCK * 0.15`)
+  and the far plane 3: the depth buffer is spent on the blocks, not on a
+  planet the blocks hide.
+
 ## Traps
 
 - **Every patch geometry wraps the shared index array in its own

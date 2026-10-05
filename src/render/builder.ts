@@ -1,5 +1,8 @@
+import type { ChunkMesh } from '@/generation/chunk'
+import type { Vec3 } from '@/generation/cube'
 import type { Dials } from '@/generation/planet'
 import type { Seed } from '@/generation/seed'
+import type { Block } from '@/generation/voxel'
 import { logger } from '@/shared/logger'
 
 import type { WorkRequest, WorkResult } from './build-protocol'
@@ -22,6 +25,15 @@ export interface Builder {
   readonly clouds: (seed: Seed, dials: Dials, width: number) => Promise<Uint8Array>
   readonly patch: (seed: Seed, dials: Dials, key: PatchKey, segments: number) => Promise<PatchData>
   readonly features: (seed: Seed, dials: Dials, key: PatchKey) => Promise<Scatter>
+  /** A chunk of the landing at `origin`: its mesh and its blocks. */
+  readonly chunk: (
+    seed: Seed,
+    dials: Dials,
+    origin: Vec3,
+    cx: number,
+    cz: number,
+    edits: readonly (readonly [number, Block])[],
+  ) => Promise<{ readonly mesh: ChunkMesh; readonly blocks: Uint8Array }>
 }
 
 interface Lane {
@@ -83,6 +95,12 @@ export function createBuilder(cores: number): Builder {
       const result = await run({ id: next, kind: 'patch', seed, dials, key, segments })
       if (result.kind !== 'patch') throw new Error('builder answered a patch with something else')
       return result.patch
+    },
+    chunk: async (seed, dials, origin, cx, cz, edits) => {
+      next += 1
+      const result = await run({ id: next, kind: 'chunk', seed, dials, origin, cx, cz, edits })
+      if (result.kind !== 'chunk') throw new Error('builder answered a chunk with something else')
+      return { mesh: result.mesh, blocks: result.blocks }
     },
     features: async (seed, dials, key) => {
       next += 1

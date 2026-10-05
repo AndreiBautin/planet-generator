@@ -37,6 +37,8 @@ export interface Quality {
   readonly featureInFlight: number
   /** Width of the sun's shadow map near the ground; 0 for no shadows. */
   readonly shadowMap: number
+  /** Chunks of a landing kept around the surveyor, as a radius. */
+  readonly chunkReach: number
   /** Cloud texture width; its height is half. */
   readonly cloudWidth: number
   readonly pixelRatio: number
@@ -58,6 +60,7 @@ export function pickQuality(device: Device): Quality {
     featureRange: phone ? (modest ? 0.05 : 0.07) : 0.11,
     featureInFlight: phone ? 8 : 16,
     shadowMap: phone ? (modest ? 0 : 1024) : 2048,
+    chunkReach: phone ? (modest ? 3 : 4) : 6,
     cloudWidth: phone ? 512 : 1024,
     pixelRatio: Math.min(device.pixelRatio, modest ? 1.5 : 2),
   }

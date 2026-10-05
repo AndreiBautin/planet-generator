@@ -22,10 +22,14 @@ import {
   withWaterDetail,
 } from './detail'
 import type { Vec3 } from './patches/cube'
+import { LandingView } from './voxel/landing-view'
 import type { ViewCone } from './patches/lod'
 import { Terrain } from './patches/terrain'
 import { nextPixelRatio, typicalFrame, type Quality } from './quality'
 import { groundTextures } from './textures'
+import { groundRadiusAt } from '@/generation/ground'
+import { AREA, BLOCK, directionOf, frameAt, groundRowOf, type Frame } from '@/generation/voxel'
+import type { Hole } from './patches/lod'
 import { waterMaterial } from './water'
 
 /**
@@ -48,6 +52,13 @@ export interface Scene {
    * the picture the person was looking at.
    */
   readonly diveFrom: () => { readonly position: Vec3; readonly heading: Vec3 }
+  /**
+   * Cut the ground under the camera into blocks and stream it in: the
+   * landing's frame, the row to stand on, and what is at any block.
+   */
+  readonly landOn: () => Landed | undefined
+  /** Let the landing go, and draw the planet's own ground there again. */
+  readonly takeOff: () => void
   /** The orbit angles that look straight down on a point of the planet, as it is turned now. */
   readonly orbitOver: (position: Vec3) => { readonly yaw: number; readonly pitch: number }
   readonly dispose: () => void
@@ -73,6 +84,15 @@ export interface CameraView {
     | undefined
   /** 0 is all orbit, 1 all glide. */
   readonly blend: number
+  /** The surveyor's eye on a landing, in the landing's own frame; absent unless walking. */
+  readonly walk:
+    | {
+        readonly eye: readonly [number, number, number]
+        readonly forward: readonly [number, number, number]
+        readonly x: number
+        readonly z: number
+      }
+    | undefined
 }
 
 export interface SceneOptions {
@@ -84,10 +104,19 @@ export interface SceneOptions {
   readonly assetBase: string
 }
 
+/** A landing on screen, for the rig to stand a surveyor on. */
+export interface Landed {
+  readonly frame: Frame
+  readonly startY: number
+  readonly stuff: (x: number, y: number, z: number) => 'air' | 'solid' | 'liquid'
+  readonly ready: (x: number, z: number) => boolean
+}
+
 /** What belongs to one planet and goes when the next is shown. */
 interface Shown {
   readonly seed: string
   readonly kind: string
+  readonly world: Planet
   readonly terrain: Terrain
   readonly clouds: THREE.Mesh
   readonly air: THREE.Mesh
@@ -160,6 +189,14 @@ export function startScene(
   const rain = new Rain()
   scene.add(rain.object)
   const rainEye = new THREE.Vector3()
+  // The landing's blocks, while the surveyor is down; a hole in the ground
+  // under them, so the planet's own surface does not poke through.
+  let landing: { readonly view: LandingView; readonly hole: Hole } | undefined
+  const walkEye = new THREE.Vector3()
+  const walkLook = new THREE.Vector3()
+  const walkUp = new THREE.Vector3()
+  const walkForward = new THREE.Vector3()
+  const walkQuat = new THREE.Quaternion()
 
   const { quality, builder } = options
   let shown: Shown | undefined
@@ -242,6 +279,10 @@ export function startScene(
       sky = buildSky(next.world, pixelRatio)
     }
     if (previous !== undefined) {
+      if (landing !== undefined) {
+        landing.view.dispose()
+        landing = undefined
+      }
       scene.remove(previous.terrain.group)
       previous.terrain.dispose()
       if (!keep) {
@@ -257,6 +298,7 @@ export function startScene(
     shown = {
       seed: next.world.seed,
       kind: next.world.kind,
+      world: next.world,
       terrain: next.terrain,
       clouds,
       air,
@@ -312,7 +354,21 @@ export function startScene(
       distance * Math.cos(pitch) * Math.cos(yaw),
     )
     const t = view.surface === undefined ? 0 : Math.min(1, Math.max(0, view.blend))
-    if (view.surface === undefined || t === 0) {
+    if (view.walk !== undefined && landing !== undefined) {
+      // On the ground: the eye in the landing's frame, taken out through
+      // the landing group's own matrix (which the terrain group turns).
+      const { eye, forward } = view.walk
+      landing.view.group.updateMatrixWorld()
+      landing.view.group.getWorldQuaternion(walkQuat)
+      walkEye.set(eye[0], eye[1], eye[2])
+      landing.view.group.localToWorld(walkEye)
+      walkForward.set(forward[0], forward[1], forward[2]).applyQuaternion(walkQuat).normalize()
+      walkUp.set(0, 1, 0).applyQuaternion(walkQuat).normalize()
+      camera.position.copy(walkEye)
+      camera.up.copy(walkUp)
+      walkLook.copy(walkEye).addScaledVector(walkForward, 0.01)
+      camera.lookAt(walkLook)
+    } else if (view.surface === undefined || t === 0) {
       camera.position.copy(orbitEye)
       camera.up.copy(ROOM_UP)
       camera.lookAt(ORIGIN)
@@ -326,7 +382,7 @@ export function startScene(
       camera.up.copy(up)
       camera.lookAt(target)
     }
-    const wanted = view.surface === undefined ? 0 : view.surface.rush * t
+    const wanted = view.surface === undefined || view.walk !== undefined ? 0 : view.surface.rush * t
     if (Math.abs(wanted - rush) > 0.002) {
       rush = wanted
       frame()
@@ -338,7 +394,7 @@ export function startScene(
     if (renderer.shadowMap.enabled) {
       // Shadows only low down, where a tree is big enough to throw one:
       // from orbit the pass would cost a frame and show nothing.
-      const low = t > 0 && above < 0.2
+      const low = (t > 0 && above < 0.2) || view.walk !== undefined
       sun.castShadow = low
       if (low) {
         shadowGround.copy(camera.position).normalize()
@@ -355,9 +411,15 @@ export function startScene(
         box.updateProjectionMatrix()
       }
     }
-    const near = Math.min(0.1, Math.max(0.0004, above * 0.2))
-    if (Math.abs(near - camera.near) > camera.near * 0.05) {
+    // Walking, the near plane is a hand's breadth and the far plane the
+    // horizon, or the blocks in front of the eye are cut away and the
+    // depth buffer is spent on a planet the blocks hide anyway.
+    const near =
+      view.walk !== undefined ? BLOCK * 0.15 : Math.min(0.1, Math.max(0.0004, above * 0.2))
+    const far = view.walk !== undefined ? 3 : 100
+    if (Math.abs(near - camera.near) > camera.near * 0.05 || far !== camera.far) {
       camera.near = near
+      camera.far = far
       camera.updateProjectionMatrix()
     }
     airAround(above)
@@ -415,7 +477,8 @@ export function startScene(
     // shadows fall from the sun's side.
     DETAIL_CLOUD_SPIN.value = -0.15 * turn
     DETAIL_CLOUD_SUN.value.set(...inPlanetFrame(sunDirection, turn, 1))
-    place(view(), turn)
+    const current = view()
+    place(current, turn)
     if (coming !== undefined) {
       coming.terrain.update(inPlanetFrame(camera.position, turn, 1), viewCone(turn))
       if (coming.terrain.ready && (coming.keepClouds || coming.clouds !== undefined)) {
@@ -436,7 +499,13 @@ export function startScene(
       modelView.copy(camera.matrixWorld).invert().multiply(shown.terrain.group.matrixWorld)
       DETAIL_NORMAL_MATRIX.value.getNormalMatrix(modelView)
       cloudsSeenFrom(shown.clouds, camera.position.length(), stage.scale, stage.clouds)
-      shown.terrain.update(inPlanetFrame(camera.position, turn, stage.scale), viewCone(turn))
+      shown.terrain.update(
+        inPlanetFrame(camera.position, turn, stage.scale),
+        viewCone(turn),
+        landing?.hole,
+      )
+      const walk = current.walk
+      if (landing !== undefined && walk !== undefined) landing.view.update(walk.x, walk.z)
       rain.update(rainEye.copy(camera.position), rainOver(shown.clouds, turn))
     }
     renderer.render(scene, camera)
@@ -462,6 +531,35 @@ export function startScene(
 
   return {
     show,
+    landOn: () => {
+      if (shown === undefined) return undefined
+      const world = shown.world
+      const direction = unit(inPlanetFrame(camera.position, lastTurn, 1))
+      const frame = frameAt(direction)
+      if (landing !== undefined) {
+        shown.terrain.group.remove(landing.view.group)
+        landing.view.dispose()
+      }
+      const view = new LandingView(world, frame, builder, ground, {
+        reach: quality.chunkReach,
+        inFlight: quality.inFlight,
+      })
+      shown.terrain.group.add(view.group)
+      landing = { view, hole: { centre: frame.origin, radius: (AREA / 2) * BLOCK * 0.92 } }
+      const startY = groundRowOf(groundRadiusAt(world, directionOf(frame, AREA / 2, AREA / 2))) + 2
+      return {
+        frame,
+        startY,
+        stuff: (x, y, z) => view.stuffAt(x, y, z),
+        ready: (x, z) => view.ready(x, z),
+      }
+    },
+    takeOff: () => {
+      if (landing === undefined) return
+      landing.view.group.removeFromParent()
+      landing.view.dispose()
+      landing = undefined
+    },
     diveFrom: () => {
       const position = unit(inPlanetFrame(camera.position, lastTurn, 1))
       // The screen's up, taken into the planet's frame, is the way ahead.
@@ -474,6 +572,7 @@ export function startScene(
       return { yaw: Math.atan2(x, z), pitch: Math.asin(Math.max(-1, Math.min(1, y))) }
     },
     dispose: () => {
+      landing?.view.dispose()
       rain.dispose()
       renderer.setAnimationLoop(null)
       window.removeEventListener('resize', resize)

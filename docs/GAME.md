@@ -45,16 +45,16 @@ it can be. Checked when live.
       heights, basalt and lava on a molten world, water below sea level,
       block trees and stone clusters where the flyover had them. Pure,
       tested, deterministic.
-- [ ] **A2 Mesher and renderer.** Chunks of 16 × 16 columns, visible faces
+- [x] **A2 Mesher and renderer.** Chunks of 16 × 16 columns, visible faces
       only, baked vertex ambient occlusion, one texture atlas cut from the
       ground photographs. Streams around the player.
-- [ ] **A3 The walker.** Touch: left thumb moves, right thumb looks, jump
+- [x] **A3 The walker.** Touch: left thumb moves, right thumb looks, jump
       button. Desktop: WASD, mouse look, space. Gravity, collision,
       step-up, swimming in water.
 - [ ] **A4 Dig and build.** Raycast to the block looked at; tap to break,
       tap a face to place; a hotbar of what is held. Edits saved per seed
       as a diff and applied over the sampler on load.
-- [ ] **A5 Land and take off.** From a glide, Land drops the ship's
+- [x] **A5 Land and take off.** From a glide, Land drops the ship's
       surveyor onto the ground under it; Take off climbs back into the
       glide with the chunks streaming out. The planet, the sky, the
       clouds and the weather are the same ones.

@@ -11,6 +11,7 @@ import { logger, setLogLevel } from '@/shared/logger'
 import { attachGestures } from '@/ui/controls'
 import { attachHud } from '@/ui/hud'
 import { createRig } from '@/ui/rig'
+import { attachWalkControls } from '@/ui/walk-controls'
 import { shareLink } from '@/ui/share'
 
 /**
@@ -78,12 +79,16 @@ const show = async (born: boolean): Promise<void> => {
   logger.info('planet.shown', { seed, kind: next.kind })
 }
 
+const modeOf = (): 'orbit' | 'flying' | 'walking' =>
+  rig.walking() ? 'walking' : rig.flying() ? 'flying' : 'orbit'
+
 const hud = attachHud({
   onNew: () => {
     // A new world is born in orbit: rising over the old one first would be
     // two seconds of a planet that is about to be replaced.
+    scene.takeOff()
     rig.cut()
-    hud.flying(false)
+    hud.mode('orbit')
     seed = freshSeed()
     dials = DEFAULT_DIALS
     window.history.pushState(null, '', linkFor(seed, dials))
@@ -95,9 +100,21 @@ const hud = attachHud({
     })
   },
   onFly: () => {
-    if (rig.flying()) rig.land(scene.orbitOver)
-    else rig.fly(scene.diveFrom())
-    hud.flying(rig.flying())
+    if (rig.walking()) {
+      rig.takeOff()
+      scene.takeOff()
+    } else if (rig.flying()) {
+      const landed = scene.landOn()
+      if (landed !== undefined) rig.drop(landed)
+    } else {
+      rig.fly(scene.diveFrom())
+    }
+    hud.mode(modeOf())
+  },
+  onOrbit: () => {
+    if (rig.walking()) scene.takeOff()
+    rig.land(scene.orbitOver)
+    hud.mode(modeOf())
   },
   onDials: (next) => {
     dials = next
@@ -108,9 +125,19 @@ const hud = attachHud({
   },
 })
 
+attachWalkControls(canvas, hud.jump, rig.walking, rig.walk)
+
 // Arrow keys steer a glide on a keyboard, and Escape lands.
 window.addEventListener('keydown', (event) => {
-  if (!rig.flying() || event.target instanceof HTMLInputElement) return
+  if (!(rig.flying() || rig.walking()) || event.target instanceof HTMLInputElement) return
+  if (rig.walking()) {
+    if (event.key === 'Escape') {
+      scene.takeOff()
+      rig.land(scene.orbitOver)
+      hud.mode('orbit')
+    }
+    return
+  }
   const steps: Record<string, readonly [number, number]> = {
     ArrowLeft: [-0.04, 0],
     ArrowRight: [0.04, 0],
@@ -126,14 +153,15 @@ window.addEventListener('keydown', (event) => {
     event.preventDefault()
     rig.nudge(step[0], step[1])
   } else if (event.key === 'Escape') {
+    if (rig.walking()) scene.takeOff()
     rig.land(scene.orbitOver)
-    hud.flying(false)
+    hud.mode('orbit')
   }
 })
 
 window.addEventListener('popstate', () => {
   rig.cut()
-  hud.flying(false)
+  hud.mode('orbit')
   const link = parseLink(window.location.search)
   const changed = link.seed !== seed
   seed = link.seed ?? freshSeed()

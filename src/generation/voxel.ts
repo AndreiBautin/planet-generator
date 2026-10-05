@@ -48,12 +48,16 @@ export const BLOCKS = [
 ] as const
 export type Block = (typeof BLOCKS)[number]
 
-export interface Landing {
-  readonly planet: Planet
+/** The tangent frame of a landing: where it is and which way is east and north. */
+export interface Frame {
   /** The landing point, a unit direction. */
   readonly origin: Vec3
   readonly east: Vec3
   readonly north: Vec3
+}
+
+export interface Landing extends Frame {
+  readonly planet: Planet
   /** Blocks the features stamp into the air above the ground: trunks, crowns, stone. */
   readonly stamps: ReadonlyMap<number, Block>
 }
@@ -74,7 +78,7 @@ export const blockKey = (x: number, y: number, z: number): number =>
   ((x + 1024) * 2048 + (z + 1024)) * 256 + y
 
 /** The unit direction of a block column's centre, from the landing frame. */
-export function directionOf(landing: Landing, x: number, z: number): Vec3 {
+export function directionOf(landing: Frame, x: number, z: number): Vec3 {
   const ex = (x - AREA / 2 + 0.5) * BLOCK
   const nz = (z - AREA / 2 + 0.5) * BLOCK
   return unit([
@@ -85,7 +89,7 @@ export function directionOf(landing: Landing, x: number, z: number): Vec3 {
 }
 
 /** The block column a direction falls in: the inverse of `directionOf`, unrounded. */
-export function columnOf(landing: Landing, direction: Vec3): readonly [number, number] {
+export function columnOf(landing: Frame, direction: Vec3): readonly [number, number] {
   const along = dot(direction, landing.origin) || 1e-9
   return [
     dot(direction, landing.east) / along / BLOCK + AREA / 2 - 0.5,
@@ -251,11 +255,17 @@ function stamp(
  * on; an area straddling a cube edge misses the strip over the edge, which
  * is twelve edges on a planet and is accepted.
  */
-export function landingAt(planet: Planet, direction: Vec3): Landing {
+/** The frame of a landing at a point: east is along the planet's turn, north towards its pole. */
+export function frameAt(direction: Vec3): Frame {
   const origin = unit(direction)
   const polar = Math.abs(origin[1]) > 0.999
   const east = unit(cross(polar ? [0, 0, 1] : [0, 1, 0], origin))
   const north = cross(origin, east)
+  return { origin, east, north }
+}
+
+export function landingAt(planet: Planet, direction: Vec3): Landing {
+  const { origin, east, north } = frameAt(direction)
   const stamps = new Map<number, Block>()
   const landing: Landing = { planet, origin, east, north, stamps }
 

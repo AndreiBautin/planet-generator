@@ -7,7 +7,7 @@ import { DETAIL_TIME } from '../detail'
 import type { GroundLayer } from '../textures'
 import { keyOf, patchAngle, type PatchKey, type Vec3 } from './cube'
 import { featureMaterial, featuresFor } from './feature-models'
-import { aheadOf, centreOf, featureTiles, type ViewCone } from './lod'
+import { aheadOf, centreOf, featureTiles, insideHole, type Hole, type ViewCone } from './lod'
 import { SCATTER_LEVEL } from './scatter'
 
 /**
@@ -62,10 +62,12 @@ export class Flora {
     this.options = options
   }
 
-  update(camera: Vec3, view?: ViewCone): void {
+  update(camera: Vec3, view?: ViewCone, hole?: Hole): void {
     if (this.disposed) return
     this.frame += 1
-    const wanted = featureTiles(camera, SCATTER_LEVEL, this.options.range * PREFETCH, view)
+    const wanted = featureTiles(camera, SCATTER_LEVEL, this.options.range * PREFETCH, view).filter(
+      (key) => hole === undefined || !insideHole(key, hole),
+    )
     const reach = patchAngle(SCATTER_LEVEL) * 0.75
     const shown = new Set(
       wanted

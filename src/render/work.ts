@@ -1,4 +1,6 @@
+import { chunkBlocks, meshChunk } from '@/generation/chunk'
 import { createPlanet, type Planet } from '@/generation/planet'
+import { blockKey, landingAt, type Landing } from '@/generation/voxel'
 
 import type { WorkRequest, WorkResult } from './build-protocol'
 import { samplePatch } from './patches/patch-data'
@@ -29,6 +31,27 @@ function planetFor(request: WorkRequest): Planet {
   return planet
 }
 
+/**
+ * The landing is kept for the last point asked about: a landing streams in
+ * as a hundred chunk requests, and stamping its features takes longer than
+ * most of the chunks.
+ */
+let held: { readonly name: string; readonly landing: Landing } | undefined
+
+function landingFor(planet: Planet, origin: readonly [number, number, number]): Landing {
+  const name = `${planet.seed}|${origin.map((n) => n.toFixed(9)).join(',')}`
+  if (held?.name === name) return held.landing
+  const landing = landingAt(planet, origin)
+  held = { name, landing }
+  return landing
+}
+
+/** The linear colours of a planet's palette, the way the chunk mesher wants them. */
+function linear([r, g, b]: readonly [number, number, number]): readonly [number, number, number] {
+  const one = (c: number): number => (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4)
+  return [one(r), one(g), one(b)]
+}
+
 export function answer(request: WorkRequest): WorkResult {
   const planet = planetFor(request)
   switch (request.kind) {
@@ -42,6 +65,19 @@ export function answer(request: WorkRequest): WorkResult {
       }
     case 'features':
       return { id: request.id, kind: 'features', features: scatterPatch(planet, request.key) }
+    case 'chunk': {
+      const landing = landingFor(planet, request.origin)
+      const blocks = chunkBlocks(landing, request.cx, request.cz, new Map(request.edits), blockKey)
+      const mesh = meshChunk(blocks, {
+        lush: linear(planet.palette.lush),
+        dry: linear(planet.palette.dry),
+        highland: linear(planet.palette.highland),
+        peak: linear(planet.palette.peak),
+        ice: linear(planet.palette.ice),
+        shallow: linear(planet.palette.shallow),
+      })
+      return { id: request.id, kind: 'chunk', mesh, blocks }
+    }
   }
 }
 
@@ -59,5 +95,18 @@ export function transferables(result: WorkResult): Transferable[] {
       ]
     case 'features':
       return Object.values(result.features).map((features) => features.buffer)
+    case 'chunk':
+      return [
+        result.mesh.positions.buffer,
+        result.mesh.normals.buffer,
+        result.mesh.colours.buffer,
+        result.mesh.tiles.buffer,
+        result.mesh.uvs.buffer,
+        result.mesh.index.buffer,
+        result.mesh.fluid.positions.buffer,
+        result.mesh.fluid.normals.buffer,
+        result.mesh.fluid.index.buffer,
+        result.blocks.buffer,
+      ]
   }
 }
