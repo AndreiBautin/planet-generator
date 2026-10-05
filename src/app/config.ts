@@ -15,6 +15,8 @@ export interface Config {
    * dev server's modules serves yesterday's code to today's edit.
    */
   readonly serviceWorker: boolean
+  /** Where the build's public files are served from, with its trailing slash: `/` or `/planet-generator/`. */
+  readonly assetBase: string
 }
 
 export interface ConfigResult {
@@ -22,7 +24,7 @@ export interface ConfigResult {
   readonly warnings: readonly string[]
 }
 
-export const DEFAULT_CONFIG: Config = { logLevel: 'warn', serviceWorker: true }
+export const DEFAULT_CONFIG: Config = { logLevel: 'warn', serviceWorker: true, assetBase: '/' }
 
 export function parseConfig(env: Readonly<Record<string, unknown>>, dev: boolean): ConfigResult {
   const warnings: string[] = []
@@ -35,7 +37,17 @@ export function parseConfig(env: Readonly<Record<string, unknown>>, dev: boolean
       warnings.push(`VITE_LOG_LEVEL must be one of ${LOG_LEVELS.join(', ')}; using ${logLevel}.`)
     }
   }
-  return { config: { logLevel, serviceWorker: !dev && DEFAULT_CONFIG.serviceWorker }, warnings }
+  const base = env.BASE_URL
+  const assetBase =
+    typeof base === 'string' && base.startsWith('/')
+      ? base.endsWith('/')
+        ? base
+        : `${base}/`
+      : DEFAULT_CONFIG.assetBase
+  return {
+    config: { logLevel, serviceWorker: !dev && DEFAULT_CONFIG.serviceWorker, assetBase },
+    warnings,
+  }
 }
 
 /** The app's configuration, read once from the build's environment. */

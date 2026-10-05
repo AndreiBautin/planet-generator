@@ -99,16 +99,26 @@ checks nothing. The pre-push hook runs `pnpm verify`; CI runs the same.
   the shore and faded before coarse patches) with foam on the crests; a
   molten world's lowland runs with glowing channels and pools, and its
   sea is plates and seams.
-- **The ground wears baked textures, not photographs.** `ground-atlas.ts`
-  bakes six tileable squares — turf, forest litter, sand, stone, snow,
-  basalt — from periodic noise (tested: every edge continues into its
-  opposite, colours stay near mid-grey so the biome colour still shows
-  through), `textures.ts` uploads them once for the page, and
-  `withGroundDetail` lays them on triplanar at two scales blended by the
-  pattern weights, their heights bumping the surface. Asked for as
-  _"photorealistic textures"_; baked because a photograph of Earth's sand
-  would be a lie about which planet this is, and six of them are megabytes
-  a phone would precache.
+- **The ground wears photographs, with the baked tiles as the first
+  frame.** `public/textures/` holds six CC0 scans from ambientCG (Grass001,
+  Ground037, Ground054, Rock030, Snow006, Rock035), colour and GL normal,
+  cut to 512 px — about 0.9 MB, precached through `PUBLIC_FILES`. The zips
+  they were cut from never enter the repo; the cutting was a one-off
+  Pillow script, and each colour map's mean linear luminance is recorded
+  in `PHOTO_MEANS` so the shader can level it. `textures.ts` starts every
+  layer on the baked tile from `ground-atlas.ts` (ready the instant the
+  page is) and swaps the photograph in on a shared uniform object when it
+  loads — no recompile, every material at once. **The alien palette still
+  rules**: `groundLayer` in the shader divides the photo by its mean and
+  part-desaturates it before multiplying the biome colour, so an ochre
+  world is ochre with grass-shaped grain, not green. The normal maps are
+  laid on triplanar as tilts in the planet's frame and brought into view
+  space through `DETAIL_NORMAL_MATRIX`, which the scene sets each frame
+  from the terrain group's model-view. The path to `public/` comes through
+  `config.assetBase` (the lint refuses `import.meta.env` elsewhere).
+  Earlier reasoning kept to baked tiles because photographs of Earth's
+  sand would be a lie about which planet this is; the levelling is what
+  answers that.
 - **A finger is a stick, not a hand on the camera.** Asked for as _"fly up
   down diagonal not just side to side"_, then _"flinging up and down moves
   the entire pov instead of tilting it like a plane would"_ and _"I'll go

@@ -14,6 +14,7 @@ import {
   DETAIL_CLOUD_SPIN,
   DETAIL_CLOUD_SUN,
   DETAIL_CLOUDS,
+  DETAIL_NORMAL_MATRIX,
   DETAIL_RANGE,
   DETAIL_TIME,
   withGroundDetail,
@@ -79,6 +80,8 @@ export interface SceneOptions {
   readonly builder: Builder
   /** Skip the birth animation: the planet simply appears. */
   readonly reducedMotion: boolean
+  /** Where `public/` is served from, for the ground's photographs. */
+  readonly assetBase: string
 }
 
 /** What belongs to one planet and goes when the next is shown. */
@@ -152,6 +155,7 @@ export function startScene(
     sun.shadow.normalBias = 0.0002
   }
   const shadowGround = new THREE.Vector3()
+  const modelView = new THREE.Matrix4()
   // Rain around the eye where the cloud over it is heavy, while flying low.
   const rain = new Rain()
   scene.add(rain.object)
@@ -179,7 +183,7 @@ export function startScene(
       {
         ground: withGroundDetail(
           new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.92, metalness: 0 }),
-          groundTextures(),
+          groundTextures(options.assetBase),
           world.molten,
         ),
         water: world.molten
@@ -419,6 +423,12 @@ export function startScene(
       shown.terrain.group.rotation.y = turn
       shown.clouds.rotation.y = turn * 1.15
       pose(shown, stage)
+      // Planet frame to view space for the ground's normal maps, from the
+      // matrices as they will be this frame.
+      shown.terrain.group.updateMatrixWorld()
+      camera.updateMatrixWorld()
+      modelView.copy(camera.matrixWorld).invert().multiply(shown.terrain.group.matrixWorld)
+      DETAIL_NORMAL_MATRIX.value.getNormalMatrix(modelView)
       cloudsSeenFrom(shown.clouds, camera.position.length(), stage.scale, stage.clouds)
       shown.terrain.update(inPlanetFrame(camera.position, turn, stage.scale), viewCone(turn))
       rain.update(rainEye.copy(camera.position), rainOver(shown.clouds, turn))

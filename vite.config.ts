@@ -20,6 +20,11 @@ const PUBLIC_FILES = [
   'icons/maskable-512.png',
   'icons/apple-touch-icon.png',
   'icons/favicon-32.png',
+  // The ground's photographs (CC0, ambientCG), colour and normal per kind.
+  ...['grass', 'litter', 'sand', 'stone', 'snow', 'basalt'].flatMap((kind) => [
+    `textures/${kind}-color.jpg`,
+    `textures/${kind}-normal.jpg`,
+  ]),
 ]
 
 /**

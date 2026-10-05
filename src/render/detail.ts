@@ -38,6 +38,12 @@ export const DETAIL_CLOUDS: { value: THREE.Texture | null } = { value: null }
 export const DETAIL_CLOUD_SPIN = { value: 0 }
 /** The sun's direction in the planet's frame, for where a cloud's shadow falls. */
 export const DETAIL_CLOUD_SUN = { value: new THREE.Vector3(1, 0, 0) }
+/**
+ * Planet frame to view space for normals, set by the scene each frame: the
+ * normal maps perturb a normal in the planet's frame, where the triplanar
+ * axes live, and Three wants it in view space.
+ */
+export const DETAIL_NORMAL_MATRIX = { value: new THREE.Matrix3() }
 
 export const NOISE = /* glsl */ `
   // A hash that holds up at large coordinates, unlike the sin() kind,
@@ -114,14 +120,14 @@ function passThrough(
       : `attribute ${extra.type} ${extra.attribute};\nvarying ${extra.type} v_${extra.attribute};\n`
   const assign = extra === undefined ? '' : `\n  v_${extra.attribute} = ${extra.attribute};`
   shader.vertexShader =
-    `uniform float detailTime;\nvarying vec3 vDetailPosition;\n${declare}` +
+    `uniform float detailTime;\nvarying vec3 vDetailPosition;\nvarying vec3 vDetailNormal;\n${declare}` +
     shader.vertexShader.replace(
       '#include <begin_vertex>',
-      `#include <begin_vertex>\n  vDetailPosition = position;${assign}`,
+      `#include <begin_vertex>\n  vDetailPosition = position;\n  vDetailNormal = normal;${assign}`,
     )
   const varying = extra === undefined ? '' : `varying ${extra.type} v_${extra.attribute};\n`
   shader.fragmentShader =
-    `uniform float detailTime;\nuniform float detailRange;\nuniform sampler2D detailClouds;\nuniform float detailCloudSpin;\nuniform vec3 detailCloudSun;\nvarying vec3 vDetailPosition;\n${varying}` +
+    `uniform float detailTime;\nuniform float detailRange;\nuniform sampler2D detailClouds;\nuniform float detailCloudSpin;\nuniform vec3 detailCloudSun;\nuniform mat3 detailNormalMatrix;\nvarying vec3 vDetailPosition;\nvarying vec3 vDetailNormal;\n${varying}` +
     NOISE +
     CLOUD_SHADOW +
     shader.fragmentShader
@@ -130,6 +136,7 @@ function passThrough(
   shader.uniforms.detailClouds = DETAIL_CLOUDS
   shader.uniforms.detailCloudSpin = DETAIL_CLOUD_SPIN
   shader.uniforms.detailCloudSun = DETAIL_CLOUD_SUN
+  shader.uniforms.detailNormalMatrix = DETAIL_NORMAL_MATRIX
 }
 
 const CLOUD_SHADOW = /* glsl */ `
@@ -158,20 +165,20 @@ export function withGroundDetail(
 ): THREE.MeshStandardMaterial {
   material.onBeforeCompile = (shader) => {
     passThrough(shader, { attribute: 'pattern', type: 'vec4' })
-    shader.uniforms.groundGrass = { value: textures.grass }
-    shader.uniforms.groundLitter = { value: textures.litter }
-    shader.uniforms.groundSand = { value: textures.sand }
-    shader.uniforms.groundStone = { value: textures.stone }
-    shader.uniforms.groundSnow = { value: textures.snow }
-    shader.uniforms.groundBasalt = { value: textures.basalt }
+    const layers = ['grass', 'litter', 'sand', 'stone', 'snow', 'basalt'] as const
+    let declare = ''
+    for (const kind of layers) {
+      const name = kind.charAt(0).toUpperCase() + kind.slice(1)
+      // The same uniform objects for every material, so a photograph that
+      // arrives later reaches every planet's ground at once.
+      shader.uniforms[`ground${name}`] = textures[kind].color
+      shader.uniforms[`ground${name}Normal`] = textures[kind].normal
+      shader.uniforms[`ground${name}Mean`] = textures[kind].mean
+      declare += `uniform sampler2D ground${name};\nuniform sampler2D ground${name}Normal;\nuniform float ground${name}Mean;\n`
+    }
     shader.fragmentShader =
+      declare +
       /* glsl */ `
-      uniform sampler2D groundGrass;
-      uniform sampler2D groundLitter;
-      uniform sampler2D groundSand;
-      uniform sampler2D groundStone;
-      uniform sampler2D groundSnow;
-      uniform sampler2D groundBasalt;
       // A texture laid on from three sides and blended by which way the
       // ground faces, so a sphere carries it with no stretching anywhere.
       vec4 groundTri(sampler2D tex, vec3 p, vec3 w) {
@@ -181,7 +188,33 @@ export function withGroundDetail(
         if (w.z > 0.02) c += texture2D(tex, p.xy) * w.z;
         return c;
       }
-      ` + shader.fragmentShader
+      // A normal map laid on the same way: each side's tangent-space tilt
+      // turned into a tilt along that side's own axes in the planet's frame.
+      vec3 groundTriNormal(sampler2D tex, vec3 p, vec3 w) {
+        vec3 d = vec3(0.0);
+        if (w.x > 0.02) { vec2 s = texture2D(tex, p.yz).xy * 2.0 - 1.0; d += vec3(0.0, s.x, s.y) * w.x; }
+        if (w.y > 0.02) { vec2 s = texture2D(tex, p.xz).xy * 2.0 - 1.0; d += vec3(s.x, 0.0, s.y) * w.y; }
+        if (w.z > 0.02) { vec2 s = texture2D(tex, p.xy).xy * 2.0 - 1.0; d += vec3(s.x, s.y, 0.0) * w.z; }
+        return d;
+      }
+      // One kind of ground's share: its colour levelled to the brightness
+      // it was cut at and part-desaturated, so the biome's own colour is
+      // what the eye reads and the photograph gives it grain and shadow.
+      void groundLayer(
+        sampler2D colorMap, sampler2D normalMap, float mean, float share,
+        vec3 p, vec3 q, vec3 w, inout vec3 albedo, inout float relief, inout vec3 tilt
+      ) {
+        if (share < 0.02) return;
+        vec4 near = groundTri(colorMap, p, w);
+        vec4 broad = groundTri(colorMap, q, w);
+        vec3 c = (near.rgb * 0.65 + broad.rgb * 0.35) / (mean * 2.0);
+        float lum = dot(c, vec3(0.2126, 0.7152, 0.0722));
+        albedo += mix(vec3(lum), c, 0.35) * share;
+        relief += (near.a * 0.65 + broad.a * 0.35) * share;
+        if (share > 0.2) tilt += (groundTriNormal(normalMap, p, w) * 0.7 + groundTriNormal(normalMap, q, w) * 0.3) * share;
+      }
+      ` +
+      shader.fragmentShader
     if (molten) {
       shader.fragmentShader = shader.fragmentShader.replace(
         '#include <emissivemap_fragment>',
@@ -221,6 +254,7 @@ export function withGroundDetail(
           (detailNoise(vDetailPosition * 2600.0) - 0.5) * 0.7 * detailClose;
         float detailShade = 1.0;
         float detailRough = 1.0;
+        vec3 detailTilt = vec3(0.0);
         float stand = 1.0 - smoothstep(detailRange * 0.55, detailRange, detailDistance);
 
         // The ground's texture: which kinds of ground are here, blended,
@@ -234,30 +268,35 @@ export function withGroundDetail(
             w /= w.x + w.y + w.z;
             vec3 p = vDetailPosition * 1500.0;
             vec3 q = vDetailPosition * 260.0 + 17.3;
+            vec3 albedo = vec3(0.0);
+            float relief = 0.0;
             ${
               molten
-                ? /* glsl */ `vec4 tex = groundTri(groundBasalt, p, w) * 0.65 + groundTri(groundBasalt, q, w) * 0.35;`
+                ? /* glsl */ `
+            float total = 1.0;
+            groundLayer(groundBasalt, groundBasaltNormal, groundBasaltMean, 1.0, p, q, w, albedo, relief, detailTilt);`
                 : /* glsl */ `
             float wLitter = v_pattern.x * stand;
             float wSand = v_pattern.y;
             float wSnow = v_pattern.z;
             float wStone = v_pattern.w;
             float wGrass = max(0.0, 1.0 - (wLitter + wSand + wSnow + wStone));
-            float total = wLitter + wSand + wSnow + wStone + wGrass;
-            vec4 tex = vec4(0.0);
-            if (wGrass > 0.02) tex += (groundTri(groundGrass, p, w) * 0.65 + groundTri(groundGrass, q, w) * 0.35) * wGrass;
-            if (wLitter > 0.02) tex += (groundTri(groundLitter, p, w) * 0.65 + groundTri(groundLitter, q, w) * 0.35) * wLitter;
-            if (wSand > 0.02) tex += (groundTri(groundSand, p, w) * 0.65 + groundTri(groundSand, q, w) * 0.35) * wSand;
-            if (wSnow > 0.02) tex += (groundTri(groundSnow, p, w) * 0.65 + groundTri(groundSnow, q, w) * 0.35) * wSnow;
-            if (wStone > 0.02) tex += (groundTri(groundStone, p, w) * 0.65 + groundTri(groundStone, q, w) * 0.35) * wStone;
-            tex /= max(total, 0.001);`
+            float total = max(0.001, wLitter + wSand + wSnow + wStone + wGrass);
+            groundLayer(groundGrass, groundGrassNormal, groundGrassMean, wGrass, p, q, w, albedo, relief, detailTilt);
+            groundLayer(groundLitter, groundLitterNormal, groundLitterMean, wLitter, p, q, w, albedo, relief, detailTilt);
+            groundLayer(groundSand, groundSandNormal, groundSandMean, wSand, p, q, w, albedo, relief, detailTilt);
+            groundLayer(groundSnow, groundSnowNormal, groundSnowMean, wSnow, p, q, w, albedo, relief, detailTilt);
+            groundLayer(groundStone, groundStoneNormal, groundStoneMean, wStone, p, q, w, albedo, relief, detailTilt);`
             }
-            diffuseColor.rgb *= mix(vec3(1.0), tex.rgb * 2.0, texFade);
-            detailHeight += (tex.a - 0.5) * 1.6 * texFade;
+            albedo /= total;
+            relief /= total;
+            detailTilt *= texFade / total;
+            diffuseColor.rgb *= mix(vec3(1.0), albedo * 2.0, texFade);
+            detailHeight += (relief - 0.5) * 1.2 * texFade;
             // The high points of a surface are worn smoother than its
             // hollows, and snow has a sheen stone has not.
             float sheen = ${molten ? '0.0' : 'v_pattern.z'};
-            detailRough = mix(1.0, (1.12 - tex.a * 0.3) * (1.0 - sheen * 0.35), texFade);
+            detailRough = mix(1.0, (1.12 - relief * 0.3) * (1.0 - sheen * 0.35), texFade);
           }
         }
 
@@ -323,6 +362,12 @@ export function withGroundDetail(
       .replace(
         '#include <normal_fragment_maps>',
         /* glsl */ `#include <normal_fragment_maps>
+        // The photographs' own relief first, tilted in the planet's frame
+        // and brought into view space; the procedural bumps on top.
+        if (dot(detailTilt, detailTilt) > 0.0) {
+          vec3 tilted = normalize(normalize(vDetailNormal) + detailTilt * 0.55);
+          normal = normalize(detailNormalMatrix * tilted) * faceDirection;
+        }
         normal = detailBump(
           -vViewPosition,
           normal,

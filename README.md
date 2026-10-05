@@ -60,6 +60,10 @@ the horizon behind it.
 
 ## Built with
 
+The ground's photographs are CC0 scans from [ambientCG](https://ambientcg.com)
+(Grass001, Ground037, Ground054, Rock030, Snow006, Rock035), cut to
+512 px and levelled in the shader so each world keeps its own colours.
+
 TypeScript (strict), Vite, Three.js, Vitest, ESLint and Prettier, managed
 with pnpm; a hand-written service worker and a generated icon set, deployed
 to GitHub Pages. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and

@@ -58,6 +58,7 @@ const scene = startScene(canvas, systemClock, rig.view, {
   quality,
   builder: createBuilder(navigator.hardwareConcurrency),
   reducedMotion: window.matchMedia('(prefers-reduced-motion: reduce)').matches,
+  assetBase: config.assetBase,
 })
 
 /**
