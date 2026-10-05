@@ -1,4 +1,5 @@
 import { surfaceAt, type Planet } from '@/generation/planet'
+import { fineReliefAt, fineReliefWeight } from '@/generation/relief'
 
 import { fromPalette } from '../colour'
 import { liftOf } from '../surface-data'
@@ -19,6 +20,10 @@ import { directionOn, patchAngle, patchUv, type PatchKey } from './cube'
  * Normals come from a ring of samples one step past the edge, so two
  * neighbouring patches light their shared edge the same way and the seam
  * does not show as a crease.
+ *
+ * The ground drawn carries fine relief on top of the planet's surface (see
+ * generation/relief.ts), and steep ground is drawn as bare rock — the two
+ * things that make it read as land rather than as a painted ball up close.
  */
 export interface PatchData {
   readonly positions: Float32Array
@@ -29,6 +34,12 @@ export interface PatchData {
 }
 
 /** Vertices in a patch: the grid, then four edges' worth of skirt. */
+/** How far fine relief lifts the ground, in surface-height units. */
+const FINE_RELIEF = 0.11
+/** Steepness (one minus the cosine of the slope) where rock starts and where it is all rock. */
+const ROCK_FROM = 0.06
+const ROCK_FULL = 0.22
+
 export const vertexCount = (segments: number): number => (segments + 1) ** 2 + 4 * (segments + 1)
 
 export function samplePatch(planet: Planet, key: PatchKey, segments: number): PatchData {
@@ -39,6 +50,7 @@ export function samplePatch(planet: Planet, key: PatchKey, segments: number): Pa
   const positions = new Float32Array(vertexCount(segments) * 3)
   const normals = new Float32Array(vertexCount(segments) * 3)
   const colours = new Float32Array(vertexCount(segments) * 3)
+  const heights = new Float32Array(side * side)
   let hasSea = false
 
   for (let j = -1; j <= segments + 1; j += 1) {
@@ -46,7 +58,9 @@ export function samplePatch(planet: Planet, key: PatchKey, segments: number): Pa
       const [u, v] = patchUv(key, i / segments, j / segments)
       const [x, y, z] = directionOn(key.face, u, v)
       const surface = surfaceAt(planet, x, y, z)
-      const radius = 1 + liftOf(surface.height, planet.relief)
+      const fine = fineReliefAt(planet, x, y, z)
+      const drawn = surface.height + fine * fineReliefWeight(surface.height) * FINE_RELIEF
+      const radius = 1 + liftOf(drawn, planet.relief)
       const at = ((j + 1) * ring + (i + 1)) * 3
       wide[at] = x * radius
       wide[at + 1] = y * radius
@@ -57,13 +71,18 @@ export function samplePatch(planet: Planet, key: PatchKey, segments: number): Pa
       positions[out] = x * radius
       positions[out + 1] = y * radius
       positions[out + 2] = z * radius
+      heights[j * side + i] = surface.height
+      // A little light and shade from the same fine noise, so a plain of
+      // one biome is not one flat colour.
+      const shade = surface.height > 0 ? 0.9 + fine * 0.15 : 1
       const linear = fromPalette(surface.colour)
-      colours[out] = linear.r
-      colours[out + 1] = linear.g
-      colours[out + 2] = linear.b
+      colours[out] = linear.r * shade
+      colours[out + 1] = linear.g * shade
+      colours[out + 2] = linear.b * shade
     }
   }
 
+  const stone = fromPalette(planet.palette.highland).lerp(fromPalette(planet.palette.peak), 0.25)
   const sample = (i: number, j: number, axis: number): number =>
     wide[((j + 1) * ring + (i + 1)) * 3 + axis] ?? 0
   for (let j = 0; j <= segments; j += 1) {
@@ -84,6 +103,25 @@ export function samplePatch(planet: Planet, key: PatchKey, segments: number): Pa
       normals[out] = nx / length
       normals[out + 1] = ny / length
       normals[out + 2] = nz / length
+
+      // Bare rock where the land is steep: grass and sand do not hold to a
+      // cliff, and a slope the same colour as the plain beneath it reads as
+      // a painted bump rather than a hillside.
+      const height = heights[j * side + i] ?? 0
+      if (height > 0.03) {
+        const px = positions[out] ?? 0
+        const py = positions[out + 1] ?? 0
+        const pz = positions[out + 2] ?? 0
+        const radial = Math.hypot(px, py, pz) || 1
+        const upright = (nx * px + ny * py + nz * pz) / length / radial
+        const steep = 1 - upright
+        const rock = Math.min(1, Math.max(0, (steep - ROCK_FROM) / (ROCK_FULL - ROCK_FROM)))
+        if (rock > 0) {
+          colours[out] = mix(colours[out] ?? 0, stone.r, rock)
+          colours[out + 1] = mix(colours[out + 1] ?? 0, stone.g, rock)
+          colours[out + 2] = mix(colours[out + 2] ?? 0, stone.b, rock)
+        }
+      }
     }
   }
 
@@ -105,6 +143,8 @@ export function samplePatch(planet: Planet, key: PatchKey, segments: number): Pa
 
   return { positions, normals, colours, hasSea }
 }
+
+const mix = (from: number, to: number, t: number): number => from + (to - from) * t
 
 /** The grid vertices along each edge, in order: bottom, top, left, right. */
 function edgeOrder(segments: number): readonly (readonly number[])[] {
