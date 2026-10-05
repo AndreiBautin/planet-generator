@@ -137,7 +137,7 @@ export function featuresAt(planet: Planet, surface: Surface, steep: number): Gro
     // Hardy pines just below the snow line, seracs standing on the steep
     // ground, and stone poking through the drifts.
     const pines = smooth(-0.55, -0.32, surface.warmth) * 0.5 * living
-    return { ...NOTHING, conifer: pines, boulder: boulder * 0.6, spire: cliff * 0.2 }
+    return { ...NOTHING, conifer: pines, boulder: boulder * 0.25, spire: cliff * 0.2 }
   }
   if (surface.biome === 'shore') return { ...NOTHING, boulder: 0.01 }
 
@@ -227,6 +227,7 @@ export function patternAt(planet: Planet, surface: Surface, steep: number): Grou
     canopy: Math.min(1, (growth.broadleaf + growth.conifer) * 1.1),
     sand: Math.min(1, Math.max(beach, dry * (1 - high) * (1 - snow) * (1 - cliff))),
     snow,
-    stone: Math.min(1, cliff + high * 0.6),
+    // Snow covers the high ground's stone; only a cliff breaks through it.
+    stone: Math.min(1, cliff + high * 0.6 * (1 - snow)),
   }
 }

@@ -109,12 +109,19 @@ checks nothing. The pre-push hook runs `pnpm verify`; CI runs the same.
   _"photorealistic textures"_; baked because a photograph of Earth's sand
   would be a lie about which planet this is, and six of them are megabytes
   a phone would precache.
-- **A glide pitches.** Asked for as _"fly up down diagonal not just side
-  to side"_. `Glide.pitch` (glide.ts): a drag up noses up, down noses
-  down, a diagonal does both; the altitude changes as it flies, as a share
-  of the speed, and the nose eases level on its own. The eye looks where
-  the nose points. The arrow keys and WASD nudge it. Pinch and wheel still
-  set the height directly.
+- **A finger is a stick, not a hand on the camera.** Asked for as _"fly up
+  down diagonal not just side to side"_, then _"flinging up and down moves
+  the entire pov instead of tilting it like a plane would"_ and _"I'll go
+  all the way across and barely turn"_. `steer` in glide.ts sets a rate of
+  turn and a pitch the nose is asked for; `advance` flies it there — the
+  heading swings at the rate, which dies away on its own, the nose follows
+  the stick and the stick drifts back level, the altitude changes as a
+  share of the speed, and the wings bank into the turn (`roll`, which
+  `poseOf` applies to the eye's up). A drag the height of the screen is
+  about half a turn (tested). Nothing snaps: a fling is felt over the next
+  second or two, which is what makes it read as flying rather than the view
+  being dragged. Arrow keys and WASD nudge it; pinch and wheel still set
+  the height directly.
 - **A tile arriving late grows up out of the ground.** Reported as _"stuff
   is rendering late which makes it feel fake"_. Features are fetched to
   `PREFETCH` times the range they are shown at, the tiles **ahead** of the
@@ -123,6 +130,14 @@ checks nothing. The pre-push hook runs `pnpm verify`; CI runs the same.
   so its features scale up over `GROW_SECONDS` rather than appearing. One
   material per tile is cheap: the cache key is shared, so it is a few
   uniforms, not a compile.
+- **No two trees are the same tree.** `modelsOf` in feature-models.ts
+  gives the kinds there are many of several shapes — a spruce, a fir and a
+  pine; a round crown, a poplar and an oak; two scrubs, two rocks, two
+  boulders — and `featuresFor` deals a tile's instances out among them by
+  their place in the tile, one instanced mesh per shape. The ground under
+  them is mottled at field scale in `samplePatch` (lusher and drier,
+  lighter and darker, from the fine fork), and its roughness follows the
+  texture's height in the shader, with a sheen on snow.
 - **Trees are green first and the palette second.** An ochre world's
   "lush" painted orange forests that read as dead ones; the forest also
   stops at real heat however wet the ground is. A pine is snow-laden only

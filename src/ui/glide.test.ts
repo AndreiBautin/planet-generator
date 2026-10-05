@@ -65,22 +65,49 @@ describe('gliding', () => {
     }
   })
 
-  it('turns with a sideways drag and keeps flying along the ground', () => {
-    const turned = steer(start, 200, 0, 800)
+  it('turns with a sideways drag, over the next moments, and keeps flying along the ground', () => {
+    const steered = steer(start, 200, 0, 800)
+    // The stick sets a rate; the heading itself swings as it flies.
+    expect(steered.heading).toEqual(start.heading)
+    expect(steered.yawRate).toBeGreaterThan(0)
+    let turned = steered
+    for (let at = 0; at < 60; at += 1) turned = advance(turned, 1 / 60, flat)
     expect(dot(turned.heading, start.heading)).toBeLessThan(0.99)
     expect(dot(turned.heading, turned.position)).toBeCloseTo(0, 10)
     // Right is right: seen from above (+z) heading +x, a right turn goes towards −y.
     expect(turned.heading[1]).toBeLessThan(0)
   })
 
+  it('swings about half a turn for a drag the height of the screen', () => {
+    let turned = steer(start, 800, 0, 800)
+    for (let at = 0; at < 60 * 6; at += 1) turned = advance(turned, 1 / 60, flat)
+    const angle = Math.acos(Math.max(-1, Math.min(1, dot(turned.heading, start.heading))))
+    expect(angle).toBeGreaterThan(Math.PI * 0.4)
+    expect(Math.abs(turned.yawRate)).toBeLessThan(0.01)
+  })
+
+  it('banks into a turn and levels its wings again', () => {
+    let turned = steer(start, 400, 0, 800)
+    for (let at = 0; at < 20; at += 1) turned = advance(turned, 1 / 60, flat)
+    expect(turned.roll).toBeGreaterThan(0.05)
+    const pose = poseOf(turned)
+    // The up of the eye leans off the vertical by the bank.
+    expect(dot(pose.up, turned.position)).toBeLessThan(0.999)
+    for (let at = 0; at < 60 * 6; at += 1) turned = advance(turned, 1 / 60, flat)
+    expect(Math.abs(turned.roll)).toBeLessThan(0.01)
+    expect(dot(poseOf(turned).up, turned.position)).toBeCloseTo(1, 3)
+  })
+
   it('pitches up with a finger moving up, and climbs as it flies', () => {
-    // Screen y grows downwards: a finger moving up noses up.
+    // Screen y grows downwards: a finger moving up asks the nose up.
     const up = steer(start, 0, -200, 800)
-    expect(up.pitch).toBeGreaterThan(0)
-    expect(steer(start, 0, -100_000, 800).pitch).toBe(MAX_PITCH_UP)
-    expect(steer(start, 0, 100_000, 800).pitch).toBe(-MAX_PITCH_DOWN)
+    expect(up.pitchGoal).toBeGreaterThan(0)
+    expect(up.pitch).toBe(0)
+    expect(steer(start, 0, -100_000, 800).pitchGoal).toBe(MAX_PITCH_UP)
+    expect(steer(start, 0, 100_000, 800).pitchGoal).toBe(-MAX_PITCH_DOWN)
     let flown = up
     for (let at = 0; at < 60; at += 1) flown = advance(flown, 1 / 60, flat)
+    expect(flown.pitch).toBeGreaterThan(0)
     expect(flown.altitude).toBeGreaterThan(start.altitude)
     let dived = steer(start, 0, 200, 800)
     for (let at = 0; at < 60; at += 1) dived = advance(dived, 1 / 60, flat)
@@ -104,9 +131,14 @@ describe('gliding', () => {
       const pose = poseOf(glide)
       return [pose.look[0] - pose.eye[0], pose.look[1] - pose.eye[1], pose.look[2] - pose.eye[2]]
     }
-    const level = dot(forwardOf(start), start.position)
-    expect(dot(forwardOf(steer(start, 0, -300, 800)), start.position)).toBeGreaterThan(level)
-    expect(dot(forwardOf(steer(start, 0, 300, 800)), start.position)).toBeLessThan(level)
+    const after = (glide: Glide): Glide => {
+      let flown = glide
+      for (let at = 0; at < 30; at += 1) flown = advance(flown, 1 / 60, flat)
+      return flown
+    }
+    const level = dot(forwardOf(after(start)), start.position)
+    expect(dot(forwardOf(after(steer(start, 0, -300, 800))), start.position)).toBeGreaterThan(level)
+    expect(dot(forwardOf(after(steer(start, 0, 300, 800))), start.position)).toBeLessThan(level)
   })
 
   it('looks ahead and a little down, with up away from the centre', () => {
@@ -118,7 +150,8 @@ describe('gliding', () => {
     ]
     expect(dot(forward, start.heading)).toBeGreaterThan(0.9)
     expect(dot(forward, start.position)).toBeLessThan(0)
-    expect(pose.up).toEqual(start.position)
+    expect(pose.up[0]).toBeCloseTo(start.position[0], 10)
+    expect(pose.up[2]).toBeCloseTo(start.position[2], 10)
   })
 
   it('does nothing for a step of no time', () => {

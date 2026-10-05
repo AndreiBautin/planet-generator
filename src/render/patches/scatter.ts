@@ -342,6 +342,9 @@ function colourOf(
       // peaks: a desert's rock is red and a highland's is grey.
       const soil = fromPalette(surface.colour)
       const stone = blend(palette.highland, palette.peak, pick * 0.8)
+      // On a snowfield a rock wears snow on its top and sides.
+      if (surface.biome === 'snow')
+        return scaled(towards(stone, palette.ice, 0.55 + shade * 0.25), 0.95)
       return scaled(towards(stone, soil, 0.35 + (1 - surface.moisture) * 0.25), light * 0.9)
     }
     case 'spire':

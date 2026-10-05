@@ -1,5 +1,6 @@
 import { surfaceAt, type Planet, type Surface } from '@/generation/planet'
 import { groupingsAt } from '@/generation/grouping'
+import { fbm } from '@/generation/noise'
 import { fineReliefAt, reliefWeightAt } from '@/generation/relief'
 import { floorAt, patternAt } from '@/generation/features'
 
@@ -118,13 +119,26 @@ export function samplePatch(planet: Planet, key: PatchKey, segments: number): Pa
       positions[out + 2] = z * radius
       heights[j * side + i] = surface.height
       surfaces[j * side + i] = surface
-      // A little light and shade from the same fine noise, so a plain of
-      // one biome is not one flat colour.
-      const shade = surface.height > 0 ? 0.9 + fine * 0.15 : 1
+      // Light and shade from the same fine noise, and a mottle at field
+      // scale — patches of lusher and drier, lighter and darker ground —
+      // so a plain of one biome is never one flat colour.
       const linear = fromPalette(surface.colour)
-      colours[out] = linear.r * shade
-      colours[out + 1] = linear.g * shade
-      colours[out + 2] = linear.b * shade
+      if (surface.height > 0 && surface.biome !== 'snow') {
+        const [ox, oy, oz] = planet.offset
+        const field = fbm(planet.fine, (x + oz) * 30, (y + ox) * 30, (z + oy) * 30, 3)
+        const broad = fbm(planet.fine, (x - ox) * 8, (y - oy) * 8, (z - oz) * 8, 2)
+        const shade = (0.9 + fine * 0.15) * (1 + field * 0.14 + broad * 0.1)
+        // Warmer and a little yellower where it is drier, cooler where lusher.
+        const dry = broad * 0.5 + field * 0.3
+        colours[out] = linear.r * shade * (1 + dry * 0.1)
+        colours[out + 1] = linear.g * shade
+        colours[out + 2] = linear.b * shade * (1 - dry * 0.12)
+      } else {
+        const shade = surface.height > 0 ? 0.95 + fine * 0.08 : 1
+        colours[out] = linear.r * shade
+        colours[out + 1] = linear.g * shade
+        colours[out + 2] = linear.b * shade
+      }
     }
   }
 

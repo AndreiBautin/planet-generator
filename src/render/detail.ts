@@ -193,6 +193,7 @@ export function withGroundDetail(
           (detailNoise(vDetailPosition * 650.0) - 0.5) * detailNear +
           (detailNoise(vDetailPosition * 2600.0) - 0.5) * 0.7 * detailClose;
         float detailShade = 1.0;
+        float detailRough = 1.0;
         float stand = 1.0 - smoothstep(detailRange * 0.55, detailRange, detailDistance);
 
         // The ground's texture: which kinds of ground are here, blended,
@@ -226,6 +227,10 @@ export function withGroundDetail(
             }
             diffuseColor.rgb *= mix(vec3(1.0), tex.rgb * 2.0, texFade);
             detailHeight += (tex.a - 0.5) * 1.6 * texFade;
+            // The high points of a surface are worn smoother than its
+            // hollows, and snow has a sheen stone has not.
+            float sheen = ${molten ? '0.0' : 'v_pattern.z'};
+            detailRough = mix(1.0, (1.12 - tex.a * 0.3) * (1.0 - sheen * 0.35), texFade);
           }
         }
 
@@ -279,6 +284,11 @@ export function withGroundDetail(
         }
 
         diffuseColor.rgb *= detailShade * (1.0 + detailHeight * 0.3);`,
+      )
+      .replace(
+        '#include <roughnessmap_fragment>',
+        /* glsl */ `#include <roughnessmap_fragment>
+        roughnessFactor = clamp(roughnessFactor * detailRough, 0.3, 1.0);`,
       )
       .replace(
         '#include <normal_fragment_maps>',

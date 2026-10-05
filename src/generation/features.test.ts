@@ -155,6 +155,7 @@ describe('patternAt', () => {
     expect(patternAt(planet, ground({ moisture: 0.9, warmth: 0.5 }), 0).canopy).toBeGreaterThan(0.5)
     expect(patternAt(planet, ground({ biome: 'shore', height: 0.015 }), 0).sand).toBe(1)
     expect(patternAt(planet, ground({ biome: 'snow' }), 0).snow).toBe(1)
+    expect(patternAt(planet, ground({ biome: 'snow', height: 0.9 }), 0).stone).toBe(0)
     expect(patternAt(planet, ground({}), 0.3).stone).toBe(1)
   })
 
