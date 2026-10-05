@@ -32,12 +32,17 @@ shared. Nothing else would notice. So:
 - **Fine relief leaves shared planets alone** (`relief.test.ts`): it lives
   on its own fork and the pinned surface heights do not move.
 - **Features and surface patterns** (`features.test.ts`,
-  `scatter.test.ts`): forests where it is wet and mild, pines where it is
-  cool or high, no forest in real heat, cacti in dry heat, rock on cliffs,
-  floes on a frozen sea, stacks only off a coast; a scatter is
-  deterministic, nothing stands on coarse patches, a parent tile holds
-  exactly its children's features, every feature stands on the ground the
-  patches draw (a floe on the sea), and no two are the same size and shade.
+  `scatter.test.ts`, `relief.test.ts`): a wood at its fullest is nearly a
+  tree per spot with undergrowth under it, an arid world grows no forest
+  however damp a patch of it, a boreal belt of pines on cold damp ground,
+  no forest in real heat, cacti and rock on a desert floor, pack ice plate
+  to plate on a frozen sea, columns and cones on a molten one; neither
+  layer ever asks for more than one thing per spot on any kind of world;
+  dunes over dry lowland and none on snow or at sea, carrying relief where
+  crags carry none; a scatter is deterministic, nothing stands on coarse
+  patches, a parent tile holds exactly its children's features, every
+  feature stands on the ground the patches draw (a floe on the sea), and
+  no two are the same size and shade.
 - **Flight** (`glide.test.ts`, `flight.test.ts`): a glide stays on the
   sphere, rises before a ridge, never comes below its clearance over bumpy
   ground, turns the way the finger goes; a dive turned back mid-way rises

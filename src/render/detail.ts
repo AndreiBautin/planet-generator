@@ -23,6 +23,11 @@ import type * as THREE from 'three'
 
 /** Seconds, for the water and the lava; the scene advances it from the clock. */
 export const DETAIL_TIME = { value: 0 }
+/**
+ * How far from the camera single features stand, in planet radii: inside
+ * it the ground draws a biome's floor, beyond it a picture of the biome.
+ */
+export const DETAIL_RANGE = { value: 0.1 }
 
 const NOISE = /* glsl */ `
   // A hash that holds up at large coordinates, unlike the sin() kind,
@@ -99,23 +104,52 @@ function passThrough(
       : `attribute ${extra.type} ${extra.attribute};\nvarying ${extra.type} v_${extra.attribute};\n`
   const assign = extra === undefined ? '' : `\n  v_${extra.attribute} = ${extra.attribute};`
   shader.vertexShader =
-    `varying vec3 vDetailPosition;\n${declare}` +
+    `uniform float detailTime;\nvarying vec3 vDetailPosition;\n${declare}` +
     shader.vertexShader.replace(
       '#include <begin_vertex>',
       `#include <begin_vertex>\n  vDetailPosition = position;${assign}`,
     )
   const varying = extra === undefined ? '' : `varying ${extra.type} v_${extra.attribute};\n`
   shader.fragmentShader =
-    `uniform float detailTime;\nvarying vec3 vDetailPosition;\n${varying}` +
+    `uniform float detailTime;\nuniform float detailRange;\nvarying vec3 vDetailPosition;\n${varying}` +
     NOISE +
     shader.fragmentShader
   shader.uniforms.detailTime = DETAIL_TIME
+  shader.uniforms.detailRange = DETAIL_RANGE
 }
 
-/** The ground: grain and bumps, and the pattern of whatever the ground is. */
-export function withGroundDetail(material: THREE.MeshStandardMaterial): THREE.MeshStandardMaterial {
+/**
+ * The ground: grain and bumps, and the pattern of whatever the ground is.
+ * On a molten world the lowland runs with channels of lava that glow.
+ */
+export function withGroundDetail(
+  material: THREE.MeshStandardMaterial,
+  molten = false,
+): THREE.MeshStandardMaterial {
   material.onBeforeCompile = (shader) => {
     passThrough(shader, { attribute: 'pattern', type: 'vec4' })
+    if (molten) {
+      shader.fragmentShader = shader.fragmentShader.replace(
+        '#include <emissivemap_fragment>',
+        /* glsl */ `#include <emissivemap_fragment>
+        {
+          // Rivers of lava threading the low ground: the zero line of a
+          // noise, which is a network of winding channels, lit from within
+          // and pulsing slowly; and pools where it has spread.
+          float lava = v_pattern.y;
+          if (lava > 0.02) {
+            float lavaFar = 1.0 - smoothstep(0.2, 1.2, length(vViewPosition));
+            vec3 p = vDetailPosition * 160.0;
+            float n = detailNoise(p) + detailNoise(p * 2.7) * 0.35 - 0.675;
+            float channel = 1.0 - smoothstep(0.0, 0.035 + 0.03 * (1.0 - lavaFar), abs(n));
+            float pool = smoothstep(0.58, 0.75, detailNoise(vDetailPosition * 45.0)) * lava;
+            float glow = max(channel * lava, pool) * (0.8 + 0.2 * sin(detailTime * 0.9 + n * 20.0));
+            totalEmissiveRadiance += vec3(1.0, 0.32, 0.04) * glow * 1.6;
+            diffuseColor.rgb *= 1.0 - glow * 0.6;
+          }
+        }`,
+      )
+    }
     shader.fragmentShader = shader.fragmentShader
       .replace(
         '#include <color_fragment>',
@@ -132,15 +166,22 @@ export function withGroundDetail(material: THREE.MeshStandardMaterial): THREE.Me
         float detailShade = 1.0;
 
         // Canopy: a forest from above is crowns with dark gaps, no two
-        // crowns the same shade, in groves of lighter and darker wood.
+        // crowns the same shade, in groves of lighter and darker wood —
+        // beyond where the trees themselves stand. Within that range the
+        // ground is the forest floor: dark, leaf-littered, mottled.
         float canopy = v_pattern.x * patternFar;
         if (canopy > 0.02) {
+          float stand = 1.0 - smoothstep(detailRange * 0.55, detailRange, detailDistance);
           vec3 crowns = detailCells(vDetailPosition * 1400.0);
           float crown = 1.0 - smoothstep(0.2, 0.75, crowns.x);
           float tone = mix(0.5, 1.12, crown) * (0.82 + crowns.z * 0.36);
           tone *= 0.85 + detailNoise(vDetailPosition * 220.0) * 0.3;
-          detailShade *= mix(1.0, tone, canopy);
-          detailHeight += (crown - 0.5) * 0.8 * canopy;
+          float litter = detailNoise(vDetailPosition * 1800.0) * 0.5 + 0.5;
+          float floorTone = 0.38 + litter * 0.22;
+          float shade = mix(tone, floorTone, stand);
+          detailShade *= mix(1.0, shade, canopy);
+          diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(1.1, 0.84, 0.6), stand * canopy * 0.6);
+          detailHeight += (crown - 0.5) * 0.8 * canopy * (1.0 - stand);
         }
 
         // Sand: ripples the wind has drawn, bent by a slower noise so they
@@ -186,14 +227,38 @@ export function withGroundDetail(material: THREE.MeshStandardMaterial): THREE.Me
           faceDirection);`,
       )
   }
-  material.customProgramCacheKey = () => 'planet-ground-detail'
+  material.customProgramCacheKey = () =>
+    molten ? 'planet-lava-ground-detail' : 'planet-ground-detail'
   return material
 }
 
-/** The sea: ripples, foam at the coast, whitecaps, lighter shallows. */
+/**
+ * The sea: a swell that lifts the surface itself near the camera, ripples
+ * over it, foam along the coast and on the crests, lighter shallows.
+ */
 export function withWaterDetail(material: THREE.Material): THREE.Material {
   material.onBeforeCompile = (shader) => {
     passThrough(shader, { attribute: 'depth', type: 'float' })
+    shader.vertexShader =
+      'varying float v_swell;\n' +
+      shader.vertexShader.replace(
+        '#include <begin_vertex>',
+        /* glsl */ `#include <begin_vertex>
+        {
+          // Two trains of swell crossing, lifting the vertices along the
+          // planet's up; faded with distance so coarse far patches, which
+          // could not follow a wave, are not torn from fine near ones, and
+          // held still right at the shore, where the land's edge is.
+          float seaView = length((modelViewMatrix * vec4(position, 1.0)).xyz);
+          float seaLift = (1.0 - smoothstep(0.02, 0.12, seaView)) * smoothstep(0.0, 0.0004, depth);
+          float swell =
+            sin(dot(position, vec3(2300.0, 800.0, 1500.0)) + detailTime * 1.3) * 0.6 +
+            sin(dot(position, vec3(-1100.0, 1900.0, 700.0)) - detailTime * 1.0) * 0.4;
+          transformed += normalize(position) * swell * 0.00009 * seaLift;
+          v_swell = swell * seaLift;
+        }`,
+      )
+    shader.fragmentShader = 'varying float v_swell;\n' + shader.fragmentShader
     shader.fragmentShader = shader.fragmentShader
       .replace(
         '#include <color_fragment>',
@@ -209,7 +274,9 @@ export function withWaterDetail(material: THREE.Material): THREE.Material {
         float churn = detailNoise(vDetailPosition * 1500.0 + drift * 1500.0);
         float foam = shore * smoothstep(0.45, 0.8, churn + shore * 0.35) * (1.0 - smoothstep(0.05, 0.5, seaDistance));
         // The odd whitecap out at sea, close enough to see.
-        float caps = smoothstep(0.9, 0.98, detailNoise(vDetailPosition * 1100.0 - drift * 1100.0)) * seaNear * 0.4;
+        // Whitecaps where a crest of the swell breaks, and the odd one out at sea.
+        float crest = smoothstep(0.55, 0.95, v_swell + detailNoise(vDetailPosition * 1600.0 + drift * 900.0) * 0.5 - 0.25);
+        float caps = max(crest * 0.55, smoothstep(0.9, 0.98, detailNoise(vDetailPosition * 1100.0 - drift * 1100.0)) * 0.4) * seaNear;
         float white = clamp(foam + caps, 0.0, 1.0);
         diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.92, 0.95, 0.97), white);
         diffuseColor.a = mix(diffuseColor.a, 0.95, white);`,

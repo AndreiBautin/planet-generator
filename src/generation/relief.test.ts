@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
-import { createPlanet, surfaceAt } from './planet'
-import { fineReliefAt, fineReliefWeight } from './relief'
+import { createPlanet, surfaceAt, type Surface } from './planet'
+import { duneWeight, fineReliefAt, fineReliefWeight, reliefWeightAt } from './relief'
 import { parseSeed, type Seed } from './seed'
 
 const parsed = parseSeed('k3m9xqa')
@@ -23,7 +23,7 @@ describe('fine relief', () => {
     for (let at = 0; at < 300; at += 1) {
       const value = fineReliefAt(planet, Math.sin(at), Math.cos(at * 1.3), Math.sin(at * 0.7))
       expect(value).toBeGreaterThanOrEqual(0)
-      expect(value).toBeLessThanOrEqual(1.5)
+      expect(value).toBeLessThanOrEqual(2.5)
     }
   })
 
@@ -32,6 +32,29 @@ describe('fine relief', () => {
     expect(fineReliefWeight(0)).toBe(0)
     expect(fineReliefWeight(0.02)).toBe(0)
     expect(fineReliefWeight(0.6)).toBeGreaterThan(fineReliefWeight(0.1))
+  })
+
+  it('draws dunes over dry lowland and none on a snowfield or at sea', () => {
+    const planet = createPlanet(seed)
+    const spot = (over: Partial<Surface>): Surface => ({
+      height: 0.1,
+      biome: 'land',
+      colour: [0, 0, 0],
+      moisture: 0.2,
+      warmth: 0.85,
+      ...over,
+    })
+    expect(duneWeight(planet, spot({}))).toBeGreaterThan(0.9)
+    expect(duneWeight({ ...planet, kind: 'arid' }, spot({ warmth: -0.2, moisture: 0.4 }))).toBe(1)
+    expect(duneWeight(planet, spot({ warmth: -0.2, moisture: 0.4 }))).toBe(0)
+    expect(duneWeight(planet, spot({ biome: 'snow' }))).toBe(0)
+    expect(duneWeight(planet, spot({ height: -0.1 }))).toBe(0)
+    expect(duneWeight(planet, spot({ height: 0.6 }))).toBe(0)
+    // Dune country carries relief where crags would carry none.
+    expect(reliefWeightAt(planet, spot({ height: 0.05 }))).toBeGreaterThan(
+      fineReliefWeight(0.05) * 3,
+    )
+    expect(reliefWeightAt(planet, spot({ height: 0.005 }))).toBe(0)
   })
 
   it('is rougher on a rougher planet', () => {

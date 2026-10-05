@@ -3,6 +3,7 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 
 import { FEATURES, type Feature } from '@/generation/features'
 
+import { DETAIL_RANGE } from '../detail'
 import { STRIDE, type Scatter } from './scatter'
 
 /**
@@ -21,6 +22,8 @@ export const FEATURE_HEIGHT = 0.0011
 
 const TRUNK = new THREE.Color(0.32, 0.24, 0.17)
 const WHITE = new THREE.Color(1, 1, 1)
+/** The floor of a crater: lit from within, so it is not tinted with the cone. */
+const EMBER = new THREE.Color(2.4, 0.55, 0.12)
 
 function painted(geometry: THREE.BufferGeometry, colour: THREE.Color): THREE.BufferGeometry {
   const flat = geometry.index === null ? geometry : geometry.toNonIndexed()
@@ -55,10 +58,10 @@ function modelOf(feature: Feature): THREE.BufferGeometry {
       return merged([
         painted(new THREE.CylinderGeometry(0.05, 0.08, 0.4, 5).translate(0, 0.2, 0), TRUNK),
         painted(
-          new THREE.IcosahedronGeometry(0.36, 0).scale(1, 0.85, 1).translate(0, 0.62, 0),
+          new THREE.IcosahedronGeometry(0.42, 0).scale(1, 0.8, 1).translate(0, 0.62, 0),
           WHITE,
         ),
-        painted(new THREE.IcosahedronGeometry(0.24, 0).translate(0.18, 0.5, 0.1), WHITE),
+        painted(new THREE.IcosahedronGeometry(0.27, 0).translate(0.22, 0.5, 0.12), WHITE),
       ])
     case 'shrub':
       return merged([
@@ -67,6 +70,26 @@ function modelOf(feature: Feature): THREE.BufferGeometry {
           WHITE,
         ),
         painted(new THREE.IcosahedronGeometry(0.2, 0).translate(0.22, 0.12, -0.08), WHITE),
+      ])
+    case 'grass':
+      // Three blades leaning apart: a tuft, read as turf when there are
+      // hundreds.
+      return merged([
+        painted(new THREE.ConeGeometry(0.08, 0.6, 3).translate(0, 0.3, 0), WHITE),
+        painted(
+          new THREE.ConeGeometry(0.07, 0.5, 3).rotateZ(0.5).translate(0.12, 0.22, 0.05),
+          WHITE,
+        ),
+        painted(
+          new THREE.ConeGeometry(0.07, 0.45, 3).rotateZ(-0.45).translate(-0.1, 0.2, -0.06),
+          WHITE,
+        ),
+      ])
+    case 'cone':
+      // A cinder cone: a wide squat mound with a crater of cooled lava.
+      return merged([
+        painted(new THREE.CylinderGeometry(0.22, 0.6, 0.45, 10).translate(0, 0.225, 0), WHITE),
+        painted(new THREE.CylinderGeometry(0.17, 0.2, 0.04, 10).translate(0, 0.45, 0), EMBER),
       ])
     case 'cactus':
       return merged([
@@ -122,12 +145,30 @@ const model = (feature: Feature): THREE.BufferGeometry => {
 }
 
 export function featureMaterial(): THREE.MeshStandardMaterial {
-  return new THREE.MeshStandardMaterial({
+  const material = new THREE.MeshStandardMaterial({
     vertexColors: true,
     flatShading: true,
     roughness: 0.88,
     metalness: 0,
   })
+  // Each instance shrinks into the ground over the last stretch of the
+  // feature range, so a wood thins out towards the horizon rather than
+  // stopping at a line where the tiles do.
+  material.onBeforeCompile = (shader) => {
+    shader.uniforms.featureRange = DETAIL_RANGE
+    shader.vertexShader =
+      'uniform float featureRange;\n' +
+      shader.vertexShader.replace(
+        '#include <begin_vertex>',
+        /* glsl */ `#include <begin_vertex>
+        {
+          float featureGap = length((modelViewMatrix * instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0)).xyz);
+          transformed *= 1.0 - smoothstep(featureRange * 0.7, featureRange, featureGap);
+        }`,
+      )
+  }
+  material.customProgramCacheKey = () => 'planet-features'
+  return material
 }
 
 const up = new THREE.Vector3()

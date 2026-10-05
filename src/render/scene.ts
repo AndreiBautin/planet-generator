@@ -9,7 +9,13 @@ import { AIR_RADIUS, buildAtmosphere } from './atmosphere'
 import { BORN, birthAt, type Birth } from './birth'
 import type { Builder } from './builder'
 import { cloudsFromTexture, cloudsSeenFrom } from './clouds'
-import { DETAIL_TIME, withGroundDetail, withLavaDetail, withWaterDetail } from './detail'
+import {
+  DETAIL_RANGE,
+  DETAIL_TIME,
+  withGroundDetail,
+  withLavaDetail,
+  withWaterDetail,
+} from './detail'
 import type { Vec3 } from './patches/cube'
 import type { ViewCone } from './patches/lod'
 import { featureMaterial } from './patches/feature-models'
@@ -147,6 +153,7 @@ export function startScene(
       {
         ground: withGroundDetail(
           new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.92, metalness: 0 }),
+          world.molten,
         ),
         water: world.molten
           ? withLavaDetail(waterMaterial(world))
@@ -342,6 +349,7 @@ export function startScene(
     const turn = (now / TURN_MS) * Math.PI * 2
     lastTurn = turn
     DETAIL_TIME.value = now / 1000
+    DETAIL_RANGE.value = quality.featureRange
     place(view(), turn)
     if (coming !== undefined) {
       coming.terrain.update(inPlanetFrame(camera.position, turn, 1), viewCone(turn))

@@ -1,6 +1,7 @@
 import { surfaceAt, type Planet, type Surface } from '@/generation/planet'
-import { fineReliefAt, fineReliefWeight } from '@/generation/relief'
-import { patternAt } from '@/generation/features'
+import { groupingsAt } from '@/generation/grouping'
+import { fineReliefAt, reliefWeightAt } from '@/generation/relief'
+import { floorAt, patternAt } from '@/generation/features'
 
 import { fromPalette } from '../colour'
 import { liftOf } from '../surface-data'
@@ -60,11 +61,11 @@ function drawnHeight(
   readonly drawn: number
 } {
   const surface = surfaceAt(planet, x, y, z)
-  const fine = fineReliefAt(planet, x, y, z)
+  const fine = fineReliefAt(planet, x, y, z, surface)
   return {
     surface,
     fine,
-    drawn: surface.height + fine * fineReliefWeight(surface.height) * FINE_RELIEF,
+    drawn: surface.height + fine * reliefWeightAt(planet, surface) * FINE_RELIEF,
   }
 }
 
@@ -162,10 +163,21 @@ export function samplePatch(planet: Planet, key: PatchKey, segments: number): Pa
       if (here !== undefined) {
         const look = patternAt(planet, here, steep)
         const at = (j * side + i) * 4
-        pattern[at] = look.canopy
-        pattern[at + 1] = look.sand
+        // The painted canopy follows the groves the trees stand in, and
+        // the ground turns stony where the rock lies, so the ground and
+        // what stands on it agree about where a wood or an outcrop is.
+        const grouping = groupingsAt(planet, px / radial, py / radial, pz / radial)
+        const stony = Math.min(1, floorAt(planet, here, steep).rock * 2) * grouping.outcrop
+        pattern[at] = look.canopy * Math.min(1, grouping.grove * 1.4)
+        pattern[at + 1] = look.sand * (1 - stony * 0.7)
         pattern[at + 2] = look.snow
-        pattern[at + 3] = look.stone
+        pattern[at + 3] = Math.min(1, look.stone + stony * 0.8)
+        if (stony > 0 && height > 0) {
+          const k = stony * 0.55
+          colours[out] = mix(colours[out] ?? 0, stone.r, k)
+          colours[out + 1] = mix(colours[out + 1] ?? 0, stone.g, k)
+          colours[out + 2] = mix(colours[out + 2] ?? 0, stone.b, k)
+        }
       }
       if (height > 0.03) {
         const rock = Math.min(1, Math.max(0, (steep - ROCK_FROM) / (ROCK_FULL - ROCK_FROM)))

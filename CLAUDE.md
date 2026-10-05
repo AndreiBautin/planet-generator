@@ -63,23 +63,47 @@ checks nothing. The pre-push hook runs `pnpm verify`; CI runs the same.
 - **Refine a step at a time.** The terrain asks for one level below what it
   is drawing, not for the leaf; asking for the leaf left the whole faces up
   until the finest ground arrived.
-- **Features stand on a fixed grid, not on the patches.** Trees, scrub,
-  cacti, rocks, boulders, spires and floes come from `featuresAt` and
-  `scatterPatch` (`generation/features.ts`, `render/patches/scatter.ts`):
-  one candidate per grid cell of `CELL` on each cube face, decided by a hash
-  of the cell, so a feature is the same one whatever patch carries it and a
-  parent tile is exactly the union of its children (tested). They stream in
-  their own level-7 tiles near the camera (`flora.ts`, owned by `Terrain`
-  so they turn with the planet), because the ground's finest patches only
-  reach a flight's height away and a forest that existed only underneath
-  is no forest. Past the feature range the ground shader carries the look:
-  `patternAt` writes canopy, sand, snow and stone per vertex and
-  `withGroundDetail` draws crowns, ripples, wind ridges and cracks from it.
-  The sea gets a depth attribute for shallows and shore foam, and a molten
-  sea its own plates-and-seams shader.
+- **A biome is made of its features; nothing is dropped onto a base.**
+  Reported as _"these seem like random entities dropped onto the original
+  stuff"_. `featuresAt` (what stands) and `floorAt` (what covers the floor)
+  in `generation/features.ts` run close to one thing per spot where a biome
+  is at its fullest — a wood is trees crown to crown with scrub and grass
+  under them, pack ice is plates edge to edge with ridges between, a lava
+  field is column pavements, cones and rubble — and **the planet's kind
+  gates what can grow**: an arid world is desert wherever it is dry enough
+  and grows no forest from a damp patch of its noise (it did, and was
+  reported). The ground answers to the same fields: `groupingsAt`
+  (`generation/grouping.ts`) is read by both the scatterer and
+  `samplePatch`, so the painted canopy follows the groves the trees stand
+  in and the ground turns stony exactly where the rock lies; `relief.ts`
+  draws dry lowland into dunes and snow into drifts, with
+  `reliefWeightAt` letting dune country carry relief at a height where
+  crags carry none. Rocks are half buried and take the ground's colour,
+  grass the turf's.
+- **Features stand on a fixed grid, not on the patches.** `scatterPatch`
+  (`render/patches/scatter.ts`) takes two candidates per grid cell of
+  `CELL` on each cube face, decided by a hash of the cell, so a feature is
+  the same one whatever patch carries it and a parent tile is exactly the
+  union of its children (tested). They stream in their own level-7 tiles
+  near the camera (`flora.ts`, owned by `Terrain` so they turn with the
+  planet), because the ground's finest patches only reach a flight's
+  height away and a forest that existed only underneath is no forest.
+  **Each instance shrinks into the ground over the last stretch of the
+  range** (`featureMaterial`), because a wood that stopped at the tile
+  line was the plainest sign of assets on a base. Past the range the
+  ground shader carries the look: `patternAt` writes canopy, sand, snow
+  and stone per vertex and `withGroundDetail` draws crowns, ripples, wind
+  ridges and cracks from it — and inside the range the canopy slot draws
+  the forest floor instead, through the `DETAIL_RANGE` uniform. The sea
+  lifts in a swell near the camera (vertex displacement, held still at
+  the shore and faded before coarse patches) with foam on the crests; a
+  molten world's lowland runs with glowing channels and pools, and its
+  sea is plates and seams.
 - **Trees are green first and the palette second.** An ochre world's
   "lush" painted orange forests that read as dead ones; the forest also
-  stops at real heat however wet the ground is.
+  stops at real heat however wet the ground is. A pine is snow-laden only
+  where the ground is snow — tinted by cold alone it stood as a white post
+  on brown highland.
 - **The sky shader only fills the sky.** Haze over ground is the scene's
   fog. Laying the shader over everything with the ground taken as a sphere
   washed low land out white, because real hills stand above that sphere.
