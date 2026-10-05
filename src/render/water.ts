@@ -5,7 +5,8 @@ import type { Planet } from '@/generation/planet'
 import { fromPalette } from './colour'
 
 /**
- * The sea: a smooth sphere at sea level over the sunken floor. Translucent,
+ * The sea: a smooth surface at sea level over the sunken floor, drawn patch
+ * by patch alongside the ground (see patches/terrain.ts). Translucent,
  * so the floor's shading reads as depth through it, and glossy, so the sun
  * leaves a glint that slides across the ocean as the planet turns.
  *
@@ -13,13 +14,12 @@ import { fromPalette } from './colour'
  */
 export const SEA_RADIUS = 1.0015
 
-export function buildWater(planet: Planet, detail: number): THREE.Mesh {
-  const geometry = new THREE.IcosahedronGeometry(SEA_RADIUS, detail)
+export function waterMaterial(planet: Planet): THREE.Material {
   // Tinted towards the deep colour: tinted with the shallow one, the whole
   // ocean read as one bright turquoise and the floor's depth was lost.
   const colour = fromPalette(planet.palette.deep).lerp(fromPalette(planet.palette.shallow), 0.35)
 
-  const material = planet.molten
+  return planet.molten
     ? new THREE.MeshStandardMaterial({
         // Dark crust lit by its own glow: a bright base colour plus the
         // sun's light washed the lava out to pale yellow.
@@ -38,8 +38,4 @@ export function buildWater(planet: Planet, detail: number): THREE.Mesh {
         clearcoat: 0.6,
         clearcoatRoughness: 0.12,
       })
-
-  const mesh = new THREE.Mesh(geometry, material)
-  mesh.renderOrder = 1
-  return mesh
 }

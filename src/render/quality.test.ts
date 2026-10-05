@@ -6,7 +6,8 @@ describe('pickQuality', () => {
   it('draws less on a phone than on a desktop', () => {
     const phone = pickQuality({ width: 390, height: 844, pixelRatio: 3, cores: 6 })
     const desktop = pickQuality({ width: 1920, height: 1080, pixelRatio: 1, cores: 12 })
-    expect(phone.detail).toBeLessThan(desktop.detail)
+    expect(phone.lodThreshold).toBeGreaterThan(desktop.lodThreshold)
+    expect(phone.maxLevel).toBeLessThanOrEqual(desktop.maxLevel)
     expect(phone.cloudWidth).toBeLessThan(desktop.cloudWidth)
   })
 
@@ -17,7 +18,7 @@ describe('pickQuality', () => {
   it('treats a device that hides its core count as a modest one', () => {
     const hidden = pickQuality({ width: 390, height: 844, pixelRatio: 3, cores: 0 })
     const strong = pickQuality({ width: 390, height: 844, pixelRatio: 3, cores: 8 })
-    expect(hidden.detail).toBeLessThan(strong.detail)
+    expect(hidden.lodThreshold).toBeGreaterThan(strong.lodThreshold)
   })
 
   it('keeps cloud textures a power of two wide', () => {

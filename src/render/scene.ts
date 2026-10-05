@@ -7,26 +7,27 @@ import { starField } from '@/generation/stars'
 
 import { buildAtmosphere } from './atmosphere'
 import { BORN, birthAt, type Birth } from './birth'
-import type { Built } from './build-protocol'
+import type { Builder } from './builder'
 import { CLOUD_OPACITY, cloudsFromTexture } from './clouds'
-import { meshFromSurface } from './planet-mesh'
+import type { Vec3 } from './patches/cube'
+import { Terrain } from './patches/terrain'
 import { nextPixelRatio, typicalFrame, type Quality } from './quality'
-import { buildWater } from './water'
+import { waterMaterial } from './water'
 
 /**
  * The Three.js scene: a renderer filling the window, a camera, a star to
  * light the planet, and a frame loop driven by a Clock. Generation hands
  * this numbers; it never generates anything itself.
  *
- * The renderer, camera and sun live for the page; a planet is shown, and
- * replaced by the next one shown, with everything the old one allocated on
- * the GPU released. The slow part — sampling the surface — happens before
- * `show`, in the builder, so showing is only uploading.
+ * The renderer, camera and sun live for the page. A planet is shown by
+ * starting its terrain streaming behind the one on screen, and swapping the
+ * two once the new one has its six faces and its clouds — so New planet
+ * never shows an empty sky, and a dial moved keeps the old ground until the
+ * new ground is there to replace it.
  */
 export interface Scene {
-  /** Whether a planet's clouds are already on screen and can be kept. */
-  readonly hasCloudsFor: (planet: Planet) => boolean
-  readonly show: (planet: Planet, built: Built, options: { readonly born: boolean }) => void
+  /** Resolves true once the planet is on screen, false if another was asked for first. */
+  readonly show: (planet: Planet, options: { readonly born: boolean }) => Promise<boolean>
   readonly dispose: () => void
 }
 
@@ -42,6 +43,7 @@ export interface CameraView {
 
 export interface SceneOptions {
   readonly quality: Quality
+  readonly builder: Builder
   /** Skip the birth animation: the planet simply appears. */
   readonly reducedMotion: boolean
 }
@@ -50,7 +52,7 @@ export interface SceneOptions {
 interface Shown {
   readonly seed: string
   readonly kind: string
-  readonly body: THREE.Group
+  readonly terrain: Terrain
   readonly clouds: THREE.Mesh
   readonly air: THREE.Mesh
   readonly sky: THREE.Points
@@ -58,8 +60,21 @@ interface Shown {
   readonly bornAt: number | undefined
 }
 
+/** A planet being made behind the one on screen. */
+interface Coming {
+  readonly world: Planet
+  readonly terrain: Terrain
+  /** The clouds, once baked; absent while baking, or when the shown ones will do. */
+  clouds: THREE.Mesh | undefined
+  readonly keepClouds: boolean
+  readonly born: boolean
+  readonly resolve: (shown: boolean) => void
+}
+
 /** Frames measured before the governor judges the device. */
 const FRAME_WINDOW = 90
+/** One slow turn every two minutes. */
+const TURN_MS = 120_000
 
 export function startScene(
   canvas: HTMLCanvasElement,
@@ -89,43 +104,76 @@ export function startScene(
   sun.position.set(5, 1.5, 2.5)
   scene.add(sun, new THREE.AmbientLight(0x1a2438, 0.35))
 
-  const { detail, cloudWidth } = options.quality
+  const { quality, builder } = options
   let shown: Shown | undefined
+  let coming: Coming | undefined
 
-  const hasCloudsFor = (world: Planet): boolean =>
-    shown !== undefined && shown.seed === world.seed && shown.kind === world.kind
+  const terrainFor = (world: Planet): Terrain =>
+    new Terrain(
+      world,
+      builder,
+      {
+        segments: quality.segments,
+        threshold: quality.lodThreshold,
+        maxLevel: quality.maxLevel,
+        inFlight: 8,
+        cached: 320,
+      },
+      {
+        ground: new THREE.MeshStandardMaterial({
+          vertexColors: true,
+          roughness: 0.92,
+          metalness: 0,
+        }),
+        water: waterMaterial(world),
+      },
+    )
 
-  const show = (world: Planet, built: Built, { born }: { readonly born: boolean }): void => {
+  const show = (world: Planet, { born }: { readonly born: boolean }): Promise<boolean> => {
     // The sky, the clouds and the air depend on the seed and the kind, not
     // on the dials, so moving a dial rebuilds only the ground and the sea —
     // the clouds are the slowest thing here to bake.
+    const keepClouds = shown !== undefined && shown.seed === world.seed && shown.kind === world.kind
+    if (coming !== undefined) {
+      coming.terrain.dispose()
+      if (coming.clouds !== undefined) release(coming.clouds)
+      coming.resolve(false)
+    }
+    return new Promise((resolve) => {
+      const next: Coming = {
+        world,
+        terrain: terrainFor(world),
+        clouds: undefined,
+        keepClouds,
+        born,
+        resolve,
+      }
+      coming = next
+      if (!keepClouds) {
+        void builder.clouds(world.seed, world.dials, quality.cloudWidth).then((texture) => {
+          if (coming === next) next.clouds = cloudsFromTexture(world, texture, quality.cloudWidth)
+        })
+      }
+    })
+  }
+
+  /** Put a made planet on screen, and let go of the one it replaces. */
+  const arrive = (next: Coming): void => {
     const previous = shown
-    const keep = previous !== undefined && hasCloudsFor(world) && built.clouds === undefined
-
-    // Land and sea turn together, as one body; the clouds drift a little
-    // faster than the ground beneath them, and the air does not turn at all.
-    const body = new THREE.Group()
-    body.add(meshFromSurface(built.surface), buildWater(world, detail))
-
+    const keep = next.keepClouds && previous !== undefined
     let clouds: THREE.Mesh
     let air: THREE.Mesh
     let sky: THREE.Points
     if (keep) {
       ;({ clouds, air, sky } = previous)
     } else {
-      // Clouds are only left out of a build when the scene said it could keep
-      // them; should that ever disagree, a clear sky beats a crash.
-      clouds =
-        built.clouds === undefined
-          ? cloudsFromTexture(world, new Uint8Array(8), 2)
-          : cloudsFromTexture(world, built.clouds, cloudWidth)
-      air = buildAtmosphere(world, sun.position)
-      sky = buildSky(world, pixelRatio)
+      clouds = next.clouds ?? cloudsFromTexture(next.world, new Uint8Array(8), 2)
+      air = buildAtmosphere(next.world, sun.position)
+      sky = buildSky(next.world, pixelRatio)
     }
-
     if (previous !== undefined) {
-      scene.remove(previous.body)
-      release(previous.body)
+      scene.remove(previous.terrain.group)
+      previous.terrain.dispose()
       if (!keep) {
         scene.remove(previous.clouds, previous.air, previous.sky)
         release(previous.clouds)
@@ -133,19 +181,20 @@ export function startScene(
         release(previous.sky)
       }
     }
-    scene.add(body)
+    scene.add(next.terrain.group)
     if (!keep) scene.add(clouds, air, sky)
-    const animate = born && !options.reducedMotion
+    const animate = next.born && !options.reducedMotion
     shown = {
-      seed: world.seed,
-      kind: world.kind,
-      body,
+      seed: next.world.seed,
+      kind: next.world.kind,
+      terrain: next.terrain,
       clouds,
       air,
       sky,
       bornAt: animate ? clock.now() : keep ? previous.bornAt : undefined,
     }
     pose(shown, animate ? birthAt(0) : stageOf(shown))
+    next.resolve(true)
   }
 
   const stageOf = (planet: Shown): Birth =>
@@ -163,8 +212,6 @@ export function startScene(
   const frames: number[] = []
   let lastFrameAt = clock.now()
 
-  // One slow turn every two minutes, from the clock rather than per frame,
-  // so a dropped frame does not slow the planet down.
   renderer.setAnimationLoop(() => {
     const now = clock.now()
     frames.push(now - lastFrameAt)
@@ -186,23 +233,36 @@ export function startScene(
       distance * Math.cos(pitch) * Math.cos(yaw),
     )
     camera.lookAt(0, 0, 0)
+
+    // From the clock rather than per frame, so a dropped frame does not
+    // slow the planet down.
+    const turn = (now / TURN_MS) * Math.PI * 2
+    if (coming !== undefined) {
+      coming.terrain.update(inPlanetFrame(camera.position, turn, 1))
+      if (coming.terrain.ready && (coming.keepClouds || coming.clouds !== undefined)) {
+        const next = coming
+        coming = undefined
+        arrive(next)
+      }
+    }
     if (shown !== undefined) {
-      const turns = now / 120_000
-      shown.body.rotation.y = turns * Math.PI * 2
-      shown.clouds.rotation.y = turns * 1.15 * Math.PI * 2
-      pose(shown, stageOf(shown))
+      const stage = stageOf(shown)
+      shown.terrain.group.rotation.y = turn
+      shown.clouds.rotation.y = turn * 1.15
+      pose(shown, stage)
+      shown.terrain.update(inPlanetFrame(camera.position, turn, stage.scale))
     }
     renderer.render(scene, camera)
   })
 
   return {
-    hasCloudsFor,
     show,
     dispose: () => {
       renderer.setAnimationLoop(null)
       window.removeEventListener('resize', resize)
+      coming?.terrain.dispose()
       if (shown !== undefined) {
-        release(shown.body)
+        shown.terrain.dispose()
         release(shown.clouds)
         release(shown.air)
         release(shown.sky)
@@ -212,9 +272,23 @@ export function startScene(
   }
 }
 
+/**
+ * The camera in the planet's own frame: undo the planet's turn about its
+ * axis and its birth scale, so the terrain is split for where the camera is
+ * relative to the ground rather than relative to the room.
+ */
+function inPlanetFrame(position: THREE.Vector3, turn: number, scale: number): Vec3 {
+  const cos = Math.cos(-turn)
+  const sin = Math.sin(-turn)
+  const x = position.x * cos + position.z * sin
+  const z = -position.x * sin + position.z * cos
+  const s = scale > 0 ? 1 / scale : 1
+  return [x * s, position.y * s, z * s]
+}
+
 /** Apply a stage of the birth animation to a shown planet. */
 function pose(planet: Shown, stage: Birth): void {
-  planet.body.scale.setScalar(stage.scale)
+  planet.terrain.group.scale.setScalar(stage.scale)
   planet.clouds.scale.setScalar(stage.scale)
   planet.air.scale.setScalar(stage.scale)
   const clouds: unknown = planet.clouds.material

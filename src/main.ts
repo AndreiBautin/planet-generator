@@ -49,9 +49,9 @@ document.body.prepend(canvas)
 const orbit = attachOrbit(canvas, systemClock)
 const scene = startScene(canvas, systemClock, orbit.current, {
   quality,
+  builder: createBuilder(navigator.hardwareConcurrency),
   reducedMotion: window.matchMedia('(prefers-reduced-motion: reduce)').matches,
 })
-const builder = createBuilder()
 
 /**
  * Show the current seed and dials. A new world is born; a dial moved on the
@@ -62,16 +62,10 @@ const show = async (born: boolean): Promise<void> => {
   const planet = createPlanet(seed, dials)
   hud.render(planet)
   document.body.classList.add('forming')
-  const built = await builder.build({
-    seed,
-    dials,
-    detail: quality.detail,
-    cloudWidth: scene.hasCloudsFor(planet) ? 0 : quality.cloudWidth,
-  })
-  // A later request has superseded this one; that one will show itself.
-  if (built === undefined) return
+  // False when a later planet was asked for first; that one will clear the
+  // forming state when it arrives.
+  if (!(await scene.show(planet, { born }))) return
   document.body.classList.remove('forming')
-  scene.show(planet, built, { born })
   logger.info('planet.shown', { seed, kind: planet.kind })
 }
 

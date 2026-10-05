@@ -1,60 +1,86 @@
-import { createPlanet } from '@/generation/planet'
+import type { Dials } from '@/generation/planet'
+import type { Seed } from '@/generation/seed'
 import { logger } from '@/shared/logger'
 
-import type { BuildRequest, Built } from './build-protocol'
-import { bakeClouds, sampleSurface } from './surface-data'
+import type { WorkRequest, WorkResult } from './build-protocol'
+import type { PatchKey } from './patches/cube'
+import type { PatchData } from './patches/patch-data'
+import { answer } from './work'
 
 /**
- * Builds planets in a worker, and on the main thread where a worker cannot
- * be made — so the app is slower there, never broken.
+ * A small pool of workers that make clouds and patches, with each request
+ * sent to whichever worker has least waiting. Where a worker cannot be made
+ * the same work runs on the page, a request a tick, so the app is slower
+ * there and never broken.
  *
- * Only the newest request matters: pressing New planet three times quickly
- * should show the third planet, not all three in turn. Each build resolves
- * with `undefined` if a later one was asked for before it finished.
+ * Nothing here decides what is wanted or whether an answer is still
+ * wanted: the terrain asks, and drops what arrives for a planet it no
+ * longer shows.
  */
 export interface Builder {
-  readonly build: (request: Omit<BuildRequest, 'id'>) => Promise<Built | undefined>
+  readonly clouds: (seed: Seed, dials: Dials, width: number) => Promise<Uint8Array>
+  readonly patch: (seed: Seed, dials: Dials, key: PatchKey, segments: number) => Promise<PatchData>
 }
 
-export function createBuilder(): Builder {
-  let latest = 0
-  let worker: Worker | undefined
+interface Lane {
+  readonly worker: Worker
+  waiting: number
+}
+
+export function createBuilder(cores: number): Builder {
+  let next = 0
+  const settle = new Map<number, (result: WorkResult) => void>()
+  // One worker per spare core, up to three: the page keeps one to itself.
+  const count = Math.max(1, Math.min(3, cores - 1))
+  const lanes: Lane[] = []
   try {
-    worker = new Worker(new URL('./build.worker.ts', import.meta.url), { type: 'module' })
+    for (let at = 0; at < count; at += 1) {
+      const worker = new Worker(new URL('./build.worker.ts', import.meta.url), { type: 'module' })
+      const lane: Lane = { worker, waiting: 0 }
+      worker.onmessage = (event: MessageEvent<WorkResult>) => {
+        lane.waiting -= 1
+        const resolve = settle.get(event.data.id)
+        settle.delete(event.data.id)
+        resolve?.(event.data)
+      }
+      lanes.push(lane)
+    }
   } catch {
     logger.warn('builder.no-worker')
-    worker = undefined
   }
-  const waiting = new Map<number, (built: Built) => void>()
-  if (worker !== undefined) {
-    worker.onmessage = (event: MessageEvent<Built>) => {
-      const resolve = waiting.get(event.data.id)
-      waiting.delete(event.data.id)
-      resolve?.(event.data)
+
+  const run = (request: WorkRequest): Promise<WorkResult> => {
+    const lane = lanes.reduce<Lane | undefined>(
+      (best, candidate) =>
+        best === undefined || candidate.waiting < best.waiting ? candidate : best,
+      undefined,
+    )
+    if (lane === undefined) {
+      return new Promise((resolve) => {
+        setTimeout(() => {
+          resolve(answer(request))
+        }, 0)
+      })
     }
+    lane.waiting += 1
+    return new Promise((resolve) => {
+      settle.set(request.id, resolve)
+      lane.worker.postMessage(request)
+    })
   }
 
   return {
-    build: async (partial) => {
-      latest += 1
-      const request: BuildRequest = { ...partial, id: latest }
-      const built =
-        worker === undefined
-          ? buildHere(request)
-          : await new Promise<Built>((resolve) => {
-              waiting.set(request.id, resolve)
-              worker.postMessage(request)
-            })
-      return built.id === latest ? built : undefined
+    clouds: async (seed, dials, width) => {
+      next += 1
+      const result = await run({ id: next, kind: 'clouds', seed, dials, width })
+      if (result.kind !== 'clouds') throw new Error('builder answered clouds with a patch')
+      return result.texture
     },
-  }
-}
-
-function buildHere(request: BuildRequest): Built {
-  const planet = createPlanet(request.seed, request.dials)
-  return {
-    id: request.id,
-    surface: sampleSurface(planet, request.detail),
-    clouds: request.cloudWidth > 0 ? bakeClouds(planet, request.cloudWidth) : undefined,
+    patch: async (seed, dials, key, segments) => {
+      next += 1
+      const result = await run({ id: next, kind: 'patch', seed, dials, key, segments })
+      if (result.kind !== 'patch') throw new Error('builder answered a patch with clouds')
+      return result.patch
+    },
   }
 }

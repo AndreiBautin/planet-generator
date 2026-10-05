@@ -15,8 +15,15 @@ export interface Device {
 }
 
 export interface Quality {
-  /** Icosphere subdivisions: the triangle count grows with its square. */
-  readonly detail: number
+  /** Grid squares along a patch's side: the triangles per patch grow with its square. */
+  readonly segments: number
+  /**
+   * How large a vertex spacing may look before a patch splits, as an angle
+   * at the eye in radians. Larger is coarser and lighter.
+   */
+  readonly lodThreshold: number
+  /** How many times a face may be halved: the finest ground there is. */
+  readonly maxLevel: number
   /** Cloud texture width; its height is half. */
   readonly cloudWidth: number
   readonly pixelRatio: number
@@ -30,7 +37,9 @@ export function pickQuality(device: Device): Quality {
   // An unknown core count is treated as a modest device, not a strong one.
   const modest = device.cores > 0 ? device.cores <= 4 : true
   return {
-    detail: phone ? (modest ? 48 : 64) : modest ? 72 : 96,
+    segments: 32,
+    lodThreshold: phone ? (modest ? 0.016 : 0.012) : modest ? 0.009 : 0.006,
+    maxLevel: phone ? 8 : 9,
     cloudWidth: phone ? 512 : 1024,
     pixelRatio: Math.min(device.pixelRatio, modest ? 1.5 : 2),
   }

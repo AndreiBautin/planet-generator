@@ -1,70 +1,23 @@
-import * as THREE from 'three'
-import { mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
-
 import { cloudDensityAt } from '@/generation/clouds'
-import { surfaceAt, type Planet } from '@/generation/planet'
-
-import { fromPalette } from './colour'
+import type { Planet } from '@/generation/planet'
 
 /**
- * The slow half of drawing a planet: sampling the surface at every vertex
- * and the clouds at every texel. Kept apart from the meshes, as plain typed
- * arrays, so it can run in a worker and hand its results across without a
- * copy — the page keeps animating while a world is being made.
- *
- * Nothing in here touches the DOM or a GPU; Three is used only for its
- * icosphere and its vertex merging.
+ * The slow, shared parts of drawing a planet that are not patches: how far
+ * a height lifts the ground, and the cloud texture. Plain numbers and typed
+ * arrays, so they run in a worker and cross back without a copy.
  */
-export interface SurfaceData {
-  readonly positions: Float32Array
-  readonly normals: Float32Array
-  readonly colours: Float32Array
-  readonly index: Uint32Array
-}
 
 /** How far above the sea's surface the lowest land sits. */
 const LAND_CLEARANCE = 0.003
 
 /**
- * An icosphere (even triangles everywhere, no poles to pinch), each vertex
- * pushed out by the surface height and painted the surface colour.
- *
- * Merged before the normals are computed — Three's icosphere repeats every
- * vertex per face, and normals averaged over unmerged vertices come out
- * flat-shaded, a faceted ball instead of a world.
+ * The radius a surface height is drawn at, above 1. Land rises with the
+ * relief, starting just clear of the water so the coast does not flicker
+ * where the two surfaces meet; the sea floor sinks more gently, so the
+ * water over it is shallow at the coast.
  */
-export function sampleSurface(planet: Planet, detail: number): SurfaceData {
-  const geometry = mergeVertices(new THREE.IcosahedronGeometry(1, detail))
-  const position = geometry.getAttribute('position')
-  const colours = new Float32Array(position.count * 3)
-
-  for (let at = 0; at < position.count; at += 1) {
-    const x = position.getX(at)
-    const y = position.getY(at)
-    const z = position.getZ(at)
-    const { height, colour } = surfaceAt(planet, x, y, z)
-    // Land rises with the relief, starting just clear of the water so the
-    // coast does not flicker where the two surfaces meet; the sea floor
-    // sinks more gently, so the water over it is shallow at the coast.
-    const lift =
-      height > 0 ? LAND_CLEARANCE + height * planet.relief * 0.7 : height * planet.relief * 0.35
-    const radius = 1 + lift
-    const length = Math.hypot(x, y, z)
-    position.setXYZ(at, (x / length) * radius, (y / length) * radius, (z / length) * radius)
-    const linear = fromPalette(colour)
-    colours[at * 3] = linear.r
-    colours[at * 3 + 1] = linear.g
-    colours[at * 3 + 2] = linear.b
-  }
-  geometry.computeVertexNormals()
-
-  const index = geometry.getIndex()
-  return {
-    positions: Float32Array.from(position.array),
-    normals: Float32Array.from(geometry.getAttribute('normal').array),
-    colours,
-    index: index === null ? new Uint32Array(0) : Uint32Array.from(index.array),
-  }
+export function liftOf(height: number, relief: number): number {
+  return height > 0 ? LAND_CLEARANCE + height * relief * 0.7 : height * relief * 0.35
 }
 
 /**
