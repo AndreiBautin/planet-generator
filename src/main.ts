@@ -4,6 +4,7 @@ import { KINDS } from '@/generation/kinds'
 import { createPlanet } from '@/generation/planet'
 import { newSeed, parseSeed } from '@/generation/seed'
 import { startScene } from '@/render/scene'
+import { attachOrbit } from '@/ui/controls'
 import { logger, setLogLevel } from '@/shared/logger'
 
 /**
@@ -33,5 +34,10 @@ const label = document.getElementById('seed')
 if (label !== null)
   label.textContent = `${planet.name} · ${KINDS[planet.kind].label} · seed ${seed}`
 
-startScene(document.body, planet, systemClock)
+// The canvas is made here so the controls and the scene can share it
+// without either knowing about the other: render/ never imports ui/.
+const canvas = document.createElement('canvas')
+document.body.prepend(canvas)
+const orbit = attachOrbit(canvas, systemClock)
+startScene(canvas, planet, systemClock, orbit.current)
 logger.info('planet.started', { seed })

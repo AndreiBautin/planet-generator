@@ -19,18 +19,31 @@ export interface Scene {
   readonly dispose: () => void
 }
 
-export function startScene(host: HTMLElement, world: Planet, clock: Clock): Scene {
-  const renderer = new THREE.WebGLRenderer({ antialias: true })
+/**
+ * Where the camera should be, asked for once a frame. Defined here rather
+ * than taken from the controls, so the scene does not know what moves it.
+ */
+export interface CameraView {
+  readonly yaw: number
+  readonly pitch: number
+  readonly distance: number
+}
+
+export function startScene(
+  canvas: HTMLCanvasElement,
+  world: Planet,
+  clock: Clock,
+  view: () => CameraView,
+): Scene {
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true })
   const pixelRatio = Math.min(window.devicePixelRatio, 2)
   renderer.setPixelRatio(pixelRatio)
   renderer.toneMapping = THREE.ACESFilmicToneMapping
   renderer.toneMappingExposure = 1.15
   renderer.setSize(window.innerWidth, window.innerHeight)
-  host.prepend(renderer.domElement)
 
   const scene = new THREE.Scene()
   const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100)
-  camera.position.set(0, 0, 3.2)
 
   // A low, warm sun from one side, so mountains throw shade and the night
   // side falls dark; the ambient is just enough to keep the night readable.
@@ -73,6 +86,13 @@ export function startScene(host: HTMLElement, world: Planet, clock: Clock): Scen
   // One slow turn every two minutes, from the clock rather than per frame,
   // so a dropped frame does not slow the planet down.
   renderer.setAnimationLoop(() => {
+    const { yaw, pitch, distance } = view()
+    camera.position.set(
+      distance * Math.cos(pitch) * Math.sin(yaw),
+      distance * Math.sin(pitch),
+      distance * Math.cos(pitch) * Math.cos(yaw),
+    )
+    camera.lookAt(0, 0, 0)
     const turns = clock.now() / 120_000
     planet.rotation.y = turns * Math.PI * 2
     clouds.rotation.y = turns * 1.15 * Math.PI * 2
