@@ -545,10 +545,14 @@ export function withWaterDetail(material: THREE.Material): THREE.Material {
     // The depth under the sea slides between levels as the ground does, so
     // the shallows and the foam do not jump when a finer patch comes in.
     shader.uniforms.terrainMorphLod = TERRAIN_MORPH
-    shader.vertexShader = (MORPH_DECLARE + 'attribute float coarseDepth;\n' + shader.vertexShader)
+    shader.vertexShader = (
+      MORPH_DECLARE +
+      'attribute float coarseDepth;\nattribute vec2 ice;\nvarying float v_ice;\n' +
+      shader.vertexShader
+    )
       .replace(
         'void main() {',
-        'void main() {\n  float seaDepth = mix(depth, coarseDepth, terrainMorphAt(position));',
+        'void main() {\n  float seaMorph = terrainMorphAt(position);\n  float seaDepth = mix(depth, coarseDepth, seaMorph);\n  v_ice = mix(ice.x, ice.y, seaMorph);',
       )
       .replace('v_depth = depth;', 'v_depth = seaDepth;')
       .replace('smoothstep(0.0, 0.0004, depth)', 'smoothstep(0.0, 0.0004, seaDepth)')
@@ -568,7 +572,9 @@ export function withWaterDetail(material: THREE.Material): THREE.Material {
           // a wave, are not torn from fine near ones; held still right at the
           // shore, where the land's edge is; taller running into the shallows.
           float seaView = length((modelViewMatrix * vec4(position, 1.0)).xyz);
-          float lift = (1.0 - smoothstep(0.02, 0.14, seaView)) * smoothstep(0.0, 0.0004, depth);
+          // And calm under ice, which damps the sea: waves lifted the water
+          // over the floes as the eye came down, and the ice drowned.
+          float lift = (1.0 - smoothstep(0.02, 0.14, seaView)) * smoothstep(0.0, 0.0004, seaDepth) * (1.0 - smoothstep(0.05, 0.4, v_ice));
           float shoal = 1.0 + 0.7 * (1.0 - smoothstep(0.0, 0.004, depth));
           // (direction, wavelength, steepness, period) for four trains.
           vec4 trainA = vec4(0.3, 0.02, 0.16, 11.0);
@@ -609,8 +615,13 @@ export function withWaterDetail(material: THREE.Material): THREE.Material {
         transformed += waveOffset;`,
         )
     shader.uniforms.seaSky = DETAIL_SKY
+    const seaIce: unknown = material.userData.seaIce
+    shader.uniforms.seaIce = {
+      value: seaIce instanceof THREE.Color ? seaIce : new THREE.Color(0.9, 0.94, 0.97),
+    }
     shader.fragmentShader =
-      'uniform vec3 seaSky;\nvarying float v_jac;\nvarying float v_heave;\n' + shader.fragmentShader
+      'uniform vec3 seaSky;\nuniform vec3 seaIce;\nvarying float v_ice;\nvarying float v_jac;\nvarying float v_heave;\n' +
+      shader.fragmentShader
     shader.fragmentShader = shader.fragmentShader
       .replace(
         '#include <color_fragment>',
@@ -635,6 +646,23 @@ export function withWaterDetail(material: THREE.Material): THREE.Material {
         float white = clamp(foam + caps, 0.0, 1.0);
         diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.92, 0.95, 0.97), white);
         diffuseColor.a = mix(diffuseColor.a, 0.95, white);
+        // Deep water keeps its own colour: clear only over the shallows,
+        // where the floor is worth seeing. Clear everywhere, the floor under
+        // it — and how much of it the angle let through — set the colour of
+        // the open sea, which shifted as the glide pitched.
+        diffuseColor.a = mix(diffuseColor.a, 0.9, smoothstep(0.0, 0.012, v_depth));
+        // Pack ice floats on the water, slabs split by dark leads, and does
+        // not mirror the sky.
+        float packIce = smoothstep(0.9, 1.0, v_ice);
+        if (packIce > 0.0) {
+          float iceSpan = length(fwidth(vDetailPosition)) * 600.0;
+          float lead = 1.0 - smoothstep(0.0, 0.05 + iceSpan * 0.3, abs(detailNoise(vDetailPosition * 600.0) - 0.5));
+          float slab = 0.88 + 0.12 * detailNoise(vDetailPosition * 160.0);
+          float onIce = packIce * (1.0 - lead * 0.85 * (1.0 - smoothstep(0.3, 1.0, iceSpan)));
+          diffuseColor.rgb = mix(diffuseColor.rgb, seaIce * slab, onIce);
+          diffuseColor.a = mix(diffuseColor.a, 1.0, onIce);
+          white = max(white, onIce);
+        }
         diffuseColor.rgb *= 1.0 - cloudShadow(vDetailPosition) * 0.5;`,
       )
       .replace(

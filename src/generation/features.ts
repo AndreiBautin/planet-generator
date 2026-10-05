@@ -59,7 +59,7 @@ export const NOTHING: Growth = {
 }
 
 /** Where the sea freezes over, as `biomeFor` decides it. */
-const FREEZES = -0.45
+export const FREEZES = -0.45
 
 /** The terms every land rule reads, computed once per spot. */
 interface Terms {

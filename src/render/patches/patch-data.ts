@@ -2,7 +2,7 @@ import { surfaceAt, type Planet, type Surface } from '@/generation/planet'
 import { groupingsAt } from '@/generation/grouping'
 import { fbm } from '@/generation/noise'
 import { fineReliefAt, reliefWeightAt } from '@/generation/relief'
-import { floorAt, patternAt } from '@/generation/features'
+import { floorAt, FREEZES, patternAt } from '@/generation/features'
 
 import { fromPalette } from '../colour'
 import { liftOf } from '../surface-data'
@@ -52,6 +52,13 @@ export interface PatchData {
   readonly coarseNormals: Float32Array
   readonly coarseColours: Float32Array
   readonly coarsePattern: Float32Array
+  /**
+   * How much of the sea here is ice, two a vertex: this patch's and its parent's.
+   * The ice is drawn on the water's surface (detail.ts), where it floats:
+   * drawn as floor under translucent water, it came and went with the
+   * angle the water was seen at.
+   */
+  readonly ice: Float32Array
 }
 
 /** Vertices in a patch: the grid, then four edges' worth of skirt. */
@@ -111,6 +118,7 @@ export function samplePatch(planet: Planet, key: PatchKey, segments: number): Pa
   const heights = new Float32Array(side * side)
   const surfaces: Surface[] = []
   const pattern = new Float32Array(vertexCount(segments) * 4)
+  const ice = new Float32Array(vertexCount(segments) * 2)
   let hasSea = false
 
   for (let j = -2; j <= segments + 2; j += 1) {
@@ -130,6 +138,13 @@ export function samplePatch(planet: Planet, key: PatchKey, segments: number): Pa
       positions[out + 1] = y * radius
       positions[out + 2] = z * radius
       heights[j * side + i] = surface.height
+      // How much of the sea here is ice, by the rule the floes are placed
+      // by (features.ts): solid pack below freezing, thinning to open water
+      // just above it.
+      ice[(j * side + i) * 2] =
+        surface.height < 0 && !planet.molten
+          ? Math.min(1, Math.max(0, (FREEZES + 0.2 - surface.warmth) / 0.2))
+          : 0
       surfaces[j * side + i] = surface
       // Light and shade from the same fine noise, and a mottle at field
       // scale — patches of lusher and drier, lighter and darker ground —
@@ -279,6 +294,7 @@ export function samplePatch(planet: Planet, key: PatchKey, segments: number): Pa
           coarsePattern[vertex * 4 + k] =
             (coarsePattern[vertex * 4 + k] ?? 0) + (pattern[from * 4 + k] ?? 0) * share
         }
+        ice[vertex * 2 + 1] = (ice[vertex * 2 + 1] ?? 0) + (ice[from * 2] ?? 0) * share
         const [px, py, pz] = parentNormal(ei, ej)
         const length = Math.hypot(px, py, pz) || 1
         nx += px / length
@@ -314,6 +330,8 @@ export function samplePatch(planet: Planet, key: PatchKey, segments: number): Pa
       coarsePositions[skirt * 4 + 3] = key.level
       for (let k = 0; k < 4; k += 1)
         coarsePattern[skirt * 4 + k] = coarsePattern[vertex * 4 + k] ?? 0
+      ice[skirt * 2] = ice[vertex * 2] ?? 0
+      ice[skirt * 2 + 1] = ice[vertex * 2 + 1] ?? 0
       skirt += 1
     }
   }
@@ -328,6 +346,7 @@ export function samplePatch(planet: Planet, key: PatchKey, segments: number): Pa
     coarseNormals,
     coarseColours,
     coarsePattern,
+    ice,
   }
 }
 

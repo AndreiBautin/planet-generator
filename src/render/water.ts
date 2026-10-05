@@ -29,13 +29,22 @@ export function waterMaterial(planet: Planet): THREE.Material {
         roughness: 0.7,
         metalness: 0,
       })
-    : new THREE.MeshPhysicalMaterial({
-        color: colour,
-        transparent: true,
-        opacity: 0.68,
-        roughness: 0.18,
-        metalness: 0,
-        clearcoat: 0.6,
-        clearcoatRoughness: 0.12,
-      })
+    : withSeaIce(
+        new THREE.MeshPhysicalMaterial({
+          color: colour,
+          transparent: true,
+          opacity: 0.68,
+          roughness: 0.18,
+          metalness: 0,
+          clearcoat: 0.6,
+          clearcoatRoughness: 0.12,
+        }),
+        fromPalette(planet.palette.ice),
+      )
+}
+
+/** The colour pack ice is drawn on this sea, for the water's shader to read. */
+function withSeaIce(material: THREE.Material, ice: THREE.Color): THREE.Material {
+  material.userData.seaIce = ice
+  return material
 }

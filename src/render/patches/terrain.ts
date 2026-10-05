@@ -41,7 +41,7 @@ interface Entry {
   readonly whole: THREE.Object3D[]
   readonly quarters: THREE.Object3D[][]
   /** Which edges are stitched to a coarser neighbour, a bit each, and the attribute that says so. */
-  edges: number
+  edges: number[]
   stitch: THREE.BufferAttribute | undefined
   shownAt: number | undefined
   requested: boolean
@@ -58,6 +58,7 @@ export class Terrain {
   private lastShown: ReadonlySet<string> = new Set<string>()
   private readonly sliding = new Set<Entry>()
   private lastCamera: Vec3 | undefined
+  private stitchedAt = 0
 
   private readonly world: Planet
   private readonly builder: Builder
@@ -260,25 +261,35 @@ export class Terrain {
       }
       return false
     }
+    // Eased, at the pace a patch slides in: a neighbour arriving finer
+    // slides from the coarse shape over the same time, so the two edges
+    // move together. Snapped, the edge jumped in one frame along a line.
+    const now = DETAIL_TIME.value
+    const step = Math.max(0, Math.min(1, (now - this.stitchedAt) / ARRIVAL_SECONDS))
+    this.stitchedAt = now
     for (const name of drawn.keys()) {
       const entry = this.entries.get(name)
       if (entry?.stitch === undefined) continue
-      let edges = 0
-      neighboursOf(entry.key).forEach((neighbour, edge) => {
-        if (coarser(neighbour)) edges |= 1 << edge
+      const goals = neighboursOf(entry.key).map((neighbour) => (coarser(neighbour) ? 1 : 0))
+      const fresh = !this.lastShown.has(name)
+      const edges = entry.edges.map((weight, edge) => {
+        const goal = goals[edge] ?? 0
+        // A patch first drawn takes its edges as they are, with nothing to ease from.
+        const next = fresh ? goal : weight + Math.max(-step, Math.min(step, goal - weight))
+        return next
       })
-      if (edges === entry.edges) continue
+      if (edges.every((weight, edge) => weight === entry.edges[edge])) continue
       entry.edges = edges
       const values = entry.stitch.array as Float32Array
-      values.fill(0)
       const side = this.options.segments + 1
       const grid = side * side
+      values.fill(0)
       for (let k = 0; k < side; k += 1) {
         const along = [k, (side - 1) * side + k, k * side, k * side + side - 1]
         along.forEach((vertex, edge) => {
-          if ((edges & (1 << edge)) === 0) return
-          values[vertex] = 1
-          values[grid + edge * side + k] = 1
+          const weight = edges[edge] ?? 0
+          values[vertex] = Math.max(values[vertex] ?? 0, weight)
+          values[grid + edge * side + k] = weight
         })
       }
       entry.stitch.needsUpdate = true
@@ -313,7 +324,7 @@ export class Terrain {
       arrival: [],
       whole: [],
       quarters: [[], [], [], []],
-      edges: 0,
+      edges: [0, 0, 0, 0],
       stitch: undefined,
       shownAt: undefined,
       requested: true,
@@ -430,6 +441,7 @@ export class Terrain {
       water.setAttribute('normal', new THREE.BufferAttribute(normals, 3))
       water.setAttribute('depth', new THREE.BufferAttribute(depth, 1))
       water.setAttribute('coarseDepth', new THREE.BufferAttribute(coarseDepth, 1))
+      water.setAttribute('ice', new THREE.BufferAttribute(patch.ice, 2))
       water.setAttribute('coarsePosition', new THREE.BufferAttribute(patch.coarsePositions, 4))
       water.setIndex(new THREE.BufferAttribute(this.index, 1))
       water.computeBoundingSphere()
