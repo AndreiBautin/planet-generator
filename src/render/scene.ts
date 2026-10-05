@@ -4,6 +4,7 @@ import type { Clock } from '@/app/clock'
 import { surfaceAt, type Planet } from '@/generation/planet'
 import { createRng } from '@/generation/rng'
 import { starField } from '@/generation/stars'
+import { logger } from '@/shared/logger'
 
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js'
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js'
@@ -13,6 +14,7 @@ import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPa
 
 import { AIR_RADIUS, buildAtmosphere } from './atmosphere'
 import { HAZE_SUN, installHaze } from './haze'
+import { installSteadyShadows } from './shadows'
 import { BORN, birthAt, type Birth } from './birth'
 import type { Builder } from './builder'
 import { cloudDataOf, cloudsFromTexture, cloudsSeenFrom } from './clouds'
@@ -158,6 +160,55 @@ function landNear(planet: Planet, under: Vec3, heading: Vec3): Vec3 {
   return nearestDry ?? under
 }
 
+/**
+ * Which way to set off: the bearing with the longest run of land ahead,
+ * out of sixteen, the one nearest the way the eye faced winning a tie. A
+ * glide flies straight unless steered — it once leaned towards land on its
+ * own, and that read as turning for no reason — so where it starts heading
+ * decides whether the first minute is over ground or over open sea.
+ */
+function alongTheLand(planet: Planet, position: Vec3, facing: Vec3): Vec3 {
+  const dry = (d: Vec3): boolean => surfaceAt(planet, d[0], d[1], d[2]).height > 0
+  const along = (v: Vec3): Vec3 => {
+    const k = v[0] * position[0] + v[1] * position[1] + v[2] * position[2]
+    return unit([v[0] - position[0] * k, v[1] - position[1] * k, v[2] - position[2] * k])
+  }
+  const ahead = along(facing)
+  const side: Vec3 = [
+    position[1] * ahead[2] - position[2] * ahead[1],
+    position[2] * ahead[0] - position[0] * ahead[2],
+    position[0] * ahead[1] - position[1] * ahead[0],
+  ]
+  let best = ahead
+  let bestRun = -1
+  for (let k = 0; k < 16; k += 1) {
+    // Out from straight ahead in both directions alternately, so a tie keeps
+    // the bearing nearest the way the eye faced.
+    const turn = (Math.ceil(k / 2) * (k % 2 === 0 ? 1 : -1) * Math.PI) / 8
+    const bearing: Vec3 = [
+      ahead[0] * Math.cos(turn) + side[0] * Math.sin(turn),
+      ahead[1] * Math.cos(turn) + side[1] * Math.sin(turn),
+      ahead[2] * Math.cos(turn) + side[2] * Math.sin(turn),
+    ]
+    let run = 0
+    while (run < 40) {
+      const t = (run + 1) * 0.006
+      const step = unit([
+        position[0] * Math.cos(t) + bearing[0] * Math.sin(t),
+        position[1] * Math.cos(t) + bearing[1] * Math.sin(t),
+        position[2] * Math.cos(t) + bearing[2] * Math.sin(t),
+      ])
+      if (!dry(step)) break
+      run += 1
+    }
+    if (run > bestRun) {
+      best = bearing
+      bestRun = run
+    }
+  }
+  return best
+}
+
 /** How far out the stars are laid, before they are scaled to the far plane. */
 const STAR_RADIUS = 60
 
@@ -212,6 +263,7 @@ export function startScene(
   options: SceneOptions,
 ): Scene {
   installHaze()
+  if (!installSteadyShadows()) logger.warn('shadows.filter-unpatched')
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: !options.quality.post })
   let pixelRatio = options.quality.pixelRatio
   renderer.setPixelRatio(pixelRatio)
@@ -276,6 +328,7 @@ export function startScene(
     sun.shadow.normalBias = 0.0002
   }
   const shadowGround = new THREE.Vector3()
+  let shadowReach = 0.015
   const shadowRight = new THREE.Vector3()
   const shadowUp = new THREE.Vector3()
   const modelView = new THREE.Matrix4()
@@ -472,8 +525,15 @@ export function startScene(
         // as the eye moves the shadow texels stay put on the ground. A box
         // that slid and resized every frame made each texel crawl, which
         // read as static over every flat surface — sand, ice, a cliff face.
+        // With some slack before it steps back down: the eye's height rises
+        // and falls with every hill it follows, and a box stepping on each
+        // one changed every shadow's sharpness and reach as it went.
         const wanted = Math.min(0.09, Math.max(0.015, above * 2.5))
-        const reach = 0.015 * Math.pow(1.5, Math.ceil(Math.log(wanted / 0.015) / Math.log(1.5)))
+        if (wanted > shadowReach || wanted < shadowReach / 1.5 / 1.3) {
+          shadowReach =
+            0.015 * Math.pow(1.5, Math.ceil(Math.log(wanted / 0.015) / Math.log(1.5) - 1e-9))
+        }
+        const reach = shadowReach
         const texel = (2 * reach) / options.quality.shadowMap
         shadowGround.copy(camera.position).normalize()
         shadowRight.crossVectors(ROOM_UP, sunDirection).normalize()
@@ -650,8 +710,9 @@ export function startScene(
       // looking at, not a featureless sea. The nearest raised ground to the
       // point under the eye, searched in rings out to about thirty degrees;
       // the point itself if there is none that close.
-      const position = shown === undefined ? under : landNear(shown.world, under, unit(heading))
-      return { position, heading }
+      if (shown === undefined) return { position: under, heading }
+      const position = landNear(shown.world, under, unit(heading))
+      return { position, heading: alongTheLand(shown.world, position, unit(heading)) }
     },
     orbitOver: (position) => {
       const [x, y, z] = intoRoom(position, lastTurn)
