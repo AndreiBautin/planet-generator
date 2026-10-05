@@ -276,11 +276,11 @@ export function withGroundDetail(
         // Stone: cracked into blocks, each a slightly different grey.
         float stone = v_pattern.w * patternFar;
         if (stone > 0.02) {
-          vec3 blocks = detailCells(vDetailPosition * 900.0);
-          float crack = 1.0 - smoothstep(0.0, 0.07, blocks.y - blocks.x);
-          detailShade *= 1.0 - crack * 0.45 * stone;
-          detailShade *= 1.0 + (blocks.z - 0.5) * 0.24 * stone;
-          detailHeight -= crack * 0.6 * stone;
+          vec3 blocks = detailCells(vDetailPosition * 2400.0);
+          float crack = (1.0 - smoothstep(0.0, 0.08, blocks.y - blocks.x)) * detailNear;
+          detailShade *= 1.0 - crack * 0.3 * stone;
+          detailShade *= 1.0 + (blocks.z - 0.5) * 0.16 * stone;
+          detailHeight -= crack * 0.5 * stone;
         }
 
         diffuseColor.rgb *= detailShade * (1.0 + detailHeight * 0.3);`,

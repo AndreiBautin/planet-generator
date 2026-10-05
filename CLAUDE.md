@@ -130,6 +130,19 @@ checks nothing. The pre-push hook runs `pnpm verify`; CI runs the same.
   so its features scale up over `GROW_SECONDS` rather than appearing. One
   material per tile is cheap: the cache key is shared, so it is a few
   uniforms, not a compile.
+- **A wood is a stand, not a sprinkle.** Reported as _"trees still spawn
+  seemingly randomly"_. `groupingsAt` ramped softly, so every acre got a
+  thin scattering; it is a sharp step now — a broad field says where the
+  woods are, a finer one roughens the edge, the inside is solid and the
+  outside bare but for a ragged margin of single trees — and rock lies in
+  outcrops the same way. `grouping.test.ts` holds both bimodal: mostly
+  solid or bare, little in between. The ground is painted by the same
+  fields, so the canopy pattern and the forest floor stop where the trees
+  stop.
+- **The planet shadows what stands on it.** A tree's sunward facets were
+  lit by a sun under the horizon, so the night side was black ground
+  under white trees and floes. `featureMaterial` scales the direct light
+  by the sun's height over the feature's own up.
 - **No two trees are the same tree.** `modelsOf` in feature-models.ts
   gives the kinds there are many of several shapes — a spruce, a fir and a
   pine; a round crown, a poplar and an oak; two scrubs, two rocks, two

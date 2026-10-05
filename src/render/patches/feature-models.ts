@@ -263,15 +263,33 @@ export function featureMaterial(born: number): THREE.MeshStandardMaterial {
     shader.uniforms.featureNow = DETAIL_TIME
     shader.uniforms.featureBorn = { value: born }
     shader.vertexShader =
-      'uniform float featureRange;\nuniform float featureNow;\nuniform float featureBorn;\n' +
+      'uniform float featureRange;\nuniform float featureNow;\nuniform float featureBorn;\nvarying vec3 vFeatureUp;\n' +
       shader.vertexShader.replace(
         '#include <begin_vertex>',
         /* glsl */ `#include <begin_vertex>
         {
-          float featureGap = length((modelViewMatrix * instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0)).xyz);
+          vec3 featureFoot = (instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0)).xyz;
+          float featureGap = length((modelViewMatrix * vec4(featureFoot, 1.0)).xyz);
           float grown = smoothstep(0.0, ${GROW_SECONDS.toFixed(2)}, featureNow - featureBorn);
           transformed *= grown * (1.0 - smoothstep(featureRange * 0.7, featureRange, featureGap));
+          vFeatureUp = normalize(normalMatrix * normalize(featureFoot));
         }`,
+      )
+    // The planet shadows what stands on it: once the sun is under the
+    // ground's horizon it lights nothing there, however a facet faces.
+    // Without this a tree's sunward side glowed white on the night side.
+    shader.fragmentShader =
+      'varying vec3 vFeatureUp;\n' +
+      shader.fragmentShader.replace(
+        '#include <lights_fragment_end>',
+        /* glsl */ `#include <lights_fragment_end>
+        #if NUM_DIR_LIGHTS > 0
+        {
+          float featureDay = smoothstep(-0.06, 0.1, dot(normalize(vFeatureUp), directionalLights[0].direction));
+          reflectedLight.directDiffuse *= featureDay;
+          reflectedLight.directSpecular *= featureDay;
+        }
+        #endif`,
       )
   }
   material.customProgramCacheKey = () => 'planet-features'
