@@ -196,6 +196,22 @@ checks nothing. The pre-push hook runs `pnpm verify`; CI runs the same.
   lit by a sun under the horizon, so the night side was black ground
   under white trees and floes. `featureMaterial` scales the direct light
   by the sun's height over the feature's own up.
+- **Woods stop at the tree line and never grow on snow.** Asked as _"why
+  does every biome have trees?"_ — snowfields grew "hardy pines just below
+  the snow line" that read as white posts, and highlands grew forest to
+  the peaks. `featuresAt`: nothing grows on the `snow` biome, trees thin
+  out from height 0.4 and are gone by 0.62, the boreal belt wants the
+  milder cold (warmth above −0.5) so a frozen world has a taiga band, not a
+  covering; an arid world grows none; a molten one nothing living. Tested.
+- **The features are smooth and roughened, not faceted.** Reported as
+  _"still looks like a PS1 game"_. `feature-models.ts` subdivides each rock
+  and crown and pushes every vertex by a hash of where it is (`roughen`),
+  with smooth normals over the result; rock, boulders, columns and cones
+  carry a `stony` attribute and wear the ground's stone photograph
+  triplanar in the planet's frame (basalt on a molten world); everything
+  else is shaded darker towards its foot so a crown has an underside. Floes
+  and columns stay faceted on purpose — a plate of ice and a basalt column
+  are flat faces.
 - **No two trees are the same tree.** `modelsOf` in feature-models.ts
   gives the kinds there are many of several shapes — a spruce, a fir and a
   pine; a round crown, a poplar and an oak; two scrubs, two rocks, two

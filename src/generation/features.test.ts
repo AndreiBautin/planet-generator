@@ -75,12 +75,23 @@ describe('featuresAt', () => {
     )
   })
 
-  it('stands ice spires and boulders on snow, with only a few pines', () => {
+  it('stands ice spires and boulders on snow, and grows nothing there', () => {
     const growth = featuresAt(planet, ground({ biome: 'snow', warmth: -0.5 }), 0.25)
     expect(growth.spire).toBeGreaterThan(0)
     expect(featuresAt(planet, ground({ biome: 'snow', warmth: -0.5 }), 0).spire).toBe(0)
     expect(growth.boulder).toBeGreaterThan(0)
-    expect(growth.broadleaf).toBe(0)
+    expect(growth.broadleaf + growth.conifer).toBe(0)
+  })
+
+  it('stops the woods at the tree line', () => {
+    const low = featuresAt(planet, ground({ moisture: 0.9, warmth: 0.1, height: 0.2 }), 0)
+    const high = featuresAt(
+      planet,
+      ground({ moisture: 0.9, warmth: 0.1, height: 0.7, biome: 'highland' }),
+      0,
+    )
+    expect(low.broadleaf + low.conifer).toBeGreaterThan(0.8)
+    expect(high.broadleaf + high.conifer).toBe(0)
   })
 
   it('packs a frozen sea with ice, plate to plate, and scatters floes past its edge', () => {
@@ -139,7 +150,7 @@ describe('floorAt', () => {
 
   it('covers a desert floor with rock and dry scrub, no turf to speak of', () => {
     const floor = floorAt(arid, ground({ moisture: 0.2, warmth: 0.6 }), 0)
-    expect(floor.rock).toBeGreaterThan(0.1)
+    expect(floor.rock).toBeGreaterThan(0.05)
     expect(floor.shrub).toBeGreaterThan(0.1)
     expect(floor.grass).toBeLessThan(0.1)
   })

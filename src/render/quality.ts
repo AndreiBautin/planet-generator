@@ -51,8 +51,8 @@ export function pickQuality(device: Device): Quality {
   const modest = device.cores > 0 ? device.cores <= 4 : true
   return {
     segments: 32,
-    lodThreshold: phone ? (modest ? 0.016 : 0.012) : modest ? 0.009 : 0.006,
-    maxLevel: phone ? 8 : 9,
+    lodThreshold: phone ? (modest ? 0.014 : 0.01) : modest ? 0.009 : 0.006,
+    maxLevel: phone && modest ? 8 : 9,
     patchCache: phone ? (modest ? 450 : 600) : 1200,
     inFlight: phone ? 12 : 24,
     featureRange: phone ? (modest ? 0.05 : 0.07) : 0.11,

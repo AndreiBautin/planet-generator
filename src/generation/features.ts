@@ -88,9 +88,11 @@ function termsOf(planet: Planet, surface: Surface, steep: number): Terms {
   const forest = arid
     ? 0
     : smooth(0.38, 0.62, wet) * smooth(-0.35, 0.0, warm) * (1 - smooth(0.55, 0.9, warm)) * living
+  // The boreal belt: cold and damp, but not the deep cold — on a frozen
+  // world it is a band around the warmest latitudes, not a covering.
   const boreal = arid
     ? 0
-    : smooth(0.28, 0.5, wet) * smooth(-0.6, -0.4, warm) * (1 - smooth(-0.15, 0.1, warm)) * living
+    : smooth(0.3, 0.52, wet) * smooth(-0.5, -0.35, warm) * (1 - smooth(-0.15, 0.1, warm)) * living
   const highland = surface.biome === 'highland' ? 1 : smooth(0.2, 0.42, surface.height)
   const cool = 1 - smooth(0.05, 0.55, warm)
   const pineShare = Math.min(1, cool * 0.8 + highland * 0.7)
@@ -134,14 +136,17 @@ export function featuresAt(planet: Planet, surface: Surface, steep: number): Gro
     }
   }
   if (surface.biome === 'snow' || surface.biome === 'sea-ice') {
-    // Hardy pines just below the snow line, seracs standing on the steep
-    // ground, and stone poking through the drifts.
-    const pines = smooth(-0.55, -0.32, surface.warmth) * 0.5 * living
-    return { ...NOTHING, conifer: pines, boulder: boulder * 0.25, spire: cliff * 0.2 }
+    // Above the tree line: seracs standing on the steep ground and stone
+    // poking through the drifts, and nothing growing. Pines here read as
+    // white posts on the snow, and were asked about.
+    return { ...NOTHING, boulder: boulder * 0.25, spire: cliff * 0.2 }
   }
   if (surface.biome === 'shore') return { ...NOTHING, boulder: 0.01 }
 
-  const trees = Math.max(forest, boreal) * 0.92
+  // The tree line: woods thin with height and stop before the peaks, on
+  // every world — a highland is grass, scree and rock, not forest.
+  const treeline = 1 - smooth(0.4, 0.62, surface.height)
+  const trees = Math.max(forest, boreal) * 0.92 * treeline
   const pines = Math.max(forest * pineShare, boreal) / Math.max(1e-9, Math.max(forest, boreal))
   const broadleafShare = planet.kind === 'frozen' ? 0 : 1 - pines
   return {
@@ -149,7 +154,7 @@ export function featuresAt(planet: Planet, surface: Surface, steep: number): Gro
     broadleaf: trees * broadleafShare,
     conifer: trees * (1 - broadleafShare),
     cactus: desert * 0.12,
-    boulder: boulder + desert * 0.03,
+    boulder: boulder + desert * 0.015,
   }
 }
 
@@ -189,7 +194,7 @@ export function floorAt(planet: Planet, surface: Surface, steep: number): Growth
     ...NOTHING,
     grass,
     shrub: Math.min(0.5, scrub),
-    rock: Math.min(0.45, rock + desert * 0.12),
+    rock: Math.min(0.45, rock + desert * 0.06),
   }
 }
 

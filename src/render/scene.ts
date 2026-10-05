@@ -165,6 +165,7 @@ export function startScene(
   let shown: Shown | undefined
   let coming: Coming | undefined
 
+  const ground = groundTextures(options.assetBase)
   const terrainFor = (world: Planet): Terrain =>
     new Terrain(
       world,
@@ -178,12 +179,17 @@ export function startScene(
         peak: world.relief * 1.1 + 0.005,
         inFlight: quality.inFlight,
         cached: quality.patchCache,
-        flora: { range: quality.featureRange, inFlight: quality.featureInFlight, cached: 320 },
+        flora: {
+          range: quality.featureRange,
+          inFlight: quality.featureInFlight,
+          cached: 320,
+          stone: world.molten ? ground.basalt : ground.stone,
+        },
       },
       {
         ground: withGroundDetail(
           new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.92, metalness: 0 }),
-          groundTextures(options.assetBase),
+          ground,
           world.molten,
         ),
         water: world.molten

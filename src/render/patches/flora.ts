@@ -4,6 +4,7 @@ import type { Planet } from '@/generation/planet'
 
 import type { Builder } from '../builder'
 import { DETAIL_TIME } from '../detail'
+import type { GroundLayer } from '../textures'
 import { keyOf, patchAngle, type PatchKey, type Vec3 } from './cube'
 import { featureMaterial, featuresFor } from './feature-models'
 import { aheadOf, centreOf, featureTiles, type ViewCone } from './lod'
@@ -31,6 +32,8 @@ export interface FloraOptions {
   readonly inFlight: number
   /** Tiles kept after they leave the range, for flying back over them. */
   readonly cached: number
+  /** The ground's stone photograph, which rock and columns wear. */
+  readonly stone: GroundLayer
 }
 
 interface Tile {
@@ -110,7 +113,7 @@ export class Flora {
       this.waiting -= 1
       if (this.disposed || this.tiles.get(name) !== tile) return
       const node = new THREE.Group()
-      const material = featureMaterial(DETAIL_TIME.value)
+      const material = featureMaterial(DETAIL_TIME.value, this.options.stone)
       for (const mesh of featuresFor(scatter, material)) node.add(mesh)
       node.visible = false
       tile.node = node
