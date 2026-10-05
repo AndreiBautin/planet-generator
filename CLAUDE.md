@@ -130,6 +130,30 @@ checks nothing. The pre-push hook runs `pnpm verify`; CI runs the same.
   so its features scale up over `GROW_SECONDS` rather than appearing. One
   material per tile is cheap: the cache key is shared, so it is a few
   uniforms, not a compile.
+- **The sea is Gerstner waves, in the vertex shader, with their own
+  normals.** Four trains crossing (`withWaterDetail`), each pushing the
+  surface along its direction as well as lifting it, so crests sharpen and
+  lean; taller running into the shallows; foam where the surface is
+  squeezed most (`v_jac`, the Jacobian's vertical term) and along the
+  coast. Faded by view distance so coarse far patches are not torn from
+  fine near ones, and held still at the shore. Wavelengths are planet-scale
+  exaggerations (0.003–0.02 radii): a real swell is invisible from a glide.
+- **Lava flows by flow mapping.** `withLavaDetail` carries the crust on a
+  noise current and reads it twice, half a cycle apart, cross-faded — the
+  only way a pattern moves without stretching forever — with brighter lava
+  streaming along the seams; a molten world's land channels carry a fine
+  noise down them. Judge motion on a device: the agent's pane shows stills.
+- **The clouds churn in the shader.** `cloudsFromTexture` keeps the baked
+  map for where the cloud is and, per pixel, bends where it is read with a
+  slow noise and breaks the edges into billows that roll through over a
+  minute or two. The map's bytes stay on the mesh (`cloudDataOf`) so the
+  rain can ask how heavy the cloud over the eye is.
+- **Rain is a shower around the eye, where the cloud over it is heavy.**
+  `render/rain.ts`: a box of line streaks placed at the eye and turned to
+  the local up each frame, falling in the vertex shader; `coverAt` reads
+  the baked map the way `SphereGeometry` maps it (tested with one bright
+  texel found by direction), in the layer's own frame, and only below
+  0.12 radii up. Weather you fly through, not weather seen from orbit.
 - **The sun throws shadows near the ground, from a box that follows the
   eye.** `sun.castShadow` only while flying under 0.2 radii up; the shadow
   camera is an orthographic box a few hundredths of a radius across kept

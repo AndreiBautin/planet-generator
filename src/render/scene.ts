@@ -8,7 +8,8 @@ import { starField } from '@/generation/stars'
 import { AIR_RADIUS, buildAtmosphere } from './atmosphere'
 import { BORN, birthAt, type Birth } from './birth'
 import type { Builder } from './builder'
-import { cloudsFromTexture, cloudsSeenFrom } from './clouds'
+import { cloudDataOf, cloudsFromTexture, cloudsSeenFrom } from './clouds'
+import { coverAt, Rain } from './rain'
 import {
   DETAIL_CLOUD_SPIN,
   DETAIL_CLOUD_SUN,
@@ -151,6 +152,10 @@ export function startScene(
     sun.shadow.normalBias = 0.0002
   }
   const shadowGround = new THREE.Vector3()
+  // Rain around the eye where the cloud over it is heavy, while flying low.
+  const rain = new Rain()
+  scene.add(rain.object)
+  const rainEye = new THREE.Vector3()
 
   const { quality, builder } = options
   let shown: Shown | undefined
@@ -416,9 +421,28 @@ export function startScene(
       pose(shown, stage)
       cloudsSeenFrom(shown.clouds, camera.position.length(), stage.scale, stage.clouds)
       shown.terrain.update(inPlanetFrame(camera.position, turn, stage.scale), viewCone(turn))
+      rain.update(rainEye.copy(camera.position), rainOver(shown.clouds, turn))
     }
     renderer.render(scene, camera)
   })
+
+  /** How heavy a shower falls on the eye: the cloud over it, only low down. */
+  const rainOver = (clouds: THREE.Mesh, turn: number): number => {
+    const above = camera.position.length() - 1
+    if (above > 0.12) return 0
+    const held = cloudDataOf(clouds)
+    if (held === undefined) return 0
+    // The eye's direction in the cloud layer's own frame, which turns a
+    // little ahead of the ground.
+    const direction = inPlanetFrame(camera.position, turn * 1.15, 1)
+    const length = Math.hypot(...direction) || 1
+    const cover = coverAt(held.data, held.width, [
+      direction[0] / length,
+      direction[1] / length,
+      direction[2] / length,
+    ])
+    return smooth(0.5, 0.8, cover) * (1 - smooth(0.06, 0.12, above))
+  }
 
   return {
     show,
@@ -434,6 +458,7 @@ export function startScene(
       return { yaw: Math.atan2(x, z), pitch: Math.asin(Math.max(-1, Math.min(1, y))) }
     },
     dispose: () => {
+      rain.dispose()
       renderer.setAnimationLoop(null)
       window.removeEventListener('resize', resize)
       coming?.terrain.dispose()

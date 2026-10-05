@@ -50,6 +50,9 @@ shared. Nothing else would notice. So:
   its ceiling and floor, looks up the sky when pitched up, gains speed in a dive and spends it in
   a climb; a dive turned
   back mid-way rises from where it had got to.
+- **The rain's reading of the cloud map** (`rain.test.ts`): one bright texel
+  in a map is found by the direction that `SphereGeometry` maps to it, and
+  an empty or too-small map reads as clear.
 - **The baked ground textures** (`ground-atlas.test.ts`): every kind is a
   full square with real variation, the seam is no sharper than the
   sharpest step inside the square (so it tiles), and the colours stay near

@@ -39,7 +39,7 @@ export const DETAIL_CLOUD_SPIN = { value: 0 }
 /** The sun's direction in the planet's frame, for where a cloud's shadow falls. */
 export const DETAIL_CLOUD_SUN = { value: new THREE.Vector3(1, 0, 0) }
 
-const NOISE = /* glsl */ `
+export const NOISE = /* glsl */ `
   // A hash that holds up at large coordinates, unlike the sin() kind,
   // which degrades on mobile GPUs well before a few thousand.
   float detailHash(vec3 p) {
@@ -197,7 +197,9 @@ export function withGroundDetail(
             float n = detailNoise(p) + detailNoise(p * 2.7) * 0.35 - 0.675;
             float channel = 1.0 - smoothstep(0.0, 0.035 + 0.03 * (1.0 - lavaFar), abs(n));
             float pool = smoothstep(0.58, 0.75, detailNoise(vDetailPosition * 45.0)) * lava;
-            float glow = max(channel * lava, pool) * (0.8 + 0.2 * sin(detailTime * 0.9 + n * 20.0));
+            // Lava running down the channel: a fine noise carried along it.
+            float run = detailNoise(vDetailPosition * 700.0 - vec3(detailTime * 2.5, detailTime * 1.7, -detailTime * 2.1) * 0.0012 * 700.0);
+            float glow = max(channel * lava * (0.7 + run * 0.6), pool) * (0.8 + 0.2 * sin(detailTime * 0.9 + n * 20.0));
             totalEmissiveRadiance += vec3(1.0, 0.32, 0.04) * glow * 1.6;
             diffuseColor.rgb *= 1.0 - glow * 0.6;
           }
@@ -299,7 +301,9 @@ export function withGroundDetail(
         }
 
         // Stone: cracked into blocks, each a slightly different grey.
-        float stone = v_pattern.w * patternFar;
+        // Only ground that is mostly stone cracks: a grassy slope with a
+        // little rock in it drew crack lines across the turf.
+        float stone = smoothstep(0.35, 0.85, v_pattern.w) * patternFar;
         if (stone > 0.02) {
           vec3 blocks = detailCells(vDetailPosition * 2400.0);
           float crack = (1.0 - smoothstep(0.0, 0.08, blocks.y - blocks.x)) * detailNear;
@@ -332,32 +336,71 @@ export function withGroundDetail(
 }
 
 /**
- * The sea: a swell that lifts the surface itself near the camera, ripples
- * over it, foam along the coast and on the crests, lighter shallows.
+ * The sea: waves that lift and push the surface itself near the camera —
+ * four trains of Gerstner waves crossing, their crests sharpened and
+ * leaning, taller as they run into the shallows — with their own normals,
+ * foam where a crest is steep enough to break and along the coast, fine
+ * ripples over it all, and lighter water over the shallows.
  */
 export function withWaterDetail(material: THREE.Material): THREE.Material {
   material.onBeforeCompile = (shader) => {
     passThrough(shader, { attribute: 'depth', type: 'float' })
     shader.vertexShader =
-      'varying float v_swell;\n' +
-      shader.vertexShader.replace(
-        '#include <begin_vertex>',
-        /* glsl */ `#include <begin_vertex>
+      'varying float v_jac;\nvarying float v_heave;\n' +
+      shader.vertexShader
+        .replace(
+          '#include <beginnormal_vertex>',
+          /* glsl */ `#include <beginnormal_vertex>
+        vec3 waveOffset = vec3(0.0);
         {
-          // Two trains of swell crossing, lifting the vertices along the
-          // planet's up; faded with distance so coarse far patches, which
-          // could not follow a wave, are not torn from fine near ones, and
-          // held still right at the shore, where the land's edge is.
+          vec3 up = normalize(position);
+          vec3 east = normalize(cross(vec3(0.0, 1.0, 0.0), up) + vec3(1e-5, 0.0, 0.0));
+          vec3 north = cross(up, east);
+          // Faded with distance so coarse far patches, which could not follow
+          // a wave, are not torn from fine near ones; held still right at the
+          // shore, where the land's edge is; taller running into the shallows.
           float seaView = length((modelViewMatrix * vec4(position, 1.0)).xyz);
-          float seaLift = (1.0 - smoothstep(0.02, 0.12, seaView)) * smoothstep(0.0, 0.0004, depth);
-          float swell =
-            sin(dot(position, vec3(2300.0, 800.0, 1500.0)) + detailTime * 1.3) * 0.6 +
-            sin(dot(position, vec3(-1100.0, 1900.0, 700.0)) - detailTime * 1.0) * 0.4;
-          transformed += normalize(position) * swell * 0.00009 * seaLift;
-          v_swell = swell * seaLift;
+          float lift = (1.0 - smoothstep(0.02, 0.14, seaView)) * smoothstep(0.0, 0.0004, depth);
+          float shoal = 1.0 + 0.7 * (1.0 - smoothstep(0.0, 0.004, depth));
+          // (direction, wavelength, steepness, period) for four trains.
+          vec4 trainA = vec4(0.3, 0.02, 0.16, 11.0);
+          vec4 trainB = vec4(1.9, 0.0105, 0.2, 7.5);
+          vec4 trainC = vec4(-0.8, 0.0055, 0.22, 5.2);
+          vec4 trainD = vec4(2.6, 0.0028, 0.25, 3.6);
+          vec4 trains[4];
+          trains[0] = trainA; trains[1] = trainB; trains[2] = trainC; trains[3] = trainD;
+          float nx = 0.0;
+          float nz = 0.0;
+          float ny = 1.0;
+          float heave = 0.0;
+          float span = 0.0;
+          for (int i = 0; i < 4; i++) {
+            vec4 w = trains[i];
+            vec3 d = cos(w.x) * east + sin(w.x) * north;
+            float k = 6.2831853 / w.y;
+            float A = (w.z / k) * shoal * lift;
+            float phi = k * dot(position, d) - (6.2831853 / w.w) * detailTime;
+            float c = cos(phi);
+            float s = sin(phi);
+            waveOffset += d * (0.8 * A * c) + up * (A * s);
+            nx -= cos(w.x) * k * A * c;
+            nz -= sin(w.x) * k * A * c;
+            ny -= 0.8 * k * A * s;
+            heave += A * s;
+            span += A;
+          }
+          objectNormal = normalize(east * nx + up * ny + north * nz);
+          // Where the surface is squeezed the crest is breaking.
+          v_jac = ny;
+          v_heave = span > 0.0 ? heave / span : 0.0;
         }`,
-      )
-    shader.fragmentShader = 'varying float v_swell;\n' + shader.fragmentShader
+        )
+        .replace(
+          '#include <begin_vertex>',
+          /* glsl */ `#include <begin_vertex>
+        transformed += waveOffset;`,
+        )
+    shader.fragmentShader = 'varying float v_jac;\nvarying float v_heave;\n' + shader.fragmentShader
     shader.fragmentShader = shader.fragmentShader
       .replace(
         '#include <color_fragment>',
@@ -365,19 +408,20 @@ export function withWaterDetail(material: THREE.Material): THREE.Material {
         float seaDistance = length(vViewPosition);
         float seaNear = 1.0 - smoothstep(0.02, 0.3, seaDistance);
         vec3 drift = vec3(detailTime * 0.9, detailTime * 0.6, -detailTime * 0.7) * 0.001;
-        // Lighter over the shallows, where the floor shows through.
+        // Lighter over the shallows, where the floor shows through, and
+        // lighter on a crest than in a trough.
         float shallows = 1.0 - smoothstep(0.0, 0.004, v_depth);
         diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * 1.7, shallows * 0.45);
+        diffuseColor.rgb *= 1.0 + v_heave * 0.18;
         // Foam where the sea meets the land, broken and moving.
         float shore = 1.0 - smoothstep(0.0, 0.0009, v_depth);
         float churn = detailNoise(vDetailPosition * 1500.0 + drift * 1500.0);
         float foam = shore * smoothstep(0.45, 0.8, churn + shore * 0.35) * (1.0 - smoothstep(0.05, 0.5, seaDistance));
-        // The odd whitecap out at sea, close enough to see.
-        // Whitecaps where a crest of the swell breaks, and the odd one out at sea.
-        float crest =
-          smoothstep(0.78, 1.0, v_swell * 0.5 + 0.5) *
-          smoothstep(0.55, 0.85, detailNoise(vDetailPosition * 1600.0 + drift * 900.0));
-        float caps = max(crest * 0.3, smoothstep(0.9, 0.98, detailNoise(vDetailPosition * 1100.0 - drift * 1100.0)) * 0.4) * seaNear;
+        // Breaking crests: where the wave has squeezed the surface most,
+        // streaked by a noise so the foam is ragged, and the odd cap at sea.
+        float breaking = smoothstep(0.62, 0.42, v_jac);
+        float streak = smoothstep(0.35, 0.75, detailNoise(vDetailPosition * 1800.0 + drift * 1200.0));
+        float caps = max(breaking * (0.4 + streak * 0.6), smoothstep(0.9, 0.98, detailNoise(vDetailPosition * 1100.0 - drift * 1100.0)) * 0.4) * seaNear;
         float white = clamp(foam + caps, 0.0, 1.0);
         diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.92, 0.95, 0.97), white);
         diffuseColor.a = mix(diffuseColor.a, 0.95, white);
@@ -403,7 +447,13 @@ export function withWaterDetail(material: THREE.Material): THREE.Material {
   return material
 }
 
-/** Lava: a drifting crust of plates split by glowing, pulsing seams. */
+/**
+ * Lava: a crust of plates carried on a slow current, split by glowing
+ * seams with brighter lava streaming along them. The current is a noise
+ * field, and the crust is read twice along it with the two reads
+ * cross-faded (flow mapping), which is what lets a pattern move without
+ * stretching forever.
+ */
 export function withLavaDetail(material: THREE.Material): THREE.Material {
   material.onBeforeCompile = (shader) => {
     passThrough(shader, undefined)
@@ -413,16 +463,40 @@ export function withLavaDetail(material: THREE.Material): THREE.Material {
       {
         float lavaDistance = length(vViewPosition);
         float far = smoothstep(0.3, 1.5, lavaDistance);
-        vec3 flow = vec3(detailTime * 0.0006, detailTime * 0.0004, -detailTime * 0.0005);
-        vec3 plates = detailCells((vDetailPosition + flow) * 70.0);
-        float seam = 1.0 - smoothstep(0.0, 0.12, plates.y - plates.x);
+        vec3 up = normalize(vDetailPosition);
+        vec3 current = vec3(
+          detailNoise(vDetailPosition * 9.0 + 3.1),
+          detailNoise(vDetailPosition * 9.0 + 7.7),
+          detailNoise(vDetailPosition * 9.0 + 1.3)) - 0.5;
+        current -= up * dot(current, up);
+        current = normalize(current + 1e-5) * 0.0035;
+        // Two phases of the same crust, half a cycle apart, each carried
+        // along the current and faded out before it has moved far.
+        float cycle = 0.12;
+        float t1 = fract(detailTime * cycle);
+        float t2 = fract(detailTime * cycle + 0.5);
+        vec3 p1 = vDetailPosition - current * ((t1 - 0.5) / cycle);
+        vec3 p2 = vDetailPosition - current * ((t2 - 0.5) / cycle);
+        float blend = abs(t1 - 0.5) * 2.0;
+        vec3 platesA = detailCells(p1 * 70.0);
+        vec3 platesB = detailCells(p2 * 70.0);
+        float seamA = 1.0 - smoothstep(0.0, 0.12, platesA.y - platesA.x);
+        float seamB = 1.0 - smoothstep(0.0, 0.12, platesB.y - platesB.x);
+        float seam = mix(seamA, seamB, blend);
+        float id = mix(platesA.z, platesB.z, blend);
         if (far < 0.99) {
-          vec3 chips = detailCells((vDetailPosition + flow * 3.0) * 700.0);
-          float fine = 1.0 - smoothstep(0.0, 0.1, chips.y - chips.x);
+          vec3 chipsA = detailCells(p1 * 700.0);
+          vec3 chipsB = detailCells(p2 * 700.0);
+          float fine = mix(
+            1.0 - smoothstep(0.0, 0.1, chipsA.y - chipsA.x),
+            1.0 - smoothstep(0.0, 0.1, chipsB.y - chipsB.x),
+            blend);
           seam = max(seam, fine * (1.0 - far));
         }
-        float pulse = 0.85 + 0.15 * sin(detailTime * 1.3 + plates.z * 6.28);
-        totalEmissiveRadiance *= mix(0.12 + plates.z * 0.15, 2.2 * pulse, seam);
+        // Lava streaming along the seams, quicker than the crust.
+        float stream = detailNoise((vDetailPosition - current * detailTime * 4.0) * 260.0);
+        float pulse = 0.85 + 0.15 * sin(detailTime * 1.3 + id * 6.28);
+        totalEmissiveRadiance *= mix(0.12 + id * 0.15, (1.6 + stream * 1.4) * pulse, seam);
         diffuseColor.rgb *= mix(0.4, 1.0, seam);
       }`,
     )
