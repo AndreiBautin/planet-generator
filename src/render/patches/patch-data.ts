@@ -41,6 +41,17 @@ export interface PatchData {
    * crowns, wind ripples, carved ridges and cracks.
    */
   readonly pattern: Float32Array
+  /**
+   * What each vertex would be on the patch one level coarser: the position
+   * (with this patch's level in the fourth slot), normal, colour and
+   * pattern the parent draws at that point. The ground shader blends
+   * towards these as a patch nears the distance where it gives way to its
+   * parent, so a change of level is a slow slide rather than a jump.
+   */
+  readonly coarsePositions: Float32Array
+  readonly coarseNormals: Float32Array
+  readonly coarseColours: Float32Array
+  readonly coarsePattern: Float32Array
 }
 
 /** Vertices in a patch: the grid, then four edges' worth of skirt. */
@@ -90,8 +101,9 @@ export const vertexCount = (segments: number): number => (segments + 1) ** 2 + 4
 
 export function samplePatch(planet: Planet, key: PatchKey, segments: number): PatchData {
   const side = segments + 1
-  const ring = segments + 3
-  // Positions on a grid one sample wider each way, for the normals.
+  const ring = segments + 5
+  // Positions on a grid two samples wider each way, for the normals — and
+  // for the coarser normals the parent patch lights its vertices with.
   const wide = new Float64Array(ring * ring * 3)
   const positions = new Float32Array(vertexCount(segments) * 3)
   const normals = new Float32Array(vertexCount(segments) * 3)
@@ -101,13 +113,13 @@ export function samplePatch(planet: Planet, key: PatchKey, segments: number): Pa
   const pattern = new Float32Array(vertexCount(segments) * 4)
   let hasSea = false
 
-  for (let j = -1; j <= segments + 1; j += 1) {
-    for (let i = -1; i <= segments + 1; i += 1) {
+  for (let j = -2; j <= segments + 2; j += 1) {
+    for (let i = -2; i <= segments + 2; i += 1) {
       const [u, v] = patchUv(key, i / segments, j / segments)
       const [x, y, z] = directionOn(key.face, u, v)
       const { surface, fine, drawn } = drawnHeight(planet, x, y, z)
       const radius = 1 + liftOf(drawn, planet.relief)
-      const at = ((j + 1) * ring + (i + 1)) * 3
+      const at = ((j + 2) * ring + (i + 2)) * 3
       wide[at] = x * radius
       wide[at + 1] = y * radius
       wide[at + 2] = z * radius
@@ -144,7 +156,7 @@ export function samplePatch(planet: Planet, key: PatchKey, segments: number): Pa
 
   const stone = fromPalette(planet.palette.highland).lerp(fromPalette(planet.palette.peak), 0.25)
   const sample = (i: number, j: number, axis: number): number =>
-    wide[((j + 1) * ring + (i + 1)) * 3 + axis] ?? 0
+    wide[((j + 2) * ring + (i + 2)) * 3 + axis] ?? 0
   for (let j = 0; j <= segments; j += 1) {
     for (let i = 0; i <= segments; i += 1) {
       // Central differences along u and v; u × v points outwards by
@@ -210,6 +222,77 @@ export function samplePatch(planet: Planet, key: PatchKey, segments: number): Pa
     }
   }
 
+  // The parent's view of each vertex. Every other vertex is one the parent
+  // has too; the rest lie on the parent's grid lines or across its
+  // triangles' shared diagonal (b to c in `patchIndex`), where the parent
+  // draws the average of the two ends.
+  const count = vertexCount(segments)
+  const coarsePositions = new Float32Array(count * 4)
+  const coarseNormals = new Float32Array(count * 3)
+  const coarseColours = new Float32Array(count * 3)
+  const coarsePattern = new Float32Array(count * 4)
+  const parentNormal = (i: number, j: number): readonly [number, number, number] => {
+    // Central differences two steps wide: the parent's own spacing.
+    const ax = sample(i + 2, j, 0) - sample(i - 2, j, 0)
+    const ay = sample(i + 2, j, 1) - sample(i - 2, j, 1)
+    const az = sample(i + 2, j, 2) - sample(i - 2, j, 2)
+    const bx = sample(i, j + 2, 0) - sample(i, j - 2, 0)
+    const by = sample(i, j + 2, 1) - sample(i, j - 2, 1)
+    const bz = sample(i, j + 2, 2) - sample(i, j - 2, 2)
+    return [ay * bz - az * by, az * bx - ax * bz, ax * by - ay * bx]
+  }
+  for (let j = 0; j <= segments; j += 1) {
+    for (let i = 0; i <= segments; i += 1) {
+      const oddI = i % 2 === 1
+      const oddJ = j % 2 === 1
+      const ends: readonly (readonly [number, number])[] =
+        oddI && oddJ
+          ? [
+              [i + 1, j - 1],
+              [i - 1, j + 1],
+            ]
+          : oddI
+            ? [
+                [i - 1, j],
+                [i + 1, j],
+              ]
+            : oddJ
+              ? [
+                  [i, j - 1],
+                  [i, j + 1],
+                ]
+              : [[i, j]]
+      const vertex = j * side + i
+      let nx = 0
+      let ny = 0
+      let nz = 0
+      for (const [ei, ej] of ends) {
+        const from = ej * side + ei
+        const share = 1 / ends.length
+        for (let axis = 0; axis < 3; axis += 1) {
+          coarsePositions[vertex * 4 + axis] =
+            (coarsePositions[vertex * 4 + axis] ?? 0) + (positions[from * 3 + axis] ?? 0) * share
+          coarseColours[vertex * 3 + axis] =
+            (coarseColours[vertex * 3 + axis] ?? 0) + (colours[from * 3 + axis] ?? 0) * share
+        }
+        for (let k = 0; k < 4; k += 1) {
+          coarsePattern[vertex * 4 + k] =
+            (coarsePattern[vertex * 4 + k] ?? 0) + (pattern[from * 4 + k] ?? 0) * share
+        }
+        const [px, py, pz] = parentNormal(ei, ej)
+        const length = Math.hypot(px, py, pz) || 1
+        nx += px / length
+        ny += py / length
+        nz += pz / length
+      }
+      const length = Math.hypot(nx, ny, nz) || 1
+      coarseNormals[vertex * 3] = nx / length
+      coarseNormals[vertex * 3 + 1] = ny / length
+      coarseNormals[vertex * 3 + 2] = nz / length
+      coarsePositions[vertex * 4 + 3] = key.level
+    }
+  }
+
   // The skirt: a copy of each edge vertex, lowered by about a grid step —
   // deeper than any crack a level boundary opens, and shallow enough that
   // it never shows below a hill seen side-on.
@@ -223,11 +306,29 @@ export function samplePatch(planet: Planet, key: PatchKey, segments: number): Pa
         colours[skirt * 3 + axis] = colours[vertex * 3 + axis] ?? 0
       }
       for (let k = 0; k < 4; k += 1) pattern[skirt * 4 + k] = pattern[vertex * 4 + k] ?? 0
+      for (let axis = 0; axis < 3; axis += 1) {
+        coarsePositions[skirt * 4 + axis] = (coarsePositions[vertex * 4 + axis] ?? 0) * drop
+        coarseNormals[skirt * 3 + axis] = coarseNormals[vertex * 3 + axis] ?? 0
+        coarseColours[skirt * 3 + axis] = coarseColours[vertex * 3 + axis] ?? 0
+      }
+      coarsePositions[skirt * 4 + 3] = key.level
+      for (let k = 0; k < 4; k += 1)
+        coarsePattern[skirt * 4 + k] = coarsePattern[vertex * 4 + k] ?? 0
       skirt += 1
     }
   }
 
-  return { positions, normals, colours, hasSea, pattern }
+  return {
+    positions,
+    normals,
+    colours,
+    hasSea,
+    pattern,
+    coarsePositions,
+    coarseNormals,
+    coarseColours,
+    coarsePattern,
+  }
 }
 
 const mix = (from: number, to: number, t: number): number => from + (to - from) * t

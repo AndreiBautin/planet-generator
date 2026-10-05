@@ -26,6 +26,8 @@ export interface TerrainOptions extends LodParams {
 
 export interface TerrainMaterials {
   readonly ground: THREE.Material
+  /** The ground's shadow caster, blended between levels as the ground is. */
+  readonly groundDepth: THREE.Material
   readonly water: THREE.Material
 }
 
@@ -158,6 +160,7 @@ export class Terrain {
     for (const entry of this.entries.values()) if (entry.node !== undefined) free(entry.node)
     this.entries.clear()
     this.materials.ground.dispose()
+    this.materials.groundDepth.dispose()
     this.materials.water.dispose()
     this.flora.dispose()
   }
@@ -189,11 +192,16 @@ export class Terrain {
     ground.setAttribute('normal', new THREE.BufferAttribute(patch.normals, 3))
     ground.setAttribute('color', new THREE.BufferAttribute(patch.colours, 3))
     ground.setAttribute('pattern', new THREE.BufferAttribute(patch.pattern, 4))
+    ground.setAttribute('coarsePosition', new THREE.BufferAttribute(patch.coarsePositions, 4))
+    ground.setAttribute('coarseNormal', new THREE.BufferAttribute(patch.coarseNormals, 3))
+    ground.setAttribute('coarseColour', new THREE.BufferAttribute(patch.coarseColours, 3))
+    ground.setAttribute('coarsePattern', new THREE.BufferAttribute(patch.coarsePattern, 4))
     ground.setIndex(new THREE.BufferAttribute(this.index, 1))
     ground.computeBoundingSphere()
     const land = new THREE.Mesh(ground, this.materials.ground)
     land.receiveShadow = true
     land.castShadow = true
+    land.customDepthMaterial = this.materials.groundDepth
     node.add(land)
 
     if (patch.hasSea) {

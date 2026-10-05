@@ -173,6 +173,63 @@ const CLOUD_SHADOW = /* glsl */ `
 `
 
 /**
+ * The level-of-detail blend: grid squares a patch has (x) and the screen
+ * angle a grid square may cover before its patch splits (y), the two
+ * numbers the quadtree decides with. From them the shader knows how far
+ * away a patch gives way to its parent, and slides each vertex towards
+ * where the parent draws it as that distance comes near — so the switch
+ * itself changes nothing on screen.
+ */
+export const TERRAIN_MORPH = { value: new THREE.Vector2(32, 0.01) }
+
+const MORPH_DECLARE = /* glsl */ `
+uniform vec2 terrainMorphLod;
+attribute vec4 coarsePosition;
+attribute vec3 coarseNormal;
+float terrainMorphAt(vec3 local) {
+  float level = coarsePosition.w;
+  if (level < 0.5) return 0.0;
+  // The parent splits once its nearest point is this close (see lod.ts).
+  float parentSpan = 1.5707963 / exp2(level - 1.0);
+  float splits = parentSpan / terrainMorphLod.x / terrainMorphLod.y;
+  float away = distance((modelMatrix * vec4(local, 1.0)).xyz, cameraPosition);
+  return smoothstep(0.5 * splits, 0.85 * splits, away);
+}
+`
+
+/** Blend a ground or shadow shader's position (and normal) towards the coarse patch. */
+function withTerrainMorph(
+  shader: THREE.WebGLProgramParametersWithUniforms,
+  normals: boolean,
+): void {
+  shader.uniforms.terrainMorphLod = TERRAIN_MORPH
+  let vertex = (MORPH_DECLARE + shader.vertexShader).replace(
+    'void main() {',
+    'void main() {\n  float terrainMorph = terrainMorphAt(position);',
+  )
+  if (normals) {
+    vertex = vertex.replace(
+      '#include <beginnormal_vertex>',
+      '#include <beginnormal_vertex>\n  objectNormal = normalize(mix(objectNormal, coarseNormal, terrainMorph));',
+    )
+  }
+  shader.vertexShader = vertex.replace(
+    '#include <begin_vertex>',
+    '#include <begin_vertex>\n  transformed = mix(transformed, coarsePosition.xyz, terrainMorph);',
+  )
+}
+
+/** The ground's shadow caster, morphed the same way, so a patch's shadow is cast by the ground drawn. */
+export function terrainDepthMaterial(): THREE.MeshDepthMaterial {
+  const material = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking })
+  material.onBeforeCompile = (shader) => {
+    withTerrainMorph(shader, false)
+  }
+  material.customProgramCacheKey = () => 'planet-ground-depth'
+  return material
+}
+
+/**
  * The ground: grain and bumps, and the pattern of whatever the ground is.
  * On a molten world the lowland runs with channels of lava that glow.
  */
@@ -183,6 +240,27 @@ export function withGroundDetail(
 ): THREE.MeshStandardMaterial {
   material.onBeforeCompile = (shader) => {
     passThrough(shader, { attribute: 'pattern', type: 'vec4' })
+    withTerrainMorph(shader, true)
+    // The colour, the pattern and the detail's own frame slide with the
+    // shape: a vertex drawn where the parent puts it, painted as the parent
+    // paints it.
+    shader.vertexShader =
+      'attribute vec3 coarseColour;\nattribute vec4 coarsePattern;\n' +
+      shader.vertexShader
+        .replace(
+          '#include <color_vertex>',
+          /* glsl */ `#include <color_vertex>
+  #ifdef USE_COLOR
+  vColor.rgb = mix(vColor.rgb, coarseColour, terrainMorph);
+  #endif`,
+        )
+        .replace(
+          '#include <project_vertex>',
+          /* glsl */ `vDetailPosition = transformed;
+  vDetailNormal = objectNormal;
+  v_pattern = mix(pattern, coarsePattern, terrainMorph);
+#include <project_vertex>`,
+        )
     const layers = ['grass', 'litter', 'sand', 'stone', 'snow', 'basalt'] as const
     let declare = ''
     for (const kind of layers) {

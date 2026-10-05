@@ -47,6 +47,33 @@ describe('samplePatch', () => {
     expect(edge - skirt).toBeLessThan(0.05)
   })
 
+  it("gives every vertex the parent's position, so a change of level can slide rather than jump", () => {
+    const side = segments + 1
+    const coarse = (vertex: number): readonly [number, number, number] => [
+      patch.coarsePositions[vertex * 4] ?? 0,
+      patch.coarsePositions[vertex * 4 + 1] ?? 0,
+      patch.coarsePositions[vertex * 4 + 2] ?? 0,
+    ]
+    // A vertex the parent has too is where it was.
+    expect(coarse(2 * side + 2)).toEqual(at(patch.positions, 2 * side + 2))
+    // One between two of the parent's lies on the line joining them.
+    const left = at(patch.positions, 2 * side + 2)
+    const right = at(patch.positions, 2 * side + 4)
+    const middle = coarse(2 * side + 3)
+    for (let axis = 0; axis < 3; axis += 1) {
+      expect(middle[axis]).toBeCloseTo(((left[axis] ?? 0) + (right[axis] ?? 0)) / 2, 6)
+    }
+    expect(patch.coarsePositions[3]).toBe(key.level)
+    for (let vertex = 0; vertex < side * side; vertex += 1) {
+      const n: readonly [number, number, number] = [
+        patch.coarseNormals[vertex * 3] ?? 0,
+        patch.coarseNormals[vertex * 3 + 1] ?? 0,
+        patch.coarseNormals[vertex * 3 + 2] ?? 0,
+      ]
+      expect(Math.hypot(...n)).toBeCloseTo(1, 5)
+    }
+  })
+
   it('is the same patch every time it is asked for', () => {
     const again = samplePatch(planet, key, segments)
     expect(Array.from(again.positions)).toEqual(Array.from(patch.positions))

@@ -26,6 +26,8 @@ import {
   DETAIL_SKY,
   DETAIL_TIME,
   withGroundDetail,
+  terrainDepthMaterial,
+  TERRAIN_MORPH,
   withLavaDetail,
   withWaterDetail,
 } from './detail'
@@ -287,6 +289,7 @@ export function startScene(
   let coming: Coming | undefined
 
   const ground = groundTextures(options.assetBase)
+  TERRAIN_MORPH.value.set(quality.segments, quality.lodThreshold)
   const terrainFor = (world: Planet): Terrain =>
     new Terrain(
       world,
@@ -308,6 +311,7 @@ export function startScene(
         },
       },
       {
+        groundDepth: terrainDepthMaterial(),
         ground: withGroundDetail(
           new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.92, metalness: 0 }),
           ground,
