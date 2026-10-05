@@ -348,11 +348,16 @@ export function featureMaterial(born: number, stone: GroundLayer): THREE.MeshSta
           vec3 featureFoot = (instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0)).xyz;
           float featureGap = length((modelViewMatrix * vec4(featureFoot, 1.0)).xyz);
           float grown = smoothstep(0.0, ${GROW_SECONDS.toFixed(2)}, featureNow - featureBorn);
-          // Out at the edge of the range a feature dissolves into the haze
-          // (a dither in the fragment shader) rather than shrinking: shrunk,
-          // the last ring of trees read as dark specks on the ground.
-          vFeatureFade = 1.0 - smoothstep(featureRange * 0.6, featureRange, featureGap);
-          transformed *= grown * (0.75 + 0.25 * vFeatureFade);
+          // Out at the edge of the range a wood thins out a whole tree at a
+          // time, each with its own fixed threshold from where it stands, so
+          // nothing flickers as the eye moves. Shrinking every tree read as
+          // dark specks, and a per-pixel dither read as static.
+          vFeatureFade = 1.0 - smoothstep(featureRange * 0.55, featureRange, featureGap);
+          vec3 featureSeed = fract(featureFoot * 7919.17);
+          featureSeed += dot(featureSeed, featureSeed.yzx + 19.19);
+          float featureKeep = fract((featureSeed.x + featureSeed.y) * featureSeed.z);
+          float featureShown = step(featureKeep, vFeatureFade);
+          transformed *= grown * featureShown;
           vFeatureUp = normalize(normalMatrix * normalize(featureFoot));
           vFeaturePlanet = (instanceMatrix * vec4(transformed, 1.0)).xyz;
           vFeatureNormal = normalize(mat3(instanceMatrix) * objectNormal);
@@ -366,11 +371,6 @@ export function featureMaterial(born: number, stone: GroundLayer): THREE.MeshSta
         .replace(
           '#include <color_fragment>',
           /* glsl */ `#include <color_fragment>
-        {
-          vec3 dq = fract(vec3(gl_FragCoord.xyx) * 0.1031);
-          dq += dot(dq, dq.yzx + 33.33);
-          if (fract((dq.x + dq.y) * dq.z) > vFeatureFade) discard;
-        }
         if (vFeatureStony > 0.5) {
           // Stone: the ground's photograph, triplanar in the planet's frame,
           // levelled to its own brightness so the instance colour says what

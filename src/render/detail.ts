@@ -267,9 +267,10 @@ export function withGroundDetail(
         float detailNear = 1.0 - smoothstep(0.03, 0.4, detailDistance);
         float detailClose = 1.0 - smoothstep(0.008, 0.07, detailDistance);
         float patternFar = 1.0 - smoothstep(0.12, 0.7, detailDistance);
+        float bumpSpan = length(fwidth(vDetailPosition));
         float detailHeight =
-          (detailNoise(vDetailPosition * 650.0) - 0.5) * detailNear +
-          (detailNoise(vDetailPosition * 2600.0) - 0.5) * 0.7 * detailClose;
+          (detailNoise(vDetailPosition * 650.0) - 0.5) * detailNear * (1.0 - smoothstep(0.2, 0.6, bumpSpan * 650.0)) +
+          (detailNoise(vDetailPosition * 2600.0) - 0.5) * 0.7 * detailClose * (1.0 - smoothstep(0.2, 0.6, bumpSpan * 2600.0));
         float detailShade = 1.0;
         float detailRough = 1.0;
         vec3 detailTilt = vec3(0.0);
@@ -322,7 +323,14 @@ export function withGroundDetail(
         // crowns the same shade, in groves of lighter and darker wood —
         // beyond where the trees themselves stand. Within that range the
         // ground is the forest floor: dark, leaf-littered, mottled.
-        float canopy = v_pattern.x * patternFar;
+        // A pattern finer than a pixel aliases into crawling static as the
+        // eye moves: each fades out once its cells shrink below a few
+        // pixels, by the screen-space rate the position changes.
+        float pixelSpan = length(fwidth(vDetailPosition));
+        float crownFilter = 1.0 - smoothstep(0.15, 0.45, pixelSpan * 1400.0);
+        float crackFilter = 1.0 - smoothstep(0.15, 0.45, pixelSpan * 2400.0);
+        float rippleFilter = 1.0 - smoothstep(0.1, 0.35, pixelSpan * 1900.0);
+        float canopy = v_pattern.x * patternFar * crownFilter;
         if (canopy > 0.02) {
           vec3 crowns = detailCells(vDetailPosition * 1400.0);
           float crown = 1.0 - smoothstep(0.2, 0.75, crowns.x);
@@ -338,7 +346,7 @@ export function withGroundDetail(
 
         // Sand: ripples the wind has drawn, bent by a slower noise so they
         // are never ruled lines.
-        float sand = v_pattern.y * detailNear;
+        float sand = v_pattern.y * detailNear * rippleFilter;
         if (sand > 0.02) {
           float bend = detailNoise(vDetailPosition * 400.0) * 6.0;
           float ripple = sin(dot(vDetailPosition, vec3(1900.0, 600.0, 1300.0)) + bend);
@@ -353,14 +361,14 @@ export function withGroundDetail(
           float ridge = detailNoise(vDetailPosition * vec3(500.0, 1500.0, 500.0));
           detailHeight += (ridge - 0.5) * 0.9 * snow;
           detailShade *= 1.0 + (ridge - 0.5) * 0.1 * snow;
-          float glint = step(0.986, detailHash(floor(vDetailPosition * 9000.0)));
+          float glint = step(0.986, detailHash(floor(vDetailPosition * 9000.0))) * (1.0 - smoothstep(0.1, 0.3, pixelSpan * 9000.0));
           detailShade += glint * 0.5 * snow * detailClose;
         }
 
         // Stone: cracked into blocks, each a slightly different grey.
         // Only ground that is mostly stone cracks: a grassy slope with a
         // little rock in it drew crack lines across the turf.
-        float stone = smoothstep(0.35, 0.85, v_pattern.w) * patternFar;
+        float stone = smoothstep(0.35, 0.85, v_pattern.w) * patternFar * crackFilter;
         if (stone > 0.02) {
           vec3 blocks = detailCells(vDetailPosition * 2400.0);
           float crack = (1.0 - smoothstep(0.0, 0.08, blocks.y - blocks.x)) * detailNear;
