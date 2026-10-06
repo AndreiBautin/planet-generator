@@ -98,6 +98,41 @@
         display: grid;
         place-items: center;
       }
+      /* A sight's name as a guided tour reaches it: a lower third, once, fading. */
+      .caption {
+        position: fixed;
+        left: var(--gutter);
+        bottom: calc(max(16px, env(safe-area-inset-bottom)) + 80px);
+        margin: 0;
+        display: grid;
+        gap: 2px;
+        opacity: 0;
+        transform: translateY(6px);
+        transition:
+          opacity 0.8s,
+          transform 0.8s;
+        pointer-events: none;
+        text-shadow: 0 1px 12px rgba(0, 0, 0, 0.85);
+      }
+      .caption.shown {
+        opacity: 1;
+        transform: none;
+      }
+      .caption strong {
+        font-size: clamp(22px, 5vw, 32px);
+        font-weight: 650;
+        letter-spacing: 0.02em;
+      }
+      .caption span {
+        font-size: 13px;
+        color: var(--dim);
+        letter-spacing: 0.06em;
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .caption {
+          transform: none;
+        }
+      }
       /* Sound sits beside the picture button: off until pressed. */
       .sound {
         position: fixed;
@@ -395,6 +430,7 @@
     <div class="flash" id="flash" aria-hidden="true"></div>
     <p class="hint" id="hint">Drag to steer and climb · pinch to change height</p>
     <p class="toast" id="toast" role="status" aria-live="polite"></p>
+    <p class="caption" id="caption" role="status" aria-live="polite"></p>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

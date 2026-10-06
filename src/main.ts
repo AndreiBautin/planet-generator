@@ -12,6 +12,7 @@ import { logger, setLogLevel } from '@/shared/logger'
 import { attachGestures } from '@/ui/controls'
 import { attachHud } from '@/ui/hud'
 import { TERRAIN_STATS } from '@/render/patches/terrain'
+import { landmarksOf, tourOrder } from '@/generation/landmarks'
 import { createRig } from '@/ui/rig'
 import { savePicture, shareLink } from '@/ui/share'
 
@@ -117,11 +118,18 @@ const hud = attachHud({
       rig.tour(false)
       return
     }
+    const from = scene.diveFrom()
     if (!rig.flying()) {
-      rig.fly(scene.diveFrom())
+      rig.fly(from)
       hud.flying(true)
     }
-    rig.tour(true)
+    // A round of the planet's sights, nearest first, then a wander.
+    const stops = tourOrder(landmarksOf(planet), from.position).map((sight) => ({
+      name: sight.name,
+      title: sight.title,
+      path: sight.kind === 'river' ? sight.path : [sight.at],
+    }))
+    rig.tour(true, stops)
   },
   onPhoto: () => {
     takePicture()
@@ -140,6 +148,9 @@ const hud = attachHud({
 
 rig.onTour((touring) => {
   hud.touring(touring)
+})
+rig.onArrive((stop) => {
+  hud.caption(stop.name, stop.title)
 })
 
 const flash = document.getElementById('flash')

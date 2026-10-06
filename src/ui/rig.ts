@@ -25,7 +25,17 @@ import {
   wheel,
   type Orbit,
 } from './orbit'
-import { stickFor, tourTurn } from './tour'
+import {
+  arcBetween,
+  guideAltitude,
+  guideStep,
+  guideTurn,
+  startGuide,
+  stickFor,
+  tourTurn,
+  type Guide,
+  type GuideStop,
+} from './tour'
 
 /**
  * The camera's state and what moves it: the orbit, the glide, and which of
@@ -48,8 +58,14 @@ export interface Rig {
   readonly flying: () => boolean
   /** Turn and climb by a step, from the keyboard. */
   readonly nudge: (turn: number, climb: number) => void
-  /** Let the glide fly itself (tour.ts), or take it back. Any hand on the controls takes it back too. */
-  readonly tour: (on: boolean) => void
+  /**
+   * Let the glide fly itself (tour.ts), or take it back. Any hand on the
+   * controls takes it back too. With stops, it visits each in turn before
+   * wandering on.
+   */
+  readonly tour: (on: boolean, stops?: readonly GuideStop[]) => void
+  /** Told as each stop of a guided tour is reached, to name it. */
+  readonly onArrive: (listener: (stop: GuideStop) => void) => void
   readonly touring: () => boolean
   /** Told whenever the tour stops or starts, so a button can say so. */
   readonly onTour: (listener: (touring: boolean) => void) => void
@@ -63,6 +79,8 @@ export function createRig(clock: Clock, ground: () => Ground): Rig {
   let touring = false
   let touredFor = 0
   let told: (touring: boolean) => void = () => undefined
+  let guide: Guide | undefined
+  let arrive: (stop: GuideStop) => void = () => undefined
   const setTouring = (on: boolean): void => {
     if (touring === on) return
     touring = on
@@ -86,8 +104,25 @@ export function createRig(clock: Clock, ground: () => Ground): Rig {
     orbit = settle(orbit, seconds)
     if (glide !== undefined && touring && steersGlide(flight) && seconds > 0) {
       touredFor += seconds
-      const rate = tourTurn(glide, ground(), SEA_RADIUS, touredFor)
+      let target: Vec3 | undefined
+      if (guide !== undefined) {
+        const step = guideStep(guide, glide.position, touredFor)
+        guide = step.guide
+        target = step.target
+        if (step.arrived !== undefined) arrive(step.arrived)
+      }
+      const rate =
+        target === undefined
+          ? tourTurn(glide, ground(), SEA_RADIUS, touredFor)
+          : guideTurn(glide, target)
       glide = steer(glide, stickFor(glide, rate, seconds), 0, 1)
+      // High to cross the distance to a sight, low to arrive; between
+      // sights, the height a glide starts at.
+      const goal = target === undefined ? 0.014 : guideAltitude(arcBetween(glide.position, target))
+      glide = {
+        ...glide,
+        altitude: glide.altitude + (goal - glide.altitude) * Math.min(1, seconds * 0.35),
+      }
     }
     if (glide !== undefined) glide = advance(glide, seconds, ground())
     return {
@@ -149,8 +184,12 @@ export function createRig(clock: Clock, ground: () => Ground): Rig {
       takeOver()
       if (glide !== undefined && steersGlide(flight)) glide = steer(glide, turn, climb, 1)
     },
-    tour: (on) => {
+    tour: (on, stops) => {
+      guide = on && stops !== undefined && stops.length > 0 ? startGuide(stops) : undefined
       setTouring(on && glide !== undefined)
+    },
+    onArrive: (listener) => {
+      arrive = listener
     },
     touring: () => touring,
     onTour: (listener) => {

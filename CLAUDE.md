@@ -466,3 +466,24 @@ Off until the speaker is pressed: browsers start audio only inside a
 gesture. **Not heard by the agent** — the preview plays nothing; what was
 checked is the gains moving with the flight (wind ~0.5 in a glide, surf
 rising at a coast).
+
+## Landmarks and the guided tour
+
+`generation/landmarks.ts` finds a planet's highest peak, largest lake (a
+connected run of lake cells) and longest river (source to mouth along the
+drainage) on the hydrology grid, and names them from the seed
+(`placeName`). Tested: the peak is the highest cell, the river runs
+receiver to receiver into the sea or a lake, the lake is over water.
+
+- **Only thawed water counts.** Water is not drawn on snow, so a lake in
+  a snowfield is a dip in the snow; the first tour named one and showed a
+  white hill.
+- **Tour is guided now** (`guideStep` in `ui/tour.ts`, pure and tested):
+  nearest sight first, high to cross the distance (a glide is faster
+  higher) and low to arrive, down a river from its source to its mouth,
+  lingering over the others, then wandering as before.
+- **A sight is named as it comes into view, not when it is underneath**
+  (`SIGHTED`, 0.06 rad): the glide looks ahead, and a caption over the
+  spot directly below named something out of frame.
+- Time of day is wherever the planet's turn puts it; a sight can be
+  reached at dusk.

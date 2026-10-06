@@ -92,3 +92,117 @@ export function stickFor(glide: Glide, rate: number, seconds: number): number {
   const step = (rate - glide.yawRate) * Math.min(1, seconds * 1.5)
   return (decay + step) / YAW_PER_SCREEN
 }
+
+/** The angle between two unit directions, radians. */
+export const arcBetween = (a: Vec3, b: Vec3): number =>
+  Math.acos(Math.max(-1, Math.min(1, a[0] * b[0] + a[1] * b[1] + a[2] * b[2])))
+
+/**
+ * The turn rate that brings the heading round to `target`, radians a
+ * second, positive right: in proportion to how far off it points, and no
+ * faster than a firm bank.
+ */
+export function guideTurn(glide: Glide, target: Vec3): number {
+  const p = glide.position
+  const d = p[0] * target[0] + p[1] * target[1] + p[2] * target[2]
+  // The way to the target along the ground, and how far round from the heading it lies.
+  const way = unit([target[0] - p[0] * d, target[1] - p[1] * d, target[2] - p[2] * d])
+  const right = cross(glide.heading, p)
+  const off = Math.atan2(
+    way[0] * right[0] + way[1] * right[1] + way[2] * right[2],
+    way[0] * glide.heading[0] + way[1] * glide.heading[1] + way[2] * glide.heading[2],
+  )
+  return Math.max(-TOUR_TURN * 1.6, Math.min(TOUR_TURN * 1.6, off * 0.9))
+}
+
+/**
+ * How high to fly with `distance` radians still to go: high to cross an
+ * ocean quickly (a glide goes faster the higher it is), low to arrive.
+ */
+export function guideAltitude(distance: number): number {
+  const t = Math.min(1, Math.max(0, (distance - 0.04) / 0.3))
+  return 0.012 + (0.075 - 0.012) * t * t * (3 - 2 * t)
+}
+
+/** A guided tour's place in its round: which stop, and along a river how far. */
+export interface Guide {
+  readonly stops: readonly GuideStop[]
+  readonly index: number
+  /** Along a river's course, the point being flown to; nought before reaching it. */
+  readonly along: number
+  /** When the current stop was reached, in seconds; undefined until then. */
+  readonly arrivedAt: number | undefined
+  /** Whether the current stop has been named on screen yet. */
+  readonly named: boolean
+}
+
+export interface GuideStop {
+  readonly name: string
+  readonly title: string
+  /** The point to fly to, and on along, for a river its course. */
+  readonly path: readonly Vec3[]
+}
+
+/** How near counts as arrived, radians: a little under a minute's glide at the lowest. */
+const ARRIVED = 0.018
+/** How near a sight is named: in view ahead from a glide's height. */
+const SIGHTED = 0.06
+/** How long to linger over a sight before setting off for the next, seconds. */
+const LINGER = 9
+
+export function startGuide(stops: readonly GuideStop[]): Guide {
+  return { stops, index: 0, along: 0, arrivedAt: undefined, named: false }
+}
+
+/**
+ * One step of the guided tour: where to fly now, and whether a sight has
+ * just been reached (to name it on screen). A river is reached at its
+ * source and then flown down to its mouth; anything else is circled for
+ * a while by the meander before the next. Past the last stop, no target:
+ * the tour wanders as it does unguided.
+ */
+export function guideStep(
+  guide: Guide,
+  position: Vec3,
+  seconds: number,
+): {
+  readonly guide: Guide
+  readonly target: Vec3 | undefined
+  readonly arrived: GuideStop | undefined
+} {
+  const stop = guide.stops[guide.index]
+  if (stop === undefined) return { guide, target: undefined, arrived: undefined }
+  const point = stop.path[guide.along] ?? stop.path[0]
+  if (point === undefined)
+    return guideStep({ ...guide, index: guide.index + 1, along: 0 }, position, seconds)
+  const next = { ...guide, index: guide.index + 1, along: 0, arrivedAt: undefined, named: false }
+  // Named as it comes into view ahead, not once it is under the eye, where
+  // a glide looking forward cannot see it.
+  const named = !guide.named && arcBetween(position, point) < SIGHTED
+  const arrived = named ? stop : undefined
+  const seen = guide.named || named
+  if (guide.arrivedAt === undefined) {
+    if (arcBetween(position, point) > ARRIVED)
+      return { guide: { ...guide, named: seen }, target: point, arrived }
+    return { guide: { ...guide, named: seen, arrivedAt: seconds }, target: point, arrived }
+  }
+  // Down a river: on to the next point of its course, a few cells ahead
+  // so the turns are smooth, until its mouth.
+  if (stop.path.length > 1) {
+    let along = guide.along
+    while (
+      along < stop.path.length - 1 &&
+      arcBetween(position, stop.path[along] ?? point) < ARRIVED * 1.5
+    ) {
+      along += 1
+    }
+    if (along < stop.path.length - 1) {
+      const ahead = stop.path[Math.min(stop.path.length - 1, along + 2)] ?? point
+      return { guide: { ...guide, along }, target: ahead, arrived: undefined }
+    }
+    return { guide: next, target: undefined, arrived: undefined }
+  }
+  if (seconds - guide.arrivedAt > LINGER)
+    return { guide: next, target: undefined, arrived: undefined }
+  return { guide, target: undefined, arrived: undefined }
+}

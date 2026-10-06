@@ -29,6 +29,8 @@ export interface Hud {
   readonly touring: (touring: boolean) => void
   /** Say whether the sound is on. */
   readonly sounding: (on: boolean) => void
+  /** Name a sight as a guided tour reaches it: a name, and what it is. */
+  readonly caption: (name: string, title: string) => void
 }
 
 const element = <T extends HTMLElement>(id: string, type: new () => T): T => {
@@ -84,6 +86,8 @@ export function attachHud(handlers: HudHandlers): Hud {
   for (const input of Object.values(dials)) input.addEventListener('input', changed)
 
   let hideToast: ReturnType<typeof setTimeout> | undefined
+  const captionBox = element('caption', HTMLElement)
+  let hideCaption: ReturnType<typeof setTimeout> | undefined
 
   return {
     render: (planet) => {
@@ -99,6 +103,19 @@ export function attachHud(handlers: HudHandlers): Hud {
       fly.textContent = flying ? 'Land' : 'Fly'
       fly.setAttribute('aria-pressed', String(flying))
       document.body.classList.toggle('flying', flying)
+    },
+    caption: (place, title) => {
+      captionBox.replaceChildren()
+      const strong = document.createElement('strong')
+      strong.textContent = place.charAt(0).toUpperCase() + place.slice(1)
+      const line = document.createElement('span')
+      line.textContent = title
+      captionBox.append(strong, line)
+      captionBox.classList.add('shown')
+      if (hideCaption !== undefined) clearTimeout(hideCaption)
+      hideCaption = setTimeout(() => {
+        captionBox.classList.remove('shown')
+      }, 6500)
     },
     sounding: (on) => {
       soundButton.setAttribute('aria-pressed', String(on))

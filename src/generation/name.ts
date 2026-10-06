@@ -49,3 +49,12 @@ export function planetName(rng: Rng): string {
   const proper = name.charAt(0).toUpperCase() + name.slice(1)
   return rng.next() < 0.18 ? `${proper}-${String(rng.int(2, 99))}` : proper
 }
+
+/** A name for a place on a planet: the planet's own sounds, never a catalogue number. */
+export function placeName(rng: Rng): string {
+  const syllables = rng.next() < 0.6 ? 2 : 3
+  let name = ''
+  for (let at = 0; at < syllables; at += 1) name += pick(rng, ONSETS) + pick(rng, VOWELS)
+  if (rng.next() < 0.5) name += pick(rng, CODAS)
+  return name.charAt(0).toUpperCase() + name.slice(1)
+}
