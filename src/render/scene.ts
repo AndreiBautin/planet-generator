@@ -24,6 +24,8 @@ import { buildHeavens, type Heavens } from './heavens'
 import { coverAt, Rain } from './rain'
 import { Soundscape } from './sound'
 import { VALLEY_FOG } from './valley-fog'
+import { Embers, plumes, PLUME_SUN } from './volcanic'
+import { volcanoesOf } from '@/generation/volcanoes'
 import { Lightning, rainShafts, SHAFT_LIGHT } from './weather'
 import {
   DETAIL_CLOUD_LAYER_SUN,
@@ -405,6 +407,8 @@ export function startScene(
   let lastEyeAt = 0
   let speed = 0
   scene.add(rain.object)
+  const embers = new Embers()
+  scene.add(embers.object)
   const rainEye = new THREE.Vector3()
 
   const { quality, builder } = options
@@ -497,6 +501,9 @@ export function startScene(
     }
     if (previous !== undefined) {
       scene.remove(previous.terrain.group)
+      for (const child of previous.terrain.group.children) {
+        if (child.userData.plume === true) release(child)
+      }
       previous.terrain.dispose()
       if (!keep) {
         scene.remove(previous.clouds, previous.air, previous.sky, previous.heavens.group)
@@ -509,6 +516,12 @@ export function startScene(
       }
     }
     scene.add(next.terrain.group)
+    // Smoke from a molten world's peaks, turning with its ground.
+    const smoke = plumes(next.world, volcanoesOf(next.world))
+    if (smoke !== undefined) {
+      smoke.userData.plume = true
+      next.terrain.group.add(smoke)
+    }
     if (!keep) scene.add(clouds, air, sky, heavens.group)
     const animate = next.born && !options.reducedMotion
     shown = {
@@ -818,6 +831,13 @@ export function startScene(
       shown.terrain.update(inPlanetFrame(camera.position, turn, stage.scale), viewCone(turn))
       const shower = rainOver(shown.clouds, turn)
       rain.update(rainEye.copy(camera.position), shower)
+      PLUME_SUN.value.copy(sunDirection)
+      embers.update(
+        rainEye,
+        shown.world.molten
+          ? 1 - smooth(0.012, 0.05, camera.position.length() / stage.scale - 1)
+          : 0,
+      )
       // Lightning in a storm near the eye, lighting the land a moment.
       const held = cloudDataOf(shown.clouds)
       const above = camera.position.length() / stage.scale - 1

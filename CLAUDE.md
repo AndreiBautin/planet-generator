@@ -633,3 +633,26 @@ from 5 to 8.
   colours every frame, so a debug test that set them to red and then
   stepped a frame painted nothing and looked like the effect was dead. The
   honest test is the density: at 180 the shallow mist was simply invisible.
+
+## Volcanic worlds: plumes, embers, lava light
+
+- **Volcanoes are the tallest summits** (`generation/volcanoes.ts`, tested):
+  drainage cells higher than all eight round them, tallest first, at most
+  14, kept 0.12 radians apart. None on a world that is not molten.
+- **A plume is a stream of puffs, not a quad** (`render/volcanic.ts`). One
+  tall billboard was tried first, shaded every way, and always read as a
+  beam of light. Each volcano has 28 soft round sprites that leave the vent,
+  rise, bend downwind (so a plume is visible from orbit as a trail rather
+  than end-on) and grow as they thin, then start again — motion as a
+  function of time in the shader, nothing moved per frame. Brown-grey ash
+  lit on top and shadowed beneath, near black on the night side, and orange
+  at the foot from the vent. Children of the terrain group, released with
+  it (`userData.plume`).
+- **Embers** are the rain's arrangement going upwards: points in a box
+  round the eye, additive, flickering, dying as they rise, on a molten
+  world below about 0.05 radii.
+- **The lava sea lights the ground just above it**, falling off over
+  0.0009 radii. The first strength lit whole slopes like daylight.
+- **Seen in passing, not fixed:** on the night side of `h999999` a low
+  slope near the lava draws pale cream, as though lit — it was there before
+  any of this, and its cause is not yet found.

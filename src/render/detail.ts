@@ -408,6 +408,12 @@ export function withGroundDetail(
           // Rivers of lava threading the low ground: the zero line of a
           // noise, which is a network of winding channels, lit from within
           // and pulsing slowly; and pools where it has spread.
+          // The molten sea lights the ground beside it from below: shores
+          // and low ground glow, more the nearer the lava, which is what
+          // keeps a coast a shape on a night side lit by nothing else.
+          float overLava = max(length(vDetailPosition) - 1.0015, 0.0);
+          float spill = exp(-overLava / 0.0009);
+          totalEmissiveRadiance += (diffuseColor.rgb * 0.35 + 0.012) * vec3(1.0, 0.33, 0.07) * spill;
           float lava = v_pattern.y;
           if (lava > 0.02) {
             float lavaFar = 1.0 - smoothstep(0.2, 1.2, length(vViewPosition));
