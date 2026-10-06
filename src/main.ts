@@ -15,7 +15,10 @@ import { attachHud } from '@/ui/hud'
 import { TERRAIN_STATS } from '@/render/patches/terrain'
 import { landmarksOf, tourOrder } from '@/generation/landmarks'
 import { createRig } from '@/ui/rig'
-import { savePicture, sendPostcard, shareLink } from '@/ui/share'
+import { saveClip, savePicture, sendPostcard, shareLink } from '@/ui/share'
+import { clipName } from '@/ui/clip'
+import { attachClipButton } from '@/ui/clip-button'
+import { recordClip } from '@/ui/clip-recorder'
 import {
   directionOf,
   headingOf,
@@ -340,6 +343,29 @@ function remember(world: Planet): void {
       })
   }, 3500)
 }
+
+/**
+ * Flythrough clips: whatever the view does for ten seconds — a glide, a
+ * dive, a stretch of the tour — with the world's name over the opening and
+ * the sound if it is on, kept as a video (clip.ts).
+ */
+attachClipButton({
+  start: ({ onTick, onDone }) =>
+    recordClip(
+      { canvas, onFrame: scene.onFrame, soundStream: scene.soundStream },
+      {
+        title: planet.name,
+        subtitle: KINDS[planet.kind].label,
+        now: () => clock.now(),
+        onTick,
+        onDone,
+      },
+    ),
+  save: (clip, format) => saveClip(clip, clipName(planet.name), format.extension),
+  tell: (message) => {
+    hud.toast(message)
+  },
+})
 
 const atlasPanel = attachAtlas({
   onOpen: (entry) => {

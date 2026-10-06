@@ -283,6 +283,47 @@
         color: #ffd27a;
         border-color: transparent;
       }
+      /* A clip: below the system's button, red and counting down while it records. */
+      .clip {
+        position: fixed;
+        top: calc(max(16px, env(safe-area-inset-top)) + 174px);
+        right: var(--gutter);
+        width: 48px;
+        padding: 0;
+        display: grid;
+        place-items: center;
+      }
+      .clip > * {
+        grid-area: 1 / 1;
+      }
+      .clip .clip-save,
+      .clip[data-state='recording'] .clip-record,
+      .clip[data-state='ready'] .clip-record {
+        display: none;
+      }
+      .clip[data-state='ready'] .clip-save {
+        display: inline;
+      }
+      .clip[data-state='recording'] {
+        border-color: #ff5a5a;
+        color: #ff8a8a;
+      }
+      .clip-count {
+        font-size: 15px;
+        font-weight: 650;
+        font-variant-numeric: tabular-nums;
+      }
+      .clip[data-state='ready'] {
+        border-color: var(--accent);
+      }
+      /* Touring, it moves up into the places the atlas and the system left. */
+      .touring .clip {
+        top: calc(max(16px, env(safe-area-inset-top)) + 58px);
+      }
+      .postcarding .clip,
+      .systeming .clip {
+        display: none;
+      }
       .touring .atlas-button,
       .postcarding .atlas-button,
       .touring .system-button,
@@ -740,6 +781,38 @@
           stroke-width="1.3"
         />
       </svg>
+    </button>
+    <button type="button" class="clip" id="clip" aria-label="Record a clip" data-state="idle">
+      <svg class="clip-record" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
+        <rect
+          x="3.5"
+          y="6.5"
+          width="12"
+          height="11"
+          rx="2"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.6"
+        />
+        <path
+          d="M15.5 10.5l5-3v9l-5-3z"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.6"
+          stroke-linejoin="round"
+        />
+      </svg>
+      <svg class="clip-save" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
+        <path
+          d="M12 4.5v10M7.5 10.5l4.5 4.5 4.5-4.5M5 19.5h14"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.6"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        />
+      </svg>
+      <span class="clip-count" id="clip-count" aria-live="off"></span>
     </button>
     <button type="button" class="system-button" id="system-button" aria-label="The star system">
       <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">

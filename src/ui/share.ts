@@ -25,6 +25,36 @@ export async function savePicture(blob: Blob, name: string): Promise<string | un
 }
 
 /**
+ * Keep a clip: the share sheet where it can carry the video (most phones),
+ * a download everywhere else. Must be called inside a press, or the sheet
+ * will not open. Returns what to say, or nothing when the sheet said it.
+ */
+export async function saveClip(
+  blob: Blob,
+  name: string,
+  extension: string,
+): Promise<string | undefined> {
+  const file = new File([blob], `${name}.${extension}`, { type: blob.type })
+  if (typeof navigator.canShare === 'function' && navigator.canShare({ files: [file] })) {
+    try {
+      await navigator.share({ files: [file], title: name })
+      return undefined
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') return undefined
+    }
+  }
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = file.name
+  link.click()
+  setTimeout(() => {
+    URL.revokeObjectURL(url)
+  }, 30_000)
+  return 'Clip saved'
+}
+
+/**
  * Share a planet's link: the system share sheet where there is one (every
  * phone), the clipboard where there is not (most desktops). The link is the
  * whole planet, so sharing it is sharing the world.

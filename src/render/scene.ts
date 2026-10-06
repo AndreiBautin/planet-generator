@@ -106,6 +106,10 @@ export interface Scene {
   }
   /** Sound on or off (sound.ts), from inside a press; says which it is now. */
   readonly toggleSound: () => boolean
+  /** The sound as a stream for a clip, once it has ever played (sound.ts). */
+  readonly soundStream: () => MediaStream | undefined
+  /** Called after every frame is drawn, while the canvas still holds it: for a clip. */
+  readonly onFrame: (listener: (() => void) | undefined) => void
   /**
    * Stop the planet turning, for a picture: the hour stays where it is
    * until let go, and then the day carries on from there.
@@ -414,6 +418,7 @@ export function startScene(
   const rain = new Rain()
   const lightning = new Lightning()
   const sound = new Soundscape()
+  let frameListener: (() => void) | undefined
   let heardStrikes = 0
   let soundFrame = 0
   let coast = 0
@@ -989,6 +994,7 @@ export function startScene(
     }
     if (composer === undefined) renderer.render(scene, camera)
     else composer.render()
+    frameListener?.()
   }
   if (options.manual !== true) renderer.setAnimationLoop(tick)
 
@@ -1032,6 +1038,10 @@ export function startScene(
     step: tick,
     root: scene,
     toggleSound: () => sound.toggle(),
+    soundStream: () => sound.stream(),
+    onFrame: (listener) => {
+      frameListener = listener
+    },
     stats: () => ({
       ...renderer.info.render,
       geometries: renderer.info.memory.geometries,

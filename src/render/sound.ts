@@ -122,6 +122,22 @@ export class Soundscape {
     source.stop(start + 6)
   }
 
+  /**
+   * The soundscape as a stream, for a clip to carry: the same mix the
+   * speakers get, silent while the sound is off. None before the sound has
+   * ever been turned on, since the browser starts no audio without a press.
+   */
+  stream(): MediaStream | undefined {
+    if (this.context === undefined || this.master === undefined) return undefined
+    if (this.tap === undefined) {
+      this.tap = this.context.createMediaStreamDestination()
+      this.master.connect(this.tap)
+    }
+    return this.tap.stream
+  }
+
+  private tap: MediaStreamAudioDestinationNode | undefined
+
   private build(): void {
     const Context = window.AudioContext as typeof AudioContext | undefined
     if (Context === undefined) return

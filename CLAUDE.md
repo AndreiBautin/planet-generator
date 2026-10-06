@@ -905,3 +905,25 @@ near the poles — so a storm comes up over the horizon, passes and goes on.
 - **Checked by frame difference**: crossing a rebirth changes the picture
   no more than any other second. The motion itself is held by a test, not
   watched on screen.
+
+## Flythrough clips
+
+The Clip button (`ui/clip-button.ts`) records ten seconds of whatever the
+view is doing — a glide, a dive, a stretch of the tour — as a video with
+the world's name over the opening and the sound if it is on.
+
+- **Copied as each frame is drawn** (`scene.onFrame`, `ui/clip-recorder.ts`):
+  the view's canvas is cleared once a frame is shown, so read on a timer of
+  its own it is black. Each frame is drawn onto a canvas of the clip's size
+  (no wider than 1280), the title laid over it, and that canvas streamed to
+  `MediaRecorder`. MP4 where the browser can make it (what phones play and
+  share sheets take), WebM otherwise (`clipFormat`, tested).
+- **The sound** comes from a tap on the soundscape's master
+  (`Soundscape.stream`); only its picture tracks are stopped after, or the
+  next clip would be silent. None if the sound has never been on.
+- **Saved by a second press**, not when recording ends: the share sheet
+  only opens inside a press, and ten seconds on the press that started the
+  clip no longer counts. The button turns into a save arrow for it.
+- Checked in the preview with downloads stubbed: a 960 × 600 MP4 of a glide
+  with the title in it, played back. **The sound in a clip, and the share
+  sheet, were not exercised.**
