@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { hydrologyOf, LAKE_DEPTH, neighboursOf, RIVER_FLOW } from './hydrology'
+import { floorHeightAt, hydrologyOf, LAKE_DEPTH, neighboursOf, RIVER_FLOW } from './hydrology'
 import { createPlanet } from './planet'
 import { parseSeed } from './seed'
 
@@ -10,6 +10,21 @@ const planet = createPlanet(seed)
 const water = hydrologyOf(planet)
 
 describe('hydrology', () => {
+  it('reads the floor of the ground round a point smoothly as the point moves', () => {
+    // The dawn mist fills up from this floor: a jump in it where the cells
+    // round a point change would draw the mist's edge as a staircase.
+    const near = new Map<number, readonly number[]>()
+    const step = 0.0004
+    let worst = 0
+    for (let k = 0; k < 400; k += 1) {
+      const t = k * step
+      const a = floorHeightAt(water, [Math.sin(t), 0.3, Math.cos(t)], near, 1)
+      const b = floorHeightAt(water, [Math.sin(t + step), 0.3, Math.cos(t + step)], near, 1)
+      worst = Math.max(worst, Math.abs(a - b))
+    }
+    expect(worst).toBeLessThan(0.004)
+  })
+
   it('fills the whole hollow of a lake: no ground beside one lies under its level', () => {
     // Stopped at its deepest cells, a lake's water ended where the grid
     // did, and its shore was a staircase of cell edges.

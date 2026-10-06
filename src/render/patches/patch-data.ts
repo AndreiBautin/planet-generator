@@ -1,4 +1,4 @@
-import { hydrologyOf, waterAt } from '@/generation/hydrology'
+import { floorHeightAt, hydrologyOf, waterAt } from '@/generation/hydrology'
 import { surfaceAt, type Planet, type Surface } from '@/generation/planet'
 import { groupingsAt } from '@/generation/grouping'
 import { fbm } from '@/generation/noise'
@@ -66,6 +66,16 @@ export interface PatchData {
    * angle the water was seen at.
    */
   readonly ice: Float32Array
+  /**
+   * How deep the dawn mist lies over each vertex, in radii (valley-fog.ts):
+   * from a soft floor of the ground round it up to a set depth, so it pools
+   * in the bottoms; just over the water on a lake or a river; below
+   * nought — under the ground — where there is none, so its edge feathers
+   * across a triangle. A depth rather than a height, because the shader
+   * draws the ground blended towards its parent's shape and a height
+   * compared with that blend found the mist under the ground.
+   */
+  readonly mist: Float32Array
   /**
    * Each biome's own ground, four weights a vertex — forest needles,
    * savanna, tundra, and salt flat (ash on a molten world) — then the same
@@ -151,6 +161,7 @@ export function samplePatch(planet: Planet, key: PatchKey, segments: number): Pa
   const surfaces: Surface[] = []
   const pattern = new Float32Array(vertexCount(segments) * 4)
   const ice = new Float32Array(vertexCount(segments) * 2)
+  const mist = new Float32Array(vertexCount(segments))
   const ground = new Float32Array(vertexCount(segments) * 8)
   const water = new Float32Array(vertexCount(segments))
   const wetted = new Float32Array(side * side)
@@ -162,6 +173,7 @@ export function samplePatch(planet: Planet, key: PatchKey, segments: number): Pa
   // (generation/hydrology.ts). A molten world's lowland runs with lava, not water.
   const hydrology = planet.molten ? undefined : hydrologyOf(planet)
   const near = new Map<number, readonly number[]>()
+  const nearer = new Map<number, readonly number[]>()
   let hasSea = false
 
   for (let j = -2; j <= segments + 2; j += 1) {
@@ -197,6 +209,25 @@ export function samplePatch(planet: Planet, key: PatchKey, segments: number): Pa
       wide[at + 1] = y * radius
       wide[at + 2] = z * radius
       if (i < 0 || j < 0 || i > segments || j > segments) continue
+      if (hydrology !== undefined) {
+        // Mist fills a valley from its floor up to a level, flat on top, so
+        // it pools in the bottoms and the slopes rise out of it. The floor
+        // is the ground's mean round about, less its spread; the level
+        // stands a set depth over it.
+        const floor =
+          1 + liftOf(floorHeightAt(hydrology, [x, y, z], nearer, MIST_SPREAD), planet.relief)
+        // Not levelled over a lake's shores: the level a lake holds nearby
+        // comes off the drainage map's cells, and mist laid flat to it drew
+        // their square edges across the land.
+        const pool = Math.max(floor + MIST_DEPTH, SEA_RADIUS + MIST_COAST)
+        const depth = pool - radius
+        let deep = surface.height < 0 ? -MIST_COAST : depth
+        // Over a lake or a river the mist lies on the water, whatever the
+        // land round it does: water is where it forms first.
+        if (Number.isFinite(level) && surface.height >= 0)
+          deep = Math.max(deep, 1 + liftOf(level, planet.relief) + MIST_ON_WATER - radius)
+        mist[j * side + i] = deep
+      }
       if (Number.isFinite(level)) {
         hasSea = true
         water[j * side + i] =
@@ -493,6 +524,7 @@ export function samplePatch(planet: Planet, key: PatchKey, segments: number): Pa
       for (let k = 0; k < 4; k += 1)
         coarsePattern[skirt * 4 + k] = coarsePattern[vertex * 4 + k] ?? 0
       water[skirt] = water[vertex] ?? 0
+      mist[skirt] = mist[vertex] ?? 0
       ice[skirt * 2] = ice[vertex * 2] ?? 0
       ice[skirt * 2 + 1] = ice[vertex * 2 + 1] ?? 0
       for (let k = 0; k < 8; k += 1) ground[skirt * 8 + k] = ground[vertex * 8 + k] ?? 0
@@ -511,10 +543,20 @@ export function samplePatch(planet: Planet, key: PatchKey, segments: number): Pa
     coarseColours,
     coarsePattern,
     ice,
+    mist,
     ground,
     water,
   }
 }
+
+/** How deep dawn mist stands over the floor of the ground round it, in radii. */
+const MIST_DEPTH = 0.0027
+/** How far under the ground's mean round about that floor sits, in its standard deviations. */
+const MIST_SPREAD = 1
+/** Mist stands at least this high over the sea along a coast. */
+const MIST_COAST = 0.0012
+/** How deep it lies over a lake or a river. */
+const MIST_ON_WATER = 0.0009
 
 const mix = (from: number, to: number, t: number): number => from + (to - from) * t
 

@@ -3,6 +3,7 @@ import * as THREE from 'three'
 import { HAZE_SUN } from './haze'
 import type { GroundKind } from './ground-atlas'
 import type { GroundTextures } from './textures'
+import { withValleyFog } from './valley-fog'
 
 /**
  * Detail finer than any patch carries, drawn per pixel, so that up close
@@ -621,6 +622,7 @@ export function withGroundDetail(
         }
         #endif`,
       )
+    withValleyFog(shader, 'mistTop')
   }
   material.customProgramCacheKey = () =>
     molten ? 'planet-lava-ground-detail' : 'planet-ground-detail'
@@ -834,6 +836,7 @@ export function withWaterDetail(material: THREE.Material): THREE.Material {
           reflectedLight.directSpecular *= ringDim;
         }`,
       )
+    withValleyFog(shader, 'mistTop')
   }
   material.customProgramCacheKey = () => 'planet-water-detail'
   return material

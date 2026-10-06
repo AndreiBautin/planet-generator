@@ -1,6 +1,7 @@
 import * as THREE from 'three'
 
 import { DETAIL_NORMAL_MATRIX, TERRAIN_MORPH } from '../detail'
+import { withValleyFog } from '../valley-fog'
 import type { PatchData } from './patch-data'
 
 /**
@@ -117,7 +118,7 @@ function hashOf(x: number, y: number, z: number, salt: number): number {
 }
 
 /** What a tree instance is told: where it stands at this level and the parent's, and how it is to fare. */
-const STRIDE = 14
+const STRIDE = 15
 
 /**
  * The trees of one patch, if it carries any (levels `TREE_COARSEST` to
@@ -175,6 +176,7 @@ export function forestFor(
         Math.floor(Math.min(1, tint.r * shade) * 255) * 65536 +
           Math.floor(Math.min(1, tint.g * shade) * 255) * 256 +
           Math.floor(Math.min(1, tint.b * shade) * 255),
+        patch.mist[v] ?? 0,
       )
     }
   }
@@ -196,6 +198,7 @@ export function forestFor(
   geometry.setAttribute('treeFate', new THREE.InterleavedBufferAttribute(buffer, 3, 6))
   geometry.setAttribute('treeWood', new THREE.InterleavedBufferAttribute(buffer, 3, 9))
   geometry.setAttribute('treeLook', new THREE.InterleavedBufferAttribute(buffer, 2, 12))
+  geometry.setAttribute('treeMist', new THREE.InterleavedBufferAttribute(buffer, 1, 14))
   geometry.instanceCount = count
   // Culled by the patch's own bounds, grown by the tallest a tree here
   // can stand: the model's own bounds know nothing of where instances go.
@@ -310,6 +313,8 @@ export function treeMaterial(): THREE.MeshStandardMaterial {
         }
         #endif`,
         )
+    // The depth is the ground's: up a tree there is that much less mist over it.
+    withValleyFog(shader, 'treeMist', 'treeMist - (length(transformed) - length(ground))')
   }
   material.customProgramCacheKey = () => 'planet-trees'
   return material

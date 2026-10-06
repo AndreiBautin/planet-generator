@@ -597,3 +597,39 @@ read live state through the recorder, not through a second import.
 
 **Not fixed, seen in passing:** land from orbit is a patchwork of
 hard-edged dark polygons — the canopy pattern at coarse levels.
+
+## Valley fog at dawn
+
+Mist lies in the valley floors round sunrise and is gone by mid-morning
+(`render/valley-fog.ts`, on the ground, the water and the trees). Each
+point's own local hour decides it — the rule `ui/postcard.ts`'s `hourAt`
+uses — so dawn sweeps round the planet with the day; 1:30 to 10:30, thickest
+from 5 to 8.
+
+- **Where: a depth baked per vertex** (`PatchData.mist`, the `mistTop` and
+  `treeMist` attributes). The floor of the ground round a point is the
+  drainage map's heights over two rings of cells, **their mean less one
+  standard deviation** (`floorHeightAt`); mist stands `MIST_DEPTH` over it,
+  about the lowest fifth of the land on the worlds measured. Over a lake or
+  river it lies just over the water; over the open sea there is none.
+- **A depth, not a height.** The first version stored the mist's top as a
+  radius and compared it in the shader with the ground's drawn position —
+  which is blended towards the parent's shape, so the mist read as under
+  the ground almost everywhere and drew nothing.
+- **Not a minimum, even a soft one.** A deep cell entering the rings as a
+  point crosses a cell edge takes a minimum over at once, and the mist's
+  edge stepped; `hydrology.test.ts` holds the floor continuous. Weights
+  fall to nothing at the rings' edge for the same reason.
+- **Not the lake's level over its shores.** The level a lake holds nearby
+  comes off the drainage cells, and mist laid flat to it drew their square
+  edges across the land.
+- **Drawing:** how far the sight line runs through the mist — its depth over
+  the point stretched by how shallowly the line climbs, the whole line when
+  the eye is in it — at density 380, never more than 62% opaque, broken by
+  two frequencies of roll so it is wisps rather than a sheet. **Paler than
+  the sunlight**: lit by the dawn sun's own orange it read as sand. Fades
+  out above ~0.1 radii, where it is a grey stain rather than mist.
+- **The trap that cost the most time:** the scene rewrites the mist's
+  colours every frame, so a debug test that set them to red and then
+  stepped a frame painted nothing and looked like the effect was dead. The
+  honest test is the density: at 180 the shallow mist was simply invisible.

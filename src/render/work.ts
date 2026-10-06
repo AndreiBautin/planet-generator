@@ -58,6 +58,7 @@ export function transferables(result: WorkResult): Transferable[] {
         result.patch.coarseColours.buffer,
         result.patch.coarsePattern.buffer,
         result.patch.ice.buffer,
+        result.patch.mist.buffer,
         result.patch.ground.buffer,
         result.patch.water.buffer,
       ]

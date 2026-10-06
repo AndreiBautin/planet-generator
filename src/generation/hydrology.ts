@@ -81,6 +81,63 @@ export function neighboursOf(cell: number): number[] {
   return out
 }
 
+/**
+ * The floor of the ground round a point: the drainage map's heights over
+ * two rings of cells about it, the nearer weighing more, the sea read as
+ * its shore — their mean, less `spread` of their standard deviation. A
+ * hollow lies under it, a slope across it, a ridge over it. What dawn
+ * mist fills a valley up from.
+ *
+ * Not a minimum, even a soft one: a deep cell joining the rings as the
+ * point crossed a cell edge took the minimum over the moment it carried
+ * any weight at all, and the mist's edge stepped. A mean and a spread move
+ * only as fast as the weights do, and those fall to nothing at the rings'
+ * edge.
+ */
+export function floorHeightAt(
+  water: Hydrology,
+  direction: Vec3,
+  near: Map<number, readonly number[]>,
+  spread: number,
+): number {
+  const cell = cellOf(direction)
+  let around = near.get(cell)
+  if (around === undefined) {
+    const ring = new Set<number>([cell])
+    for (const first of neighboursOf(cell)) {
+      ring.add(first)
+      for (const second of neighboursOf(first)) ring.add(second)
+    }
+    around = [...ring]
+    near.set(cell, around)
+  }
+  const length = Math.hypot(...direction) || 1
+  const x = direction[0] / length
+  const y = direction[1] / length
+  const z = direction[2] / length
+  const c = water.centres
+  let sum = 0
+  let squares = 0
+  let weights = 0
+  for (const k of around) {
+    const gap =
+      Math.hypot(x - (c[k * 3] ?? 0), y - (c[k * 3 + 1] ?? 0), z - (c[k * 3 + 2] ?? 0)) / CELL_SPAN
+    const weight = Math.max(0, 1 - gap / FLOOR_REACH) ** 2
+    const h = Math.max(0, water.height[k] ?? 0)
+    sum += weight * h
+    squares += weight * h * h
+    weights += weight
+  }
+  if (weights <= 0) return 0
+  const mean = sum / weights
+  return mean - spread * Math.sqrt(Math.max(0, squares / weights - mean * mean))
+}
+
+/** How far, in cells, the floor's weights reach: short of the third ring, which is never read. */
+const FLOOR_REACH = 2.4
+/** A cell's width, as an angle (as `CELL_ANGLE`, declared before the functions that use it first). */
+const CELL_SPAN = Math.PI / 2 / SIDE
+
 /** A binary heap of cells by priority, lowest first. */
 class Queue {
   private readonly cells: number[] = []

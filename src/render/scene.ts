@@ -23,6 +23,7 @@ import { fromPalette } from './colour'
 import { buildHeavens, type Heavens } from './heavens'
 import { coverAt, Rain } from './rain'
 import { Soundscape } from './sound'
+import { VALLEY_FOG } from './valley-fog'
 import { Lightning, rainShafts, SHAFT_LIGHT } from './weather'
 import {
   DETAIL_CLOUD_LAYER_SUN,
@@ -735,6 +736,14 @@ export function startScene(
         skylight.intensity = 0.18 + 0.47 * twilight + 0.6 * twilight * (1 - day)
         // The shafts of rain in the light the sky gives, with a floor for the night.
         SHAFT_LIGHT.value.copy(airColour).multiplyScalar(0.42).addScalar(0.02)
+        // The dawn mist lit by the sun as it reaches the ground, and in shade by the sky.
+        // Paler than the sunlight itself: mist scatters every colour, and
+        // lit by the dawn sun's own deep orange it read as sand.
+        VALLEY_FOG.light.value.copy(sun.color).lerp(WHITE, 0.6).multiplyScalar(0.9)
+        VALLEY_FOG.shade.value
+          .copy(skylight.color)
+          .multiplyScalar(skylight.intensity * 0.7)
+          .addScalar(0.015)
       }
     }
     // The sun in view space for the haze, weighted by how much daylight
@@ -796,6 +805,9 @@ export function startScene(
       shown.clouds.rotation.y = turn * 1.15
       pose(shown, stage)
       shown.heavens.update(now / 1000, sunDirection, stage.scale)
+      VALLEY_FOG.shape.value.z = stage.scale
+      VALLEY_FOG.shape.value.w = shown.world.molten ? 0 : 1
+      VALLEY_FOG.sun.value.copy(sunDirection)
       // Planet frame to view space for the ground's normal maps, from the
       // matrices as they will be this frame.
       shown.terrain.group.updateMatrixWorld()
