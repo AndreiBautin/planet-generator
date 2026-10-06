@@ -1054,7 +1054,7 @@ export function startScene(
       fog.density += (WATER_FOG_DENSITY / scale - fog.density) * under
     }
     scene.background = air ? null : deepBackground.copy(waterColour)
-    marineSnow.update(camera.position, under, waterColour, scale)
+    marineSnow.update(camera.position, under, waterColour, day, scale)
   }
 
   /** How heavy a shower falls on the eye: the cloud over it, only low down. */

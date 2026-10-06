@@ -18,6 +18,8 @@ describe('under the sea', () => {
     const deep = waterFog(0.02, 1, new THREE.Color())
     const night = waterFog(0, 0, new THREE.Color())
     expect(deep.g).toBeLessThan(shallow.g)
-    expect(night.g).toBeLessThan(shallow.g * 0.2)
+    expect(night.g).toBeLessThan(shallow.g * 0.3)
+    // Dim, never black: a black night dive reads as broken.
+    expect(night.g).toBeGreaterThan(shallow.g * 0.1)
   })
 })

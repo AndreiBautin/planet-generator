@@ -29,15 +29,19 @@ const SHALLOW = new THREE.Color(0.05, 0.32, 0.36)
 
 /**
  * The water's colour seen through, into `into`: paler near the surface,
- * deeper further down, and dim at night, `day` 0 to 1.
+ * deeper further down, and dim at night, `day` 0 to 1 — dim, not black:
+ * at nought a night dive was a black screen, which reads as broken.
  */
 export function waterFog(depth: number, day: number, into: THREE.Color): THREE.Color {
   const t = Math.min(1, Math.max(0, depth / 0.02))
   return into
     .copy(SHALLOW)
     .lerp(DEEP, t)
-    .multiplyScalar(0.08 + 0.92 * day)
+    .multiplyScalar(0.2 + 0.8 * day)
 }
+
+/** The specks' own light at night. */
+const GLOW = new THREE.Color(0.25, 0.85, 0.75)
 
 /** Specks in the box round the eye, in radii. */
 const SPECKS = 600
@@ -108,12 +112,20 @@ export class MarineSnow {
     this.object.visible = false
   }
 
-  /** At the eye, as strongly as it is under (0 to 1), lit like the water round it. */
-  update(eye: THREE.Vector3, under: number, water: THREE.Color, scale: number): void {
+  /**
+   * At the eye, as strongly as it is under (0 to 1), lit like the water
+   * round it by day; by night glowing faintly blue-green of their own, so
+   * a night dive is a dark full of sparks rather than nothing.
+   */
+  update(eye: THREE.Vector3, under: number, water: THREE.Color, day: number, scale: number): void {
     this.strength.value = under
     this.object.visible = under > 0.01
     if (!this.object.visible) return
-    this.light.value.copy(water).multiplyScalar(3).addScalar(0.08)
+    this.light.value
+      .copy(water)
+      .multiplyScalar(3)
+      .addScalar(0.08)
+      .lerp(GLOW, 1 - day)
     this.object.position.copy(eye)
     this.object.scale.setScalar(scale)
     this.up.copy(eye).normalize()

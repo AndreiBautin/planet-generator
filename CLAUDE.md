@@ -870,7 +870,8 @@ not all one coast), up to 150 towns kept apart, the best sites largest.
   sky and all, not only the ground — when the eye is low.
 - **Lunar eclipses**: a moon in the planet's shadow (`moonLight`) dims to a
   dark red and glows faintly, the red of every sunset on the rim at once.
-  Tested; **not seen on screen**.
+  Seen on screen: a dark red-brown disc beside the planet from a wide
+  orbit at dusk, back to grey once it left the shadow.
 - **Meteors** (`render/meteors.ts`): 32 streaks, each waiting 14–40 s and
   burning for under a second somewhere new, all a function of time in the
   shader; a third of worlds are in a shower, three times as often, all
@@ -925,8 +926,11 @@ the world's name over the opening and the sound if it is on.
   only opens inside a press, and ten seconds on the press that started the
   clip no longer counts. The button turns into a save arrow for it.
 - Checked in the preview with downloads stubbed: a 960 × 600 MP4 of a glide
-  with the title in it, played back. **The sound in a clip, and the share
-  sheet, were not exercised.**
+  with the title in it, played back. **The sound is in it**: with the sound
+  turned on by a real press, a glide's clip decoded to audio peaking at
+  0.6. From orbit the track is there and silent, which is the soundscape
+  being quiet up there, not the clip. **The share sheet was not
+  exercised** — it needs a phone.
 
 ## Under the sea
 
@@ -952,5 +956,11 @@ water is too shallow to fly in, the glide comes up.
   and specks of marine snow hang round the eye.
 - **Dived to a third of the depth**, near the sea bed, where there is
   something to see: at half the depth the bed was a fog.
-- Not seen: night under the water, the shallows surfacing on their own,
-  and a phone.
+- **At night it was a black screen**, which reads as broken: the water now
+  keeps a fifth of its light, and the marine snow glows faintly blue-green
+  of its own after dark, so a night dive is a dark full of sparks.
+- **`rig.test.ts` holds the dive**: under and staying under, refusing a
+  lagoon, coming up by itself in the shallows (and saying so), and no step
+  through the surface bigger than a frame's settling — that last one fails
+  if the ceiling is held from the moment of the dive, as it first was.
+- Not seen: a phone.
