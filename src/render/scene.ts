@@ -3,6 +3,7 @@ import * as THREE from 'three'
 import type { Clock } from '@/app/clock'
 import { surfaceAt, type Planet } from '@/generation/planet'
 import { createRng } from '@/generation/rng'
+import { RING_BANDS, satellitesOf } from '@/generation/satellites'
 import { starField } from '@/generation/stars'
 import { logger } from '@/shared/logger'
 
@@ -18,6 +19,7 @@ import { installSteadyShadows } from './shadows'
 import { BORN, birthAt, type Birth } from './birth'
 import type { Builder } from './builder'
 import { cloudDataOf, cloudsFromTexture, cloudsSeenFrom } from './clouds'
+import { buildHeavens, type Heavens } from './heavens'
 import { coverAt, Rain } from './rain'
 import {
   DETAIL_CLOUD_SPIN,
@@ -25,6 +27,8 @@ import {
   DETAIL_CLOUDS,
   DETAIL_NORMAL_MATRIX,
   DETAIL_RANGE,
+  DETAIL_RING_BANDS,
+  DETAIL_RINGS,
   DETAIL_SKY,
   DETAIL_ZENITH,
   DETAIL_TIME,
@@ -122,6 +126,8 @@ interface Shown {
   readonly clouds: THREE.Mesh
   readonly air: THREE.Mesh
   readonly sky: THREE.Points
+  /** Its moons and rings. */
+  readonly heavens: Heavens
   /** Clock time the planet appeared, for the birth animation; absent if it simply appeared. */
   readonly bornAt: number | undefined
 }
@@ -432,9 +438,12 @@ export function startScene(
     let clouds: THREE.Mesh
     let air: THREE.Mesh
     let sky: THREE.Points
+    let heavens: Heavens
     if (keep) {
-      ;({ clouds, air, sky } = previous)
+      ;({ clouds, air, sky, heavens } = previous)
     } else {
+      heavens = buildHeavens(satellitesOf(next.world))
+      ringsOnGround(heavens)
       clouds = next.clouds ?? cloudsFromTexture(next.world, new Uint8Array(8), 2)
       DETAIL_CLOUDS.value = cloudMapOf(clouds)
       air = buildAtmosphere(next.world, sun.position)
@@ -444,14 +453,17 @@ export function startScene(
       scene.remove(previous.terrain.group)
       previous.terrain.dispose()
       if (!keep) {
-        scene.remove(previous.clouds, previous.air, previous.sky)
+        scene.remove(previous.clouds, previous.air, previous.sky, previous.heavens.group)
+        release(previous.heavens.group)
+        // In a shader's uniforms, where `release` does not look.
+        previous.heavens.bands?.dispose()
         release(previous.clouds)
         release(previous.air)
         release(previous.sky)
       }
     }
     scene.add(next.terrain.group)
-    if (!keep) scene.add(clouds, air, sky)
+    if (!keep) scene.add(clouds, air, sky, heavens.group)
     const animate = next.born && !options.reducedMotion
     shown = {
       seed: next.world.seed,
@@ -461,6 +473,7 @@ export function startScene(
       clouds,
       air,
       sky,
+      heavens,
       bornAt: animate ? clock.now() : keep ? previous.bornAt : undefined,
     }
     pose(shown, animate ? birthAt(0) : stageOf(shown))
@@ -732,6 +745,7 @@ export function startScene(
       shown.terrain.group.rotation.y = turn
       shown.clouds.rotation.y = turn * 1.15
       pose(shown, stage)
+      shown.heavens.update(now / 1000, sunDirection, stage.scale)
       // Planet frame to view space for the ground's normal maps, from the
       // matrices as they will be this frame.
       shown.terrain.group.updateMatrixWorld()
@@ -859,6 +873,7 @@ function pose(planet: Shown, stage: Birth): void {
   planet.terrain.group.scale.setScalar(stage.scale)
   planet.clouds.scale.setScalar(stage.scale)
   planet.air.scale.setScalar(stage.scale)
+  planet.heavens.group.scale.setScalar(stage.scale)
   const air: unknown = planet.air.material
   if (air instanceof THREE.ShaderMaterial) {
     const { strength, outer, inner } = air.uniforms
@@ -880,6 +895,21 @@ function fieldOfView(aspect: number): number {
   if (aspect >= 1) return FIELD_OF_VIEW
   const half = THREE.MathUtils.degToRad(FIELD_OF_VIEW / 2)
   return THREE.MathUtils.radToDeg(2 * Math.atan(Math.tan(half) / aspect))
+}
+
+/** Hand the rings' bands to the ground, for the shadow they cast; none, for a world without. */
+function ringsOnGround(heavens: Heavens): void {
+  DETAIL_RINGS.value.set(heavens.inner, heavens.outer)
+  const data = heavens.bands?.image.data
+  DETAIL_RING_BANDS.value.forEach((v, k) => {
+    // Sixty-four of the bands' samples, four to a vector.
+    const at = (i: number): number => {
+      if (!(data instanceof Uint8Array)) return 0
+      const sample = Math.round(((k * 4 + i) / 63) * (RING_BANDS - 1))
+      return (data[sample * 4] ?? 0) / 255
+    }
+    v.set(at(0), at(1), at(2), at(3))
+  })
 }
 
 function buildSky(world: Planet, pixelRatio: number): THREE.Points {

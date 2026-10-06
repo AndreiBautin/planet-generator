@@ -431,3 +431,22 @@ ground followed the sun's own `day`. Now:
 `recorder.sun()` gives the sun's direction in the planet's frame, to start
 a glide at a chosen sun height. Don't read it off the light's position:
 the shadow camera moves the light.
+
+## Moons and rings
+
+`generation/satellites.ts` decides them from the seed (tested: the same
+every time, moons clear of the rings and of each other, rings on about a
+quarter of worlds and never a molten one); `render/heavens.ts` draws
+them, kept with the clouds when only a dial moves.
+
+- **In the room's frame.** The rings lie in the equator, so the planet's
+  turn about its axis leaves them where they are; the moons keep their
+  own time (`update`, from the clock).
+- **Moons are lit like the ground**, so their phases are just the sun on
+  a sphere. Bigger and nearer than a real moon of their size, on purpose.
+- **The rings' shadow on the ground** is `ringShadow` in detail.ts, from
+  the same bands passed as 16 packed `vec4` uniforms rather than a
+  texture: the ground's shader is already near a phone's texture limit.
+  The planet's shadow on the rings is the ring shader's own.
+- **The band texture lives in a uniform**, where `release` does not look;
+  it is disposed by hand when a planet goes.

@@ -55,6 +55,16 @@ export const DETAIL_NORMAL_MATRIX = { value: new THREE.Matrix3() }
 export const DETAIL_SKY = { value: new THREE.Color(0, 0, 0) }
 /** The sky overhead, deeper than the haze at the horizon: what calm water mirrors looking down. */
 export const DETAIL_ZENITH = { value: new THREE.Color(0, 0, 0) }
+/**
+ * The rings, for the shadow they throw on the ground: inner and outer edge
+ * (x, y; nought for no rings) and their bands, 64 samples packed four to
+ * a vector. Uniforms rather than a texture, as the ground's shader is
+ * already near the number of textures a phone allows.
+ */
+export const DETAIL_RINGS = { value: new THREE.Vector2(0, 0) }
+export const DETAIL_RING_BANDS = {
+  value: Array.from({ length: 16 }, () => new THREE.Vector4()),
+}
 
 export const NOISE = /* glsl */ `
   // A hash that holds up at large coordinates, unlike the sin() kind,
@@ -138,9 +148,10 @@ function passThrough(
     )
   const varying = extra === undefined ? '' : `varying ${extra.type} v_${extra.attribute};\n`
   shader.fragmentShader =
-    `uniform float detailTime;\nuniform float detailRange;\nuniform sampler2D detailClouds;\nuniform float detailCloudSpin;\nuniform vec3 detailCloudSun;\nuniform mat3 detailNormalMatrix;\nvarying vec3 vDetailPosition;\nvarying vec3 vDetailNormal;\n${varying}` +
+    `uniform float detailTime;\nuniform float detailRange;\nuniform sampler2D detailClouds;\nuniform float detailCloudSpin;\nuniform vec3 detailCloudSun;\nuniform mat3 detailNormalMatrix;\nuniform vec2 detailRings;\nuniform vec4 detailRingBands[16];\nvarying vec3 vDetailPosition;\nvarying vec3 vDetailNormal;\n${varying}` +
     NOISE +
     CLOUD_SHADOW +
+    RING_SHADOW +
     shader.fragmentShader
   shader.uniforms.detailTime = DETAIL_TIME
   shader.uniforms.detailRange = DETAIL_RANGE
@@ -148,8 +159,42 @@ function passThrough(
   shader.uniforms.detailCloudSpin = DETAIL_CLOUD_SPIN
   shader.uniforms.detailCloudSun = DETAIL_CLOUD_SUN
   shader.uniforms.detailNormalMatrix = DETAIL_NORMAL_MATRIX
+  shader.uniforms.detailRings = DETAIL_RINGS
+  shader.uniforms.detailRingBands = DETAIL_RING_BANDS
   shader.uniforms.hazeSun = HAZE_SUN
 }
+
+const RING_SHADOW = /* glsl */ `
+  // How much of the sun the rings take from this point: where the sun's
+  // ray from here crosses the equatorial plane, how solid the rings are
+  // at that radius. The rings lie in the planet's equator, so in the
+  // planet's frame they are the plane y = 0 however the planet turns.
+  float ringShadow(vec3 p) {
+    if (detailRings.y <= 0.0 || abs(detailCloudSun.y) < 1e-4) return 0.0;
+    float t = -p.y / detailCloudSun.y;
+    if (t <= 0.0) return 0.0;
+    float r = length(p + detailCloudSun * t);
+    float across = (r - detailRings.x) / (detailRings.y - detailRings.x);
+    if (across <= 0.0 || across >= 1.0) return 0.0;
+    float at = across * 63.0;
+    int i = int(floor(at));
+    float f = fract(at);
+    float a = 0.0;
+    float b = 0.0;
+    for (int k = 0; k < 16; k++) {
+      vec4 v = detailRingBands[k];
+      if (k * 4 == i) a = v.x;
+      if (k * 4 == i + 1) b = v.x;
+      if (k * 4 + 1 == i) a = v.y;
+      if (k * 4 + 1 == i + 1) b = v.y;
+      if (k * 4 + 2 == i) a = v.z;
+      if (k * 4 + 2 == i + 1) b = v.z;
+      if (k * 4 + 3 == i) a = v.w;
+      if (k * 4 + 3 == i + 1) b = v.w;
+    }
+    return mix(a, b, f) * 0.85;
+  }
+`
 
 const CLOUD_SHADOW = /* glsl */ `
   // How much cloud lies between this point and the sun: the cloud map read
@@ -562,6 +607,8 @@ export function withGroundDetail(
         {
           vec3 groundUp = normalize(detailNormalMatrix * normalize(vDetailPosition));
           float groundDay = smoothstep(-0.05, 0.08, dot(groundUp, directionalLights[0].direction));
+          // And the rings, if any, cast their bands across it.
+          groundDay *= 1.0 - ringShadow(vDetailPosition);
           reflectedLight.directDiffuse *= groundDay;
           reflectedLight.directSpecular *= groundDay;
         }
