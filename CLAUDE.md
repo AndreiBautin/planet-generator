@@ -964,3 +964,22 @@ water is too shallow to fly in, the glide comes up.
   through the surface bigger than a frame's settling — that last one fails
   if the ceiling is held from the moment of the dive, as it first was.
 - Not seen: a phone.
+
+## Sunbeams
+
+`render/sunbeams.ts`, a pass on the finished frame before the bloom: each
+pixel looks back along the line to the sun, gathering the frame's
+brightness above a threshold with each step counting less, and adds it in
+the sun's own colour. The bright sky round the sun is the light; a cloud,
+a ridge or a tree between is dark and leaves a dark ray behind it, so the
+beams fall exactly where the picture shows a gap.
+
+- **Strength** (`sunbeamStrength`, tested): strongest with the sun low and
+  in view from near the ground, much less overhead, gone below the horizon,
+  from orbit, under the sea, and with the sun well off the screen (a point
+  behind the eye projects mirrored, so it counts as not in view at all).
+- **Tuned by eye with a switch**, since the first strength drew nothing
+  anyone would notice: 3.5 times that is clear rays over the trees at dusk
+  without washing out the land.
+- **Only with the post pass**, so not on a modest phone, which draws
+  straight to the screen.

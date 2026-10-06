@@ -30,6 +30,7 @@ import { Embers, plumes, PLUME_SUN } from './volcanic'
 import { spray } from './waterfalls'
 import { Birds } from './birds'
 import { Meteors } from './meteors'
+import { SUNBEAM_SHADER, sunbeamStrength } from './sunbeams'
 import { MarineSnow, underwaterAt, WATER_FOG_DENSITY, waterFog } from './underwater'
 import { DETAIL_CLOUD_MOONS, DETAIL_MOONS, moonShadow, type MoonDisc } from './eclipse'
 import { volcanoesOf } from '@/generation/volcanoes'
@@ -369,6 +370,9 @@ export function startScene(
     1.0,
   )
   const grade = new ShaderPass(GRADE_SHADER)
+  // Sunbeams through the gaps in the clouds (sunbeams.ts), before the bloom.
+  const beams = new ShaderPass(SUNBEAM_SHADER)
+  const sunOnScreen = new THREE.Vector3()
   if (composer !== undefined) {
     composer.setPixelRatio(pixelRatio)
     composer.setSize(window.innerWidth, window.innerHeight)
@@ -376,6 +380,7 @@ export function startScene(
   const camera = new THREE.PerspectiveCamera(FIELD_OF_VIEW, 1, 0.1, 100)
   if (composer !== undefined) {
     composer.addPass(new RenderPass(scene, camera))
+    composer.addPass(beams)
     composer.addPass(bloom)
     composer.addPass(new OutputPass())
     composer.addPass(grade)
@@ -1008,6 +1013,7 @@ export function startScene(
       }
     }
     underTheSea()
+    if (composer !== undefined) aimBeams()
     if (composer === undefined) renderer.render(scene, camera)
     else composer.render()
     frameListener?.()
@@ -1055,6 +1061,29 @@ export function startScene(
     }
     scene.background = air ? null : deepBackground.copy(waterColour)
     marineSnow.update(camera.position, under, waterColour, day, scale)
+  }
+
+  /** Where the sun is on the screen and how strong its beams are, this frame. */
+  const aimBeams = (): void => {
+    const scale = shown === undefined ? 1 : stageOf(shown).scale
+    const above = camera.position.length() / scale - 1
+    camera.updateMatrixWorld()
+    sunOnScreen.copy(camera.position).addScaledVector(sunDirection, camera.far * 0.5)
+    sunOnScreen.project(camera)
+    // Behind the eye a projected point comes out mirrored: it is not in view at all.
+    const ahead = sunOnScreen.z < 1
+    const x = sunOnScreen.x * 0.5 + 0.5
+    const y = sunOnScreen.y * 0.5 + 0.5
+    const off = ahead ? Math.hypot(x - 0.5, y - 0.5) : 2
+    const elevation = meteorUp.copy(camera.position).normalize().dot(sunDirection)
+    const { sunAt, strength, tint } = beams.uniforms
+    if (sunAt === undefined || strength === undefined || tint === undefined) return
+    ;(sunAt.value as THREE.Vector2).set(x, y)
+    strength.value =
+      BEAM_STRENGTH *
+      sunbeamStrength(elevation, 1 - smooth(0.05, 0.3, above), off) *
+      (1 - DETAIL_UNDER.value)
+    ;(tint.value as THREE.Color).copy(sun.color)
   }
 
   /** How heavy a shower falls on the eye: the cloud over it, only low down. */
@@ -1188,6 +1217,9 @@ function inPlanetFrame(
   const s = scale > 0 ? 1 / scale : 1
   return [x * s, position.y * s, z * s]
 }
+
+/** How bright the sunbeams are at their strongest (sunbeams.ts). */
+const BEAM_STRENGTH = 5.6
 
 /** The renderer's exposure in ordinary daylight; an eclipse dims it. */
 const EXPOSURE = 1.15
