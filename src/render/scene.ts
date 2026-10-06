@@ -30,6 +30,7 @@ import { Embers, plumes, PLUME_SUN } from './volcanic'
 import { spray } from './waterfalls'
 import { Birds } from './birds'
 import { Meteors } from './meteors'
+import { MarineSnow, underwaterAt, WATER_FOG_DENSITY, waterFog } from './underwater'
 import { DETAIL_CLOUD_MOONS, DETAIL_MOONS, moonShadow, type MoonDisc } from './eclipse'
 import { volcanoesOf } from '@/generation/volcanoes'
 import { cityLights } from './city-lights'
@@ -37,6 +38,7 @@ import { CITY_GLOW_WIDTH } from './work'
 import { Lightning, rainShafts, SHAFT_LIGHT } from './weather'
 import {
   DETAIL_AURORA,
+  DETAIL_UNDER,
   DETAIL_CITIES,
   DETAIL_CITY_LIGHT,
   DETAIL_CLOUD_LAYER_SUN,
@@ -60,7 +62,7 @@ import type { ViewCone } from './patches/lod'
 import { Terrain } from './patches/terrain'
 import { nextPixelRatio, typicalFrame, type Quality } from './quality'
 import { groundTextures } from './textures'
-import { waterMaterial } from './water'
+import { SEA_RADIUS, waterMaterial } from './water'
 
 /**
  * The Three.js scene: a renderer filling the window, a camera, a star to
@@ -430,6 +432,11 @@ export function startScene(
   scene.add(embers.object)
   const birds = new Birds()
   scene.add(birds.object)
+  const marineSnow = new MarineSnow()
+  scene.add(marineSnow.object)
+  const waterColour = new THREE.Color()
+  const deepBackground = new THREE.Color()
+  let underSide: THREE.Side = THREE.FrontSide
   const meteors = new Meteors()
   scene.add(meteors.object)
   const meteorUp = new THREE.Vector3()
@@ -462,11 +469,19 @@ export function startScene(
           ground,
           world.molten,
         ),
-        water: world.molten
-          ? withLavaDetail(waterMaterial(world))
-          : withWaterDetail(waterMaterial(world)),
+        water: world.molten ? withLavaDetail(waterMaterial(world)) : seaFor(world),
       },
     )
+
+  // Each world's sea, kept so it can be drawn from below when the eye is under it.
+  const seas = new Set<THREE.Material>()
+  const seaFor = (world: Planet): THREE.Material => {
+    const sea = withWaterDetail(waterMaterial(world))
+    seas.add(sea)
+    // The world on screen and the one being made behind it; older ones are gone.
+    for (const old of seas) if (seas.size > 2) seas.delete(old)
+    return sea
+  }
 
   const show = (world: Planet, { born }: { readonly born: boolean }): Promise<boolean> => {
     // The sky, the clouds and the air depend on the seed and the kind, not
@@ -992,11 +1007,55 @@ export function startScene(
         }
       }
     }
+    underTheSea()
     if (composer === undefined) renderer.render(scene, camera)
     else composer.render()
     frameListener?.()
   }
   if (options.manual !== true) renderer.setAnimationLoop(tick)
+
+  /**
+   * Under the sea (underwater.ts): the air's haze becomes the water's, the
+   * sky and everything in the air go, the surface is drawn from below, and
+   * specks hang round the eye. Decided last, after everything above has
+   * set itself for the air, so it overrules it.
+   */
+  const underTheSea = (): void => {
+    const stage = shown === undefined ? undefined : stageOf(shown)
+    const scale = stage?.scale ?? 1
+    const radius = camera.position.length() / scale
+    const under = shown === undefined || shown.world.molten ? 0 : underwaterAt(radius)
+    DETAIL_UNDER.value = under
+    const side = under > 0 ? THREE.DoubleSide : THREE.FrontSide
+    if (side !== underSide) {
+      underSide = side
+      for (const sea of seas) {
+        sea.side = side
+        sea.needsUpdate = true
+      }
+    }
+    const air = under < 0.5
+    if (shown !== undefined) {
+      shown.air.visible = air
+      shown.clouds.visible = air
+      shown.sky.visible = air
+      shown.heavens.group.visible = air
+    }
+    if (!air) {
+      birds.object.visible = false
+      meteors.object.visible = false
+      rain.object.visible = false
+    }
+    const day = smooth(-0.1, 0.2, meteorUp.copy(camera.position).normalize().dot(sunDirection))
+    const depth = Math.max(0, SEA_RADIUS - radius)
+    waterFog(depth, day, waterColour)
+    if (under > 0) {
+      fog.color.lerp(waterColour, under)
+      fog.density += (WATER_FOG_DENSITY / scale - fog.density) * under
+    }
+    scene.background = air ? null : deepBackground.copy(waterColour)
+    marineSnow.update(camera.position, under, waterColour, scale)
+  }
 
   /** How heavy a shower falls on the eye: the cloud over it, only low down. */
   const rainOver = (clouds: THREE.Mesh, turn: number): number => {

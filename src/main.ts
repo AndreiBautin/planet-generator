@@ -6,7 +6,7 @@ import { KINDS } from '@/generation/kinds'
 import { createPlanet, DEFAULT_DIALS, type Dials, type Planet } from '@/generation/planet'
 import { newSeed, type Seed } from '@/generation/seed'
 import { createBuilder } from '@/render/builder'
-import { groundRadiusAt } from '@/render/patches/patch-data'
+import { floorRadiusAt, groundRadiusAt } from '@/render/patches/patch-data'
 import { pickQuality } from '@/render/quality'
 import { startScene } from '@/render/scene'
 import { logger, setLogLevel } from '@/shared/logger'
@@ -349,6 +349,31 @@ function remember(world: Planet): void {
  * dive, a stretch of the tour — with the world's name over the opening and
  * the sound if it is on, kept as a video (clip.ts).
  */
+/**
+ * Under the sea: the glide flies over the sea bed instead of over the
+ * surface, until the water grows too shallow or the button is pressed
+ * again (rig.ts `submerge`, render/underwater.ts).
+ */
+const diveButton = document.getElementById('dive')
+const showDive = (under: boolean): void => {
+  diveButton?.setAttribute('aria-pressed', String(under))
+  diveButton?.setAttribute('aria-label', under ? 'Come up for air' : 'Dive under the sea')
+}
+diveButton?.addEventListener('click', () => {
+  if (rig.submerged()) {
+    rig.submerge(undefined)
+    showDive(false)
+    return
+  }
+  const went = rig.submerge((direction) => floorRadiusAt(planet, direction))
+  showDive(went)
+  if (!went) hud.toast('Fly over open sea to dive')
+})
+rig.onSurface((shallow) => {
+  showDive(false)
+  if (shallow) hud.toast('Too shallow · surfaced')
+})
+
 attachClipButton({
   start: ({ onTick, onDone }) =>
     recordClip(

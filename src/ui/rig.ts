@@ -60,6 +60,15 @@ export interface Rig {
   ) => void
   /** Back to the orbit at once — for a new planet, where a rise over the old one would be a lie. */
   readonly cut: () => void
+  /**
+   * Take the glide under the sea, flying over `floor` (the sea bed) and
+   * under the surface; or, with nothing, back up into the air. Says
+   * whether it went: not unless gliding over water deep enough to fly in.
+   */
+  readonly submerge: (floor: Ground | undefined) => boolean
+  readonly submerged: () => boolean
+  /** Told when the glide comes up by itself: the water grew too shallow (`shallow`), or it left the glide. */
+  readonly onSurface: (listener: (shallow: boolean) => void) => void
   /** Whether the glide is the camera a finger steers: diving or gliding. */
   readonly flying: () => boolean
   /** Turn and climb by a step, from the keyboard. */
@@ -126,7 +135,43 @@ export type Spot =
       readonly distance: number
     }
 
+/**
+ * Under the sea: the eye never comes nearer the surface than this, so the
+ * waves passing over do not lift it into the air.
+ */
+const SEA_CEILING = SEA_RADIUS - 0.0012
+/** Nor nearer the sea bed than this, as over land. */
+const UNDER_CLEARANCE = 0.0025
+/** How high over the sea the glide climbs to when it comes up. */
+const RISE_TO = 0.008
+/** The least depth to dive into: enough water to fly in, not a lagoon. */
+const DEEP_ENOUGH = 0.006
+
+const clamp = (value: number, low: number, high: number): number =>
+  Math.min(high, Math.max(low, value))
+
 export function createRig(clock: Clock, ground: () => Ground): Rig {
+  // Under the sea, the glide flies over the sea bed and under a ceiling
+  // just below the surface (`submerge`).
+  let under: Ground | undefined
+  let surfaced: (shallow: boolean) => void = () => undefined
+  // Coming up, the glide still flies over the sea bed until it is clear of
+  // the water: over the sea's surface at once, the clearance above it put
+  // the eye there in a single frame.
+  let rising: Ground | undefined
+  let sunk = false
+  const comeUp = (shallow: boolean): void => {
+    if (under === undefined) return
+    rising = under
+    under = undefined
+    if (glide !== undefined)
+      glide = {
+        ...glide,
+        altitude: clamp(SEA_RADIUS + RISE_TO - rising(glide.position), MIN_ALTITUDE, MAX_ALTITUDE),
+      }
+    surfaced(shallow)
+  }
+  const groundNow = (): Ground => under ?? rising ?? ground()
   let orbit: Orbit = INITIAL_ORBIT
   let glide: Glide | undefined
   let flight: Flight = ORBITING
@@ -198,7 +243,7 @@ export function createRig(clock: Clock, ground: () => Ground): Rig {
       }
       const rate =
         target === undefined
-          ? tourTurn(glide, ground(), SEA_RADIUS, touredFor)
+          ? tourTurn(glide, groundNow(), SEA_RADIUS, touredFor)
           : guideTurn(glide, target)
       glide = steer(glide, stickFor(glide, rate, seconds), 0, 1)
       // High to cross the distance to a sight, low to arrive; between
@@ -209,7 +254,23 @@ export function createRig(clock: Clock, ground: () => Ground): Rig {
         altitude: glide.altitude + (goal - glide.altitude) * Math.min(1, seconds * 0.35),
       }
     }
-    if (glide !== undefined) glide = advance(glide, seconds, ground())
+    if (glide !== undefined) glide = advance(glide, seconds, groundNow())
+    if (glide !== undefined && under !== undefined) {
+      // Too shallow to stay under: come up.
+      if (under(glide.position) + UNDER_CLEARANCE > SEA_CEILING) comeUp(true)
+      else {
+        // The ceiling holds only once the eye has sunk past it: held from
+        // the moment of the dive, it put the eye under the water in a frame.
+        if (glide.eye <= SEA_CEILING) sunk = true
+        if (sunk) glide = { ...glide, eye: Math.min(glide.eye, SEA_CEILING) }
+      }
+    }
+    if (glide !== undefined && rising !== undefined && glide.eye > SEA_RADIUS + UNDER_CLEARANCE) {
+      // Clear of the water: back to flying over the surface, still making
+      // for the height it was climbing to.
+      rising = undefined
+      glide = { ...glide, altitude: RISE_TO }
+    }
     return {
       orbit,
       surface: glide === undefined ? undefined : poseOf(glide),
@@ -227,7 +288,7 @@ export function createRig(clock: Clock, ground: () => Ground): Rig {
         // Composing, a drag turns the view where it stands and tilts it up or down.
         const h = Math.max(1, height)
         const turned = faceGlide(glide, (dx / h) * 1.4)
-        glide = stillGlide(turned, ground(), turned.altitude, turned.pitch - (dy / h) * 1.2)
+        glide = stillGlide(turned, groundNow(), turned.altitude, turned.pitch - (dy / h) * 1.2)
         return
       }
       if (steersGlide(flight) && glide !== undefined) glide = steer(glide, dx, dy, height)
@@ -239,7 +300,7 @@ export function createRig(clock: Clock, ground: () => Ground): Rig {
     // Height is not the tour's to choose, so a pinch changes it without taking over.
     pinch: (factor) => {
       if (held === 'frame' && glide !== undefined) {
-        glide = stillGlide(pinchGlide(glide, factor), ground(), undefined, glide.pitch)
+        glide = stillGlide(pinchGlide(glide, factor), groundNow(), undefined, glide.pitch)
         return
       }
       if (steersGlide(flight) && glide !== undefined) glide = pinchGlide(glide, factor)
@@ -251,7 +312,7 @@ export function createRig(clock: Clock, ground: () => Ground): Rig {
     wheel: (deltaY) => {
       if (held === 'frame' && glide !== undefined) {
         const nearer = pinchGlide(glide, Math.exp(-deltaY * 0.0015))
-        glide = stillGlide(nearer, ground(), undefined, glide.pitch)
+        glide = stillGlide(nearer, groundNow(), undefined, glide.pitch)
         return
       }
       if (steersGlide(flight) && glide !== undefined)
@@ -267,11 +328,14 @@ export function createRig(clock: Clock, ground: () => Ground): Rig {
     view,
     gestures,
     fly: (from) => {
-      glide = startGlide(from.position, from.heading, ground())
+      rising = undefined
+      glide = startGlide(from.position, from.heading, groundNow())
       flight = dive(flight, clock.now())
     },
     land: (over) => {
       setTouring(false)
+      comeUp(false)
+      rising = undefined
       if (glide !== undefined) {
         const { yaw, pitch } = over(glide.position)
         // Rise to the orbit's own distance, over the ground just flown, so
@@ -281,7 +345,28 @@ export function createRig(clock: Clock, ground: () => Ground): Rig {
       }
       flight = rise(flight, clock.now())
     },
+    submerge: (floor) => {
+      if (floor === undefined) {
+        comeUp(false)
+        return true
+      }
+      if (glide === undefined || !steersGlide(flight)) return false
+      const depth = SEA_CEILING - floor(glide.position)
+      if (depth < DEEP_ENOUGH) return false
+      under = floor
+      sunk = false
+      // Down near the sea bed, where there is something to see, eased there
+      // by the glide's own settling.
+      glide = { ...glide, altitude: clamp(depth * 0.3, MIN_ALTITUDE, MAX_ALTITUDE) }
+      return true
+    },
+    submerged: () => under !== undefined,
+    onSurface: (listener) => {
+      surfaced = listener
+    },
     cut: () => {
+      comeUp(false)
+      rising = undefined
       setTouring(false)
       flight = ORBITING
       glide = undefined
@@ -314,7 +399,7 @@ export function createRig(clock: Clock, ground: () => Ground): Rig {
         flight = ORBITING
         glide = undefined
       }
-      if (glide !== undefined) glide = stillGlide(glide, ground())
+      if (glide !== undefined) glide = stillGlide(glide, groundNow())
       orbit = { ...orbit, yawVelocity: 0, pitchVelocity: 0, dragging: false }
     },
     onRelease: (listener) => {
@@ -326,7 +411,7 @@ export function createRig(clock: Clock, ground: () => Ground): Rig {
         : { kind: 'orbit', value: orbit.distance, low: MIN_DISTANCE, high: MAX_DISTANCE },
     setHeight: (height) => {
       if (glide !== undefined && steersGlide(flight)) {
-        glide = stillGlide(glide, ground(), height, glide.pitch)
+        glide = stillGlide(glide, groundNow(), height, glide.pitch)
       } else {
         orbit = { ...orbit, distance: Math.min(MAX_DISTANCE, Math.max(MIN_DISTANCE, height)) }
       }
@@ -344,8 +429,8 @@ export function createRig(clock: Clock, ground: () => Ground): Rig {
     place: (spot) => {
       setTouring(false)
       if (spot.kind === 'glide') {
-        const start = startGlide(spot.position, spot.heading, ground())
-        glide = stillGlide(start, ground(), spot.altitude, spot.tilt)
+        const start = startGlide(spot.position, spot.heading, groundNow())
+        glide = stillGlide(start, groundNow(), spot.altitude, spot.tilt)
         flight = { mode: 'gliding', since: clock.now(), from: 1 }
       } else {
         glide = undefined

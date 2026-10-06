@@ -927,3 +927,30 @@ the world's name over the opening and the sound if it is on.
 - Checked in the preview with downloads stubbed: a 960 × 600 MP4 of a glide
   with the title in it, played back. **The sound in a clip, and the share
   sheet, were not exercised.**
+
+## Under the sea
+
+The Dive button (shown while flying) takes the glide under the water,
+over the sea bed (`floorRadiusAt`, the ground without the sea laid over
+it) and under a ceiling just below the surface, so passing waves do not
+lift the eye into the air (`rig.submerge`). Pressed again, or once the
+water is too shallow to fly in, the glide comes up.
+
+- **Neither crossing is a jump**, and both were at first. Going in, the
+  ceiling held from the moment of the dive and put the eye under the
+  water in a frame; it now holds only once the eye has sunk past it.
+  Coming up, the air's clearance over the sea put the eye 0.01 higher in a
+  frame; the glide now keeps flying over the sea bed (`rising`) until it is
+  clear of the water, then hands over at the height it was climbing to.
+  Checked by tracking the eye: no step larger than an ordinary frame's.
+- **What it sees** (`render/underwater.ts`, applied last in the frame so it
+  overrules the air): the haze becomes the water's, teal and paler near the
+  surface, dim at night; the sky, clouds, moons, birds, meteors and rain
+  go; the surface is drawn from below as a bright rippled ceiling (the
+  sea's material goes double-sided only while under); the sun through the
+  waves draws caustics on the sea bed (`DETAIL_UNDER`), fading with depth;
+  and specks of marine snow hang round the eye.
+- **Dived to a third of the depth**, near the sea bed, where there is
+  something to see: at half the depth the bed was a fog.
+- Not seen: night under the water, the shallows surfacing on their own,
+  and a phone.

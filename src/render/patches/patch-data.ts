@@ -136,6 +136,21 @@ export function groundRadiusAt(
 }
 
 /**
+ * The floor under a direction, the sea bed where there is sea: the ground
+ * as drawn, without the sea's surface laid over it. What a dive under the
+ * water flies over.
+ */
+export function floorRadiusAt(
+  planet: Planet,
+  direction: readonly [number, number, number],
+): number {
+  const [x, y, z] = direction
+  const length = Math.hypot(x, y, z) || 1
+  const { drawn } = drawnHeight(planet, x / length, y / length, z / length)
+  return 1 + liftOf(drawn, planet.relief)
+}
+
+/**
  * The same, for a unit direction whose surface is already in hand: the
  * scatter has just sampled it, and sampling it again was a fifth of the
  * cost of a tile of trees.

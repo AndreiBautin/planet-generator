@@ -324,6 +324,30 @@
       .systeming .clip {
         display: none;
       }
+      /* Under the sea: only while flying, below the clip. */
+      .dive {
+        position: fixed;
+        top: calc(max(16px, env(safe-area-inset-top)) + 232px);
+        right: var(--gutter);
+        width: 48px;
+        padding: 0;
+        display: none;
+        place-items: center;
+      }
+      .flying .dive {
+        display: grid;
+      }
+      .touring .dive {
+        top: calc(max(16px, env(safe-area-inset-top)) + 116px);
+      }
+      .dive[aria-pressed='true'] {
+        border-color: var(--accent);
+        color: var(--accent);
+      }
+      .postcarding .dive,
+      .systeming .dive {
+        display: none;
+      }
       .touring .atlas-button,
       .postcarding .atlas-button,
       .touring .system-button,
@@ -813,6 +837,31 @@
         />
       </svg>
       <span class="clip-count" id="clip-count" aria-live="off"></span>
+    </button>
+    <button
+      type="button"
+      class="dive"
+      id="dive"
+      aria-pressed="false"
+      aria-label="Dive under the sea"
+    >
+      <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
+        <path
+          d="M3 8.5c2-1.6 4-1.6 6 0s4 1.6 6 0 4-1.6 6 0"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.6"
+          stroke-linecap="round"
+        />
+        <path
+          d="M12 11v8.5M8.5 16l3.5 3.5 3.5-3.5"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.6"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        />
+      </svg>
     </button>
     <button type="button" class="system-button" id="system-button" aria-label="The star system">
       <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">

@@ -5,6 +5,7 @@ import type { GroundKind } from './ground-atlas'
 import type { GroundTextures } from './textures'
 import { DETAIL_MOONS, MOON_SHADOW } from './eclipse'
 import { withValleyFog } from './valley-fog'
+import { SEA_RADIUS } from './water'
 import { CLOUD_FLOW, CLOUD_FLOW_LIFE, FLOW_GLSL } from './winds'
 
 /**
@@ -74,6 +75,8 @@ export const DETAIL_CITIES: { value: THREE.Texture | null } = { value: null }
 export const DETAIL_CITY_LIGHT = { value: 0 }
 /** How strongly the aurora (aurora.ts) lights the ground under it on the night side; nought with none. */
 export const DETAIL_AURORA = { value: 0 }
+/** How far under the sea the eye is, 0 to 1 (underwater.ts): caustics on the sea bed, the surface lit from below. */
+export const DETAIL_UNDER = { value: 0 }
 export const DETAIL_RING_BANDS = {
   value: Array.from({ length: 16 }, () => new THREE.Vector4()),
 }
@@ -160,7 +163,7 @@ function passThrough(
     )
   const varying = extra === undefined ? '' : `varying ${extra.type} v_${extra.attribute};\n`
   shader.fragmentShader =
-    `uniform float detailTime;\nuniform float detailRange;\nuniform sampler2D detailClouds;\nuniform float detailCloudSpin;\nuniform vec3 detailCloudSun;\nuniform mat3 detailNormalMatrix;\nuniform vec2 detailRings;\nuniform vec4 detailRingBands[16];\nuniform float detailAurora;\nuniform sampler2D detailCities;\nuniform float detailCityLight;\nuniform vec4 detailMoons[2];\nuniform vec4 cloudFlow;\nuniform vec2 cloudFlowLife;\nvarying vec3 vDetailPosition;\nvarying vec3 vDetailNormal;\n${varying}` +
+    `uniform float detailTime;\nuniform float detailRange;\nuniform sampler2D detailClouds;\nuniform float detailCloudSpin;\nuniform vec3 detailCloudSun;\nuniform mat3 detailNormalMatrix;\nuniform vec2 detailRings;\nuniform vec4 detailRingBands[16];\nuniform float detailAurora;\nuniform sampler2D detailCities;\nuniform float detailCityLight;\nuniform vec4 detailMoons[2];\nuniform vec4 cloudFlow;\nuniform vec2 cloudFlowLife;\nuniform float detailUnder;\nvarying vec3 vDetailPosition;\nvarying vec3 vDetailNormal;\n${varying}` +
     NOISE +
     FLOW_GLSL +
     CLOUD_SHADOW +
@@ -176,6 +179,7 @@ function passThrough(
   shader.uniforms.detailRings = DETAIL_RINGS
   shader.uniforms.detailRingBands = DETAIL_RING_BANDS
   shader.uniforms.detailAurora = DETAIL_AURORA
+  shader.uniforms.detailUnder = DETAIL_UNDER
   shader.uniforms.detailCities = DETAIL_CITIES
   shader.uniforms.detailCityLight = DETAIL_CITY_LIGHT
   shader.uniforms.detailMoons = DETAIL_MOONS
@@ -657,6 +661,20 @@ export function withGroundDetail(
           groundDay *= 1.0 - moonShadowFrom(vDetailPosition, detailCloudSun);
           reflectedLight.directDiffuse *= groundDay;
           reflectedLight.directSpecular *= groundDay;
+          // Seen from under the sea, the sun through the moving surface
+          // draws a net of light on the sea bed: two drifting fields, bright
+          // where they agree, and fainter the deeper the floor.
+          if (detailUnder > 0.0) {
+            float seaFloor = ${SEA_RADIUS.toFixed(5)} - length(vDetailPosition);
+            if (seaFloor > 0.0) {
+              vec3 cp = vDetailPosition * 1400.0;
+              float ca = detailNoise(cp + vec3(detailTime * 0.35, 0.0, detailTime * 0.2));
+              float cb = detailNoise(cp * 1.31 - vec3(detailTime * 0.25, detailTime * 0.3, 0.0));
+              float net = pow(1.0 - abs(ca - cb), 14.0);
+              float reach = exp(-seaFloor / 0.012);
+              reflectedLight.directDiffuse *= 1.0 + net * 2.4 * reach * detailUnder;
+            }
+          }
           // Under the aurora's band, on the night side, the ground takes a
           // little of its green: snow most, being brightest.
           // The towns' glow on the ground round them, at night: what makes
@@ -913,6 +931,13 @@ export function withWaterDetail(material: THREE.Material): THREE.Material {
           float ringDim = (1.0 - ringShadowFrom(vDetailPosition, detailCloudSun)) * (1.0 - moonShadowFrom(vDetailPosition, detailCloudSun));
           reflectedLight.directDiffuse *= ringDim;
           reflectedLight.directSpecular *= ringDim;
+          // From under the sea the surface is a bright, moving ceiling: the
+          // sky let through, rippled. Its underside faces away from the sun
+          // and would otherwise be drawn dark.
+          if (!gl_FrontFacing) {
+            float ripple = detailNoise(vDetailPosition * 2200.0 + vec3(detailTime * 0.5, 0.0, -detailTime * 0.4));
+            reflectedLight.indirectDiffuse += vec3(0.35, 0.75, 0.8) * (0.6 + ripple * 0.8) * detailUnder;
+          }
         }`,
       )
     withValleyFog(shader, 'mistTop')
