@@ -551,6 +551,22 @@ export function withGroundDetail(
           vec2(dFdx(detailHeight), dFdy(detailHeight)) * 0.9,
           faceDirection);`,
       )
+      .replace(
+        '#include <lights_fragment_end>',
+        /* glsl */ `#include <lights_fragment_end>
+        // The planet shadows its own ground: once the sun is under the
+        // horizon it lights nothing there, however a slope faces. Without
+        // it, every hillside turned towards a sun already set glowed red
+        // across the dark, the evening's light on the wrong side of night.
+        #if NUM_DIR_LIGHTS > 0
+        {
+          vec3 groundUp = normalize(detailNormalMatrix * normalize(vDetailPosition));
+          float groundDay = smoothstep(-0.05, 0.08, dot(groundUp, directionalLights[0].direction));
+          reflectedLight.directDiffuse *= groundDay;
+          reflectedLight.directSpecular *= groundDay;
+        }
+        #endif`,
+      )
   }
   material.customProgramCacheKey = () =>
     molten ? 'planet-lava-ground-detail' : 'planet-ground-detail'

@@ -407,3 +407,27 @@ frames.
   Skipped on snow, the bed stopped dead at the snow line.
 - **The cloud tops fade at grazing angles**: edge-on, two shells read as
   a slab with its sides missing.
+
+## Dusk
+
+The sky's own model (single scattering in `atmosphere.ts`) stayed bright
+well past sunset while the land went black, because the light on the
+ground followed the sun's own `day`. Now:
+
+- **The sky light on the ground follows `twilight`** (the sun from 0.1
+  down to −0.2), in the air's own colour rather than reddened sunlight,
+  with extra fill while the sun is low and the sky still bright, and a
+  faint cool `NIGHT_LIGHT` floor so the land is a shape at night.
+- **The ground and the clouds take no direct sun past the terminator**
+  (`groundDay`, `cloudDay`): a slope or a cloud's flank turned towards a
+  sun already set glowed red across the dark.
+- **Stars wait for the sun to be down** (`starlit`).
+- **A warm glow round a low sun is added explicitly**, from inside the
+  air only. Making scattering steeper with wavelength was tried first: it
+  saturated the noon sky to a blue with no red in it, and with steeper
+  loss only, a teal world's whole dusk sky went green — which is the
+  physics of a teal sky, and not what anybody wants to fly into.
+
+`recorder.sun()` gives the sun's direction in the planet's frame, to start
+a glide at a chosen sun height. Don't read it off the light's position:
+the shadow camera moves the light.

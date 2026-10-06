@@ -219,6 +219,7 @@ if (recording) {
       },
       /** The three.js scene, to inspect what is drawn. */
       root: scene.root,
+      sun: () => scene.sunInPlanet(),
       /** The terrain's last selection: stand-ins, the nearest, patches pending. */
       terrain: () => ({ ...TERRAIN_STATS }),
       /** Where Fly would start the glide now. */

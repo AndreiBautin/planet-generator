@@ -85,17 +85,31 @@ function layerMaterial(planet: Planet, texture: THREE.Texture, layer: Layer): TH
   material.onBeforeCompile = (shader) => {
     shader.uniforms.cloudTime = DETAIL_TIME
     shader.vertexShader =
-      'varying vec3 vCloudDir;\n' +
+      'varying vec3 vCloudDir;\nvarying vec3 vCloudUp;\n' +
       shader.vertexShader.replace(
         '#include <begin_vertex>',
-        '#include <begin_vertex>\n  vCloudDir = normalize(position);',
+        '#include <begin_vertex>\n  vCloudDir = normalize(position);\n  vCloudUp = normalize(normalMatrix * normalize(position));',
       )
     shader.fragmentShader =
-      'uniform float cloudTime;\nvarying vec3 vCloudDir;\n' +
+      'uniform float cloudTime;\nvarying vec3 vCloudDir;\nvarying vec3 vCloudUp;\n' +
       NOISE +
-      shader.fragmentShader.replace(
-        '#include <alphamap_fragment>',
-        /* glsl */ `
+      shader.fragmentShader
+        .replace(
+          '#include <lights_fragment_end>',
+          /* glsl */ `#include <lights_fragment_end>
+        // No sun past the terminator: a cloud's flank still turned towards
+        // a sun already set glowed red over the dark side.
+        #if NUM_DIR_LIGHTS > 0
+        {
+          float cloudDay = smoothstep(-0.08, 0.06, dot(normalize(vCloudUp), directionalLights[0].direction));
+          reflectedLight.directDiffuse *= cloudDay;
+          reflectedLight.directSpecular *= cloudDay;
+        }
+        #endif`,
+        )
+        .replace(
+          '#include <alphamap_fragment>',
+          /* glsl */ `
         {
           float t = cloudTime * 0.012;
           // Bend where the map is read, slowly, so the shapes drift and
@@ -110,7 +124,7 @@ function layerMaterial(planet: Planet, texture: THREE.Texture, layer: Layer): TH
             detailNoise(vCloudDir * 130.0 - vec3(t * 2.5, t * 1.1, -t * 1.8)) * 0.4;
           ${SHAPES[layer]}
         }`,
-      )
+        )
   }
   material.customProgramCacheKey = () => `planet-clouds-${layer}`
   return material

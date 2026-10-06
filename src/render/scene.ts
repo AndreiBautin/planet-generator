@@ -72,6 +72,8 @@ export interface Scene {
   readonly capture: () => Promise<Blob | null>
   /** The three.js scene itself, for the development recorder to inspect. */
   readonly root: THREE.Scene
+  /** Where the sun is, as a direction in the planet's own frame, as it is turned now. */
+  readonly sunInPlanet: () => Vec3
   readonly dispose: () => void
 }
 
@@ -621,10 +623,17 @@ export function startScene(
   const WHITE = new THREE.Color(1, 1, 1)
   const SUN_COLOUR = new THREE.Color(0xfff2e0)
   const SKY_LIGHT = new THREE.Color(0x9fc3ff)
+  const NIGHT_LIGHT = new THREE.Color(0x1c2a44)
   const airAround = (above: number): void => {
     const low = 1 - smooth(0.08, 0.35, above)
     const elevation = camera.position.clone().normalize().dot(sunDirection)
     const day = smooth(-0.15, 0.3, elevation)
+    // The sky stays lit for a while after the sun has gone — that is what
+    // twilight is — and the ground under it with it. Read off the sun's own
+    // day, the land went black at sunset under a sky still bright.
+    const twilight = smooth(-0.2, 0.1, elevation)
+    // Stars only once the sun is down and the sky is dimming.
+    const starlit = 1 - smooth(-0.2, -0.03, elevation)
     // Seeing as far as the horizon, about √(2h) away, should leave a far hill
     // about half visible.
     fog.density = low * (0.65 / Math.sqrt(2 * Math.max(above, 0.002)))
@@ -634,7 +643,7 @@ export function startScene(
       if (value instanceof THREE.Color) {
         // The sky shader writes its colour straight to the screen; read as
         // sRGB here so the fog meets it at the horizon rather than a shade off.
-        const k = 1.25 * day
+        const k = 1.25 * twilight
         airColour.setRGB(value.r * k, value.g * k, value.b * k, THREE.SRGBColorSpace)
         // Low down, sunlight comes through a long slant of air and loses
         // the colour the air scatters (atmosphere.ts): the sun on the
@@ -654,11 +663,17 @@ export function startScene(
         // The sky lights the ground from above in its own colour, the
         // ground bounces its own back, both fading with the day; the
         // ambient left is the night's.
+        // Lit by the sky's own colour, not the reddened sunlight, so the
+        // land under a dusk sky is blue-lit and dims with it; at night a
+        // faint cool light stays, the way moonless ground is still a shape.
         skylight.color
-          .copy(airColour)
-          .multiplyScalar(1.6)
+          .setRGB(value.r, value.g, value.b, THREE.SRGBColorSpace)
+          .multiplyScalar(1.6 * twilight)
+          .lerp(NIGHT_LIGHT, 1 - twilight)
           .lerp(SKY_LIGHT, 1 - low)
-        skylight.intensity = 0.25 + 0.4 * day
+        // And more of it at dusk, when the sun is too low to light much but
+        // the sky overhead is still bright: what the land is seen by then.
+        skylight.intensity = 0.18 + 0.47 * twilight + 0.6 * twilight * (1 - day)
       }
     }
     // The sun in view space for the haze, weighted by how much daylight
@@ -669,7 +684,7 @@ export function startScene(
       .transformDirection(camera.matrixWorldInverse)
       .multiplyScalar(low * day)
     const stars: unknown = shown?.sky.material
-    if (stars instanceof THREE.PointsMaterial) stars.opacity = 1 - low * day * 0.92
+    if (stars instanceof THREE.PointsMaterial) stars.opacity = 1 - low * (1 - starlit) * 0.95
   }
 
   const tick = (): void => {
@@ -770,6 +785,7 @@ export function startScene(
     },
     step: tick,
     root: scene,
+    sunInPlanet: () => inPlanetFrame(sunDirection, lastTurn, 1),
     capture: () =>
       new Promise((resolve) => {
         tick()

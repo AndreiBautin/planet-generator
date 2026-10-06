@@ -141,6 +141,18 @@ export function buildAtmosphere(planet: Planet, sun: THREE.Vector3): THREE.Mesh 
         float g = 0.76;
         float phaseM = 0.1194 * ((1.0 - g * g) * (1.0 + mu * mu)) / ((2.0 + g * g) * pow(1.0 + g * g - 2.0 * g * mu, 1.5));
         vec3 sky = (sumR * betaR * phaseR + sumM * betaM * phaseM) * 9.0 * strength;
+        // Sunset: the dust and haze low in the air redden the sun far more
+        // than the air alone does, and glow round it as it sets — orange
+        // whatever colour the air is. Only from inside the air, low on the
+        // sky, towards the sun, while it is within a few degrees of the
+        // horizon. Left to the air alone a teal world's dusk went green.
+        float sunUp = dot(normalize(o), sun);
+        float inside = 1.0 - smoothstep(inner + thickness * 0.4, outer, length(o));
+        float dusk = smoothstep(0.3, 0.02, sunUp) * smoothstep(-0.22, -0.02, sunUp);
+        float low = pow(1.0 - abs(dot(d, normalize(o))), 3.0);
+        float toward = max(mu, 0.0);
+        float lobe = pow(toward, 3.0) * 0.5 + pow(toward, 24.0) * 1.4;
+        sky += vec3(1.0, 0.38, 0.1) * lobe * low * dusk * inside * strength * 0.9;
         // Linear light out: the frame is tone-mapped and encoded once, at
         // the end, by the post pass, like every other material's.
         gl_FragColor = vec4(sky, 1.0);
