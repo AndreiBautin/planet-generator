@@ -53,6 +53,8 @@ export const DETAIL_NORMAL_MATRIX = { value: new THREE.Matrix3() }
  * black band under a bright sky.
  */
 export const DETAIL_SKY = { value: new THREE.Color(0, 0, 0) }
+/** A flash of lightning inside a storm: its direction in the cloud layer's frame (xyz) and how bright, 0 to 1 (w). */
+export const LIGHTNING = { value: new THREE.Vector4(0, 1, 0, 0) }
 /** The sky overhead, deeper than the haze at the horizon: what calm water mirrors looking down. */
 export const DETAIL_ZENITH = { value: new THREE.Color(0, 0, 0) }
 /**

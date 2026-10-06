@@ -4,7 +4,7 @@ import { KINDS } from '@/generation/kinds'
 import type { Planet } from '@/generation/planet'
 
 import { fromPalette } from './colour'
-import { DETAIL_TIME, NOISE } from './detail'
+import { DETAIL_TIME, LIGHTNING, NOISE } from './detail'
 
 /**
  * The cloud layer: a sphere just above the highest ground, its opacity a
@@ -46,8 +46,13 @@ const SHAPES: Readonly<Record<Layer, string>> = {
   base: /* glsl */ `
           float shaped = smoothstep(0.28, 0.78, cover + (billow - 0.5) * 0.5);
           diffuseColor.a *= shaped;
-          // The underside of the deck: greyer, and greyest under the thickest cloud.
-          diffuseColor.rgb *= (0.74 + billow * 0.26) * (1.0 - smoothstep(0.6, 1.0, cover) * 0.18);`,
+          // The underside of the deck: greyer, and greyest under the thickest
+          // cloud — a storm's base is slate, not a paler white.
+          diffuseColor.rgb *= (0.74 + billow * 0.26) * (1.0 - smoothstep(0.6, 1.0, cover) * 0.18);
+          diffuseColor.rgb *= mix(vec3(1.0), vec3(0.42, 0.46, 0.55), smoothstep(0.74, 0.92, cover));
+          // Lit from inside by lightning, round where it struck.
+          float struck = acos(clamp(dot(normalize(vCloudDir), cloudLightning.xyz), -1.0, 1.0));
+          cloudFlash = cloudLightning.w * exp(-pow(struck / 0.035, 2.0)) * smoothstep(0.6, 0.9, cover);`,
   tops: /* glsl */ `
           float shaped = smoothstep(0.52, 0.9, cover + (billow - 0.5) * 0.6);
           // Only from above. Seen edge-on, from a glide near the clouds'
@@ -84,6 +89,7 @@ function layerMaterial(planet: Planet, texture: THREE.Texture, layer: Layer): TH
   })
   material.onBeforeCompile = (shader) => {
     shader.uniforms.cloudTime = DETAIL_TIME
+    shader.uniforms.cloudLightning = LIGHTNING
     shader.vertexShader =
       'varying vec3 vCloudDir;\nvarying vec3 vCloudUp;\n' +
       shader.vertexShader.replace(
@@ -91,9 +97,13 @@ function layerMaterial(planet: Planet, texture: THREE.Texture, layer: Layer): TH
         '#include <begin_vertex>\n  vCloudDir = normalize(position);\n  vCloudUp = normalize(normalMatrix * normalize(position));',
       )
     shader.fragmentShader =
-      'uniform float cloudTime;\nvarying vec3 vCloudDir;\nvarying vec3 vCloudUp;\n' +
+      'uniform float cloudTime;\nuniform vec4 cloudLightning;\nvarying vec3 vCloudDir;\nvarying vec3 vCloudUp;\nfloat cloudFlash = 0.0;\n' +
       NOISE +
       shader.fragmentShader
+        .replace(
+          '#include <emissivemap_fragment>',
+          '#include <emissivemap_fragment>\n        totalEmissiveRadiance += vec3(0.85, 0.85, 1.0) * cloudFlash * 2.5;',
+        )
         .replace(
           '#include <lights_fragment_end>',
           /* glsl */ `#include <lights_fragment_end>

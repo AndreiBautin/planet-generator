@@ -22,6 +22,7 @@ import { cloudDataOf, cloudsFromTexture, cloudsSeenFrom } from './clouds'
 import { fromPalette } from './colour'
 import { buildHeavens, type Heavens } from './heavens'
 import { coverAt, Rain } from './rain'
+import { Lightning, rainShafts, SHAFT_LIGHT } from './weather'
 import {
   DETAIL_CLOUD_SPIN,
   DETAIL_CLOUD_SUN,
@@ -365,6 +366,7 @@ export function startScene(
   const modelView = new THREE.Matrix4()
   // Rain around the eye where the cloud over it is heavy, while flying low.
   const rain = new Rain()
+  const lightning = new Lightning()
   scene.add(rain.object)
   const rainEye = new THREE.Vector3()
 
@@ -443,6 +445,11 @@ export function startScene(
       heavens = buildHeavens(satellitesOf(next.world))
       ringsOnGround(heavens)
       clouds = next.clouds ?? cloudsFromTexture(next.world, new Uint8Array(8), 2)
+      // Rain hanging from the storms, turning with the clouds they fall from.
+      const held = cloudDataOf(clouds)
+      if (held !== undefined && held.width > 2 && !next.world.molten)
+        clouds.add(rainShafts(held.data, held.width))
+      rain.snows(next.world.kind === 'frozen')
       DETAIL_CLOUDS.value = cloudMapOf(clouds)
       air = buildAtmosphere(next.world, sun.position)
       sky = buildSky(next.world, pixelRatio)
@@ -685,6 +692,8 @@ export function startScene(
         // And more of it at dusk, when the sun is too low to light much but
         // the sky overhead is still bright: what the land is seen by then.
         skylight.intensity = 0.18 + 0.47 * twilight + 0.6 * twilight * (1 - day)
+        // The shafts of rain in the light the sky gives, with a floor for the night.
+        SHAFT_LIGHT.value.copy(airColour).multiplyScalar(0.42).addScalar(0.02)
       }
     }
     // The sun in view space for the haze, weighted by how much daylight
@@ -753,6 +762,17 @@ export function startScene(
       cloudsSeenFrom(shown.clouds, camera.position.length(), stage.scale, stage.clouds)
       shown.terrain.update(inPlanetFrame(camera.position, turn, stage.scale), viewCone(turn))
       rain.update(rainEye.copy(camera.position), rainOver(shown.clouds, turn))
+      // Lightning in a storm near the eye, lighting the land a moment.
+      const held = cloudDataOf(shown.clouds)
+      const above = camera.position.length() / stage.scale - 1
+      const flash = lightning.update(
+        now / 1000,
+        inPlanetFrame(camera.position, turn * 1.15, 1),
+        1 - smooth(0.06, 0.14, above),
+        held?.data,
+        held?.width ?? 0,
+      )
+      skylight.intensity += flash * 2.5
     }
     if (composer === undefined) renderer.render(scene, camera)
     else composer.render()

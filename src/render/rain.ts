@@ -21,6 +21,7 @@ const HEIGHT = 0.012
 export class Rain {
   readonly object: THREE.LineSegments
   private readonly strength: { value: number }
+  private readonly snow = { value: 0 }
   private readonly up = new THREE.Vector3()
   private readonly quaternion = new THREE.Quaternion()
   private static readonly Y = new THREE.Vector3(0, 1, 0)
@@ -57,19 +58,26 @@ export class Rain {
       uniforms: {
         rainTime: DETAIL_TIME,
         rainStrength: this.strength,
+        rainSnow: this.snow,
       },
       vertexShader: /* glsl */ `
         uniform float rainTime;
         uniform float rainStrength;
+        uniform float rainSnow;
         attribute float tail;
+        varying float vSnow;
         varying float vFade;
         void main() {
           // Each streak falls its own column at its own pace, wrapping
           // round the box; the tail end trails a little above the head.
-          float pace = 0.55 + fract(position.x * 7.31 + position.z * 3.17) * 0.35;
+          // Snow falls a fifth as fast, in short flakes rather than
+          // streaks, and drifts from side to side as it comes down.
+          float pace = (0.55 + fract(position.x * 7.31 + position.z * 3.17) * 0.35) * mix(1.0, 0.18, rainSnow);
           float drop = fract(position.y - rainTime * pace);
-          float y = (0.5 - drop) * ${HEIGHT.toFixed(4)} + tail * ${(HEIGHT * 0.05).toFixed(5)};
-          vec3 local = vec3(position.x * ${RADIUS.toFixed(4)}, y, position.z * ${RADIUS.toFixed(4)});
+          float y = (0.5 - drop) * ${HEIGHT.toFixed(4)} + tail * ${(HEIGHT * 0.05).toFixed(5)} * mix(1.0, 0.08, rainSnow);
+          float sway = sin(rainTime * 1.3 + position.z * 20.0 + position.y * 9.0) * 0.0005 * rainSnow;
+          vec3 local = vec3(position.x * ${RADIUS.toFixed(4)} + sway, y, position.z * ${RADIUS.toFixed(4)} + sway * 0.6);
+          vSnow = rainSnow;
           vec4 view = modelViewMatrix * vec4(local, 1.0);
           // Fainter at the tail and at the edge of the box.
           float edge = 1.0 - smoothstep(0.6, 1.0, length(position.xz));
@@ -79,8 +87,9 @@ export class Rain {
       `,
       fragmentShader: /* glsl */ `
         varying float vFade;
+        varying float vSnow;
         void main() {
-          gl_FragColor = vec4(0.52, 0.6, 0.74, vFade * 0.45);
+          gl_FragColor = vec4(mix(vec3(0.52, 0.6, 0.74), vec3(0.95), vSnow), vFade * mix(0.45, 0.85, vSnow));
           #include <tonemapping_fragment>
           #include <colorspace_fragment>
         }
@@ -90,6 +99,11 @@ export class Rain {
     this.object.frustumCulled = false
     this.object.renderOrder = 3
     this.object.visible = false
+  }
+
+  /** Whether what falls is snow rather than rain. */
+  snows(snow: boolean): void {
+    this.snow.value = snow ? 1 : 0
   }
 
   /** Place the shower at the eye, falling along `up`, as heavy as `strength` (0 to 1). */

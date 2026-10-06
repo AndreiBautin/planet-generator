@@ -430,3 +430,25 @@ them, kept with the clouds when only a dial moves.
   The planet's shadow on the rings is the ring shader's own.
 - **The band texture lives in a uniform**, where `release` does not look;
   it is disposed by hand when a planet goes.
+
+## Weather
+
+Read off the baked cloud map, like the shower over the eye: a storm is
+where the cover passes `STORM` (0.82), and nowhere else (`weather.ts`).
+
+- **Storm bases are slate** in the cloud base's own shader.
+- **Rain shafts** are instanced quads under the storm cells, children of
+  the cloud layer so they drift with it, each turned to the eye about its
+  own vertical. Faded close by, where the shower takes over, and far off,
+  where from orbit a storm is its cloud. Coloured from the sky but well
+  below it (`SHAFT_LIGHT`): drawn in the sky's own colour they read as
+  pillars of light rather than curtains of rain.
+- **Lightning** is decided by the clock and a hash of it, so a recorded
+  flight sees the same storm every run: every few seconds, a look for a
+  storm within a few degrees of the eye, and a double flicker there that
+  lights the cloud from inside (`LIGHTNING`, in detail.ts so the cloud
+  and the shafts can share it without a cycle) and the land through the
+  sky light. About six flashes in thirty seconds of touring an ocean
+  world.
+- **Snow falls instead of rain on a frozen world** (`Rain.snows`):
+  slower, short flakes, swaying. Not yet seen on screen.
