@@ -2,7 +2,6 @@ import { createPlanet, type Planet } from '@/generation/planet'
 
 import type { WorkRequest, WorkResult } from './build-protocol'
 import { samplePatch } from './patches/patch-data'
-import { scatterPatch } from './patches/scatter'
 import { bakeClouds } from './surface-data'
 
 /**
@@ -39,7 +38,6 @@ export function answer(request: WorkRequest): WorkResult {
         id: request.id,
         kind: 'patch',
         patch: samplePatch(planet, request.key, request.segments),
-        features: scatterPatch(planet, request.key, request.keep),
       }
   }
 }
@@ -62,7 +60,6 @@ export function transferables(result: WorkResult): Transferable[] {
         result.patch.ice.buffer,
         result.patch.ground.buffer,
         result.patch.water.buffer,
-        ...Object.values(result.features).map((features) => features.buffer),
       ]
   }
 }

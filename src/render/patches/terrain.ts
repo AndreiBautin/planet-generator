@@ -15,10 +15,8 @@ import {
   type Vec3,
 } from './cube'
 import { aheadOf, ancestorAt, centreOf, selectLeaves, type LodParams, type ViewCone } from './lod'
-import { featureMaterial, featuresFor } from './feature-models'
+import { forestFor, TREE_COARSEST, TREE_LEVEL, treeDepthMaterial, treeMaterial } from './forest'
 import { patchIndex, quarterIndex, type PatchData } from './patch-data'
-import { treesKept, type Scatter } from './scatter'
-import type { GroundLayer } from '../textures'
 import { DETAIL_TIME, TERRAIN_MORPH } from '../detail'
 
 /**
@@ -28,13 +26,8 @@ import { DETAIL_TIME, TERRAIN_MORPH } from '../detail'
  * so there is always a planet to draw, however coarse.
  */
 export interface TerrainOptions extends LodParams {
-  /** What stands on the ground: trees and the like (scatter.ts). */
-  readonly features: {
-    /** Inside this distance, in planet radii, every feature stands; nought for none. */
-    readonly reach: number
-    /** The ground's stone photograph, which rock and columns wear. */
-    readonly stone: GroundLayer
-  }
+  /** The woods' two colours (forest.ts); absent for a world with none. */
+  readonly trees: { readonly conifer: THREE.Color; readonly broadleaf: THREE.Color } | undefined
   /** Requests out at once; more is faster to fill and slower to change its mind. */
   readonly inFlight: number
   /** Patches kept after they stop being drawn, for flying back over them. */
@@ -59,6 +52,8 @@ interface Entry {
   /** Which edges are stitched to a coarser neighbour, a bit each, and the attribute that says so. */
   edges: number[]
   stitch: THREE.BufferAttribute | undefined
+  /** Its trees (forest.ts), shown by what ground is drawn rather than with its own node. */
+  trees: THREE.Mesh[]
   shownAt: number | undefined
   requested: boolean
   usedAt: number
@@ -84,7 +79,9 @@ export class Terrain {
   private readonly builder: Builder
   private readonly options: TerrainOptions
   private readonly materials: TerrainMaterials
-  private readonly featureMaterial: THREE.Material
+  private readonly treeMaterial: THREE.Material
+  private readonly treeDepth: THREE.Material
+  private readonly forest = new THREE.Group()
 
   constructor(
     world: Planet,
@@ -96,8 +93,10 @@ export class Terrain {
     this.builder = builder
     this.options = options
     this.materials = materials
-    // Features ride in the ground's own patches (scatter.ts), one material for all.
-    this.featureMaterial = featureMaterial(options.features.stone)
+    // The woods, on the ground's own vertices (forest.ts).
+    this.treeMaterial = treeMaterial()
+    this.treeDepth = treeDepthMaterial()
+    this.group.add(this.forest)
     // One array of triangles for every patch; each geometry wraps it in an
     // attribute of its own, because disposing a geometry frees its index's
     // GPU buffer and a shared attribute would be freed from under the rest.
@@ -276,6 +275,19 @@ export class Terrain {
       })
     }
     this.stitch(drawn)
+    // The trees: each drawn patch's own between the coarsest level that
+    // carries them and `TREE_LEVEL`, and for finer ground its ancestor's at
+    // `TREE_LEVEL`, whose vertices are among its own.
+    const wooded = new Set<string>()
+    for (const name of drawn.keys()) {
+      const key = this.entries.get(name)?.key
+      if (key === undefined || key.level < TREE_COARSEST) continue
+      wooded.add(keyOf(key.level > TREE_LEVEL ? ancestorAt(key, TREE_LEVEL) : key))
+    }
+    for (const [name, entry] of this.entries) {
+      const on = wooded.has(name)
+      for (const mesh of entry.trees) mesh.visible = on
+    }
     this.lastShown = shown
     for (const entry of this.sliding) {
       const weight = entry.shownAt === undefined ? 0 : arrivalAt(entry.shownAt, DETAIL_TIME.value)
@@ -285,7 +297,7 @@ export class Terrain {
       }
       if (weight <= 0) this.sliding.delete(entry)
     }
-    this.evict(shown)
+    this.evict(new Set([...shown, ...wooded]))
   }
 
   /**
@@ -388,12 +400,16 @@ export class Terrain {
 
   dispose(): void {
     this.disposed = true
-    for (const entry of this.entries.values()) if (entry.node !== undefined) free(entry.node)
+    for (const entry of this.entries.values()) {
+      if (entry.node !== undefined) free(entry.node)
+      for (const mesh of entry.trees) mesh.geometry.dispose()
+    }
     this.entries.clear()
     this.materials.ground.dispose()
     this.materials.groundDepth.dispose()
     this.materials.water.dispose()
-    this.featureMaterial.dispose()
+    this.treeMaterial.dispose()
+    this.treeDepth.dispose()
   }
 
   private request(key: PatchKey, urgency = 0): void {
@@ -408,6 +424,7 @@ export class Terrain {
       quarters: [[], [], [], []],
       edges: [0, 0, 0, 0],
       stitch: undefined,
+      trees: [],
       shownAt: undefined,
       requested: true,
       usedAt: this.frame,
@@ -415,22 +432,27 @@ export class Terrain {
     entry.requested = true
     this.entries.set(name, entry)
     this.waiting += 1
-    // Carried for the nearest this level is ever drawn, at the loosest the
-    // governor lets the detail go, so no distance it is drawn at asks for a
-    // feature it lacks.
-    const keep = treesKept(
-      key.level,
-      this.options.maxLevel,
-      this.options.features.reach,
-      this.options.segments * this.options.threshold * COARSEST,
-    )
     void this.builder
-      .patch(this.world.seed, this.world.dials, key, this.options.segments, keep, urgency)
-      .then(({ patch, features }) => {
+      .patch(this.world.seed, this.world.dials, key, this.options.segments, urgency)
+      .then((patch) => {
         this.waiting -= 1
         // A planet replaced while its patches were being made: drop them.
         if (this.disposed || this.entries.get(name) !== entry) return
-        entry.node = this.nodeFor(patch, features, entry.arrival, entry.whole, entry.quarters)
+        entry.node = this.nodeFor(patch, entry.arrival, entry.whole, entry.quarters)
+        if (this.options.trees !== undefined) {
+          entry.trees = forestFor(
+            patch,
+            key.level,
+            this.options.segments,
+            this.treeMaterial,
+            this.treeDepth,
+            this.options.trees,
+          )
+          for (const mesh of entry.trees) {
+            mesh.visible = false
+            this.forest.add(mesh)
+          }
+        }
         entry.stitch = entry.node.userData.stitch as THREE.BufferAttribute
         entry.node.visible = false
         this.group.add(entry.node)
@@ -439,15 +461,11 @@ export class Terrain {
 
   private nodeFor(
     patch: PatchData,
-    features: Scatter,
     arrival: THREE.BufferAttribute[],
     whole: THREE.Object3D[],
     quarters: THREE.Object3D[][],
   ): THREE.Group {
     const node = new THREE.Group()
-    // What stands on it, shown with it whole whatever quarters are drawn: a
-    // quarter left to the children is drawn by them with the same features.
-    for (const mesh of featuresFor(features, this.featureMaterial)) node.add(mesh)
     const ground = new THREE.BufferGeometry()
     ground.setAttribute('position', new THREE.BufferAttribute(patch.positions, 3))
     ground.setAttribute('normal', new THREE.BufferAttribute(patch.normals, 3))
@@ -583,6 +601,10 @@ export class Terrain {
       if (entry.node !== undefined) {
         this.group.remove(entry.node)
         free(entry.node)
+      }
+      for (const mesh of entry.trees) {
+        this.forest.remove(mesh)
+        mesh.geometry.dispose()
       }
       this.entries.delete(keyOf(entry.key))
       this.sliding.delete(entry)

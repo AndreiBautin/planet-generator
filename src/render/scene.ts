@@ -19,6 +19,7 @@ import { installSteadyShadows } from './shadows'
 import { BORN, birthAt, type Birth } from './birth'
 import type { Builder } from './builder'
 import { cloudDataOf, cloudsFromTexture, cloudsSeenFrom } from './clouds'
+import { fromPalette } from './colour'
 import { buildHeavens, type Heavens } from './heavens'
 import { coverAt, Rain } from './rain'
 import {
@@ -385,10 +386,7 @@ export function startScene(
         peak: world.relief * 1.1 + 0.005,
         inFlight: quality.inFlight,
         cached: quality.patchCache,
-        features: {
-          reach: quality.featureRange,
-          stone: world.molten ? ground.basalt : ground.stone,
-        },
+        trees: world.molten ? undefined : treeColours(world),
       },
       {
         groundDepth: terrainDepthMaterial(),
@@ -895,6 +893,18 @@ function fieldOfView(aspect: number): number {
   if (aspect >= 1) return FIELD_OF_VIEW
   const half = THREE.MathUtils.degToRad(FIELD_OF_VIEW / 2)
   return THREE.MathUtils.radToDeg(2 * Math.atan(Math.tan(half) / aspect))
+}
+
+/**
+ * The woods' colours: the world's own lush green for broadleaves, darker
+ * and bluer for conifers, so the two read apart from the air.
+ */
+function treeColours(world: Planet): { conifer: THREE.Color; broadleaf: THREE.Color } {
+  const lush = fromPalette(world.palette.lush)
+  return {
+    broadleaf: lush.clone().multiplyScalar(1.05),
+    conifer: lush.clone().multiply(new THREE.Color(0.75, 0.9, 0.85)),
+  }
 }
 
 /** Hand the rings' bands to the ground, for the shadow they cast; none, for a world without. */

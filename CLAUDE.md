@@ -84,8 +84,8 @@ checks nothing. The pre-push hook runs `pnpm verify`; CI runs the same.
   (`render/patches/scatter.ts`) takes two candidates per grid cell of
   `CELL` on each cube face, decided by a hash of the cell, so a feature is
   the same one whatever patch carries it and a parent tile is exactly the
-  union of its children (tested). They ride in the ground's own patches
-  — see "Trees ride with the ground" below.
+  union of its children (tested). That scatter is gone; see "Trees are
+  level of detail on the ground's own vertices" below.
   **Each instance shrinks into the ground over the last stretch of the
   range** (`featureMaterial`), because a wood that stopped at the tile
   line was the plainest sign of assets on a base. Past the range the
@@ -238,43 +238,23 @@ checks nothing. The pre-push hook runs `pnpm verify`; CI runs the same.
   from that work should come back as a default-UI feature; a flag or a
   separate page, if at all.
 
-- **Trees ride with the ground, and the tiles are gone.** They were built
-  in tiles of their own, and on a phone a tile built after the eye
-  reached it was a wood springing up in plain view; a day of narrowing
-  that down did not remove it, and they were switched off. Now each
-  ground patch is built with the standing features on it, in the same
-  request, so a tree cannot arrive after its ground. A patch carries the
-  cells ranked under `treesKept` — every feature at the finest level,
-  the low-ranked few at coarse ones, sized for the nearest the level is
-  ever drawn at the governor's loosest threshold — and the shader shows
-  an instance where its rank is under `(reach / distance)²`. A coarse
-  patch's trees are the same trees its children carry (tested), so a
-  patch giving way to its children changes nothing. Only what stands is
-  scattered; floor cover stays painted. None stands in a river or lake.
-  **What can still go wrong is the ground being late**: a coarse
-  ancestor standing in close up carries too few trees for that distance.
-  Judge that in real time — the recorder at 8 ms of sleep a frame gives
-  the workers a quarter of the time a real frame does, and made the
-  trees look as if they vanished when at real pace they held.
-- **The terrain governs its own detail** (`govern` in `terrain.ts`): it
-  measures how many levels behind the drawn ground runs and loosens the
-  detail threshold while patches are late, tightening again once they
-  keep up. A picture a step softer that is all there is a picture; fine
-  ground landing after the eye arrives is ground sharpening under it.
-  `TERRAIN_MORPH` is set from the governed threshold each frame.
-- **Nothing in the ground shader is drawn only within a distance.** The
-  sand ripples, snow ridges, stone cracks and procedural bumps all were,
-  so each appeared ahead of the eye as it flew — and the cracks read as
-  a honeycomb over a desert. Patterns that remain are filtered by
-  `fwidth` so they blur away rather than switch, and the photographs
-  carry the grain.
-- **`?record` in a development build drives time and frames by hand**
-  (`window.recorder.step(ms)`, `nudge`), so a flight renders exactly and
-  can be compared frame to frame. The preview pane draws nothing on its
-  own, and every flicker fix made without this was made blind.
-- **The planet turns at two rates**: once in two minutes from orbit,
-  once in eight in a glide, the angle carried forward at the blended
-  rate so the change never jumps the ground.
+- **Trees are level of detail on the ground's own vertices**
+  (`patches/forest.ts`), and every earlier scheme is gone — tiles of their
+  own, then trees baked into patches and thinned by distance. Both made a
+  tree _appear_ somewhere it was already in plain view: the second by
+  design, as each tree waited for its rank's distance, which from a glide's
+  height was 20–80 pixels tall. Now a tree stands on a vertex of the
+  `TREE_LEVEL` grid; finer ground shows its ancestor's trees, which stand
+  exactly on it; coarser patches carry a quarter as many trees a level up,
+  each twice the size. Over the ground's own blend distance, the trees a
+  parent lacks shrink to nothing and the ones it shares grow to its size,
+  so a change of level draws the same picture — coverage is constant and
+  nothing appears. No worker time: the ground already holds the vertices.
+  **The instanced geometry needs the model's index copied too**: without
+  it every frame with a tree in it came out empty, with no error anywhere.
+  Culled by each patch's bounds, as the model's own know nothing of where
+  the instances stand. About 43k trees and 530k triangles before culling
+  over a temperate glide on a desktop.
 
 ## Traps
 

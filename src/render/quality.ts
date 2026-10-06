@@ -31,7 +31,7 @@ export interface Quality {
   readonly patchCache: number
   /** Patch requests out at once: more fills the view faster and uses more of the workers. */
   readonly inFlight: number
-  /** Inside this distance, in planet radii, every tree, cactus and floe stands; they thin beyond it. */
+  /** How far out, in planet radii, the ground draws a forest floor under the trees. */
   readonly featureRange: number
   /** Width of the sun's shadow map near the ground; 0 for no shadows. */
   readonly shadowMap: number
@@ -55,10 +55,10 @@ export function pickQuality(device: Device): Quality {
     maxLevel: phone && modest ? 8 : 9,
     patchCache: phone ? (modest ? 450 : 600) : 1200,
     inFlight: phone ? 12 : 24,
-    // Inside this distance every tree stands, and beyond it they thin by
-    // the square of the distance (scatter.ts). They ride in the ground's
-    // own patches, so a nearer reach costs instances, never lateness.
-    featureRange: phone ? 0.008 : 0.012,
+    // How far out the ground darkens its painted woods to a forest floor,
+    // where trees stand on it (forest.ts carries them out to the coarse
+    // ground at about this distance).
+    featureRange: 0.25,
     shadowMap: phone ? (modest ? 0 : 1024) : 2048,
     cloudWidth: phone ? 512 : 1024,
     pixelRatio: Math.min(device.pixelRatio, modest ? 1.5 : 2),

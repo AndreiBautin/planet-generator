@@ -5,7 +5,6 @@ import { logger } from '@/shared/logger'
 import type { WorkRequest, WorkResult } from './build-protocol'
 import type { PatchKey } from './patches/cube'
 import type { PatchData } from './patches/patch-data'
-import type { Scatter } from './patches/scatter'
 import { answer } from './work'
 
 /**
@@ -29,16 +28,8 @@ export interface Builder {
     dials: Dials,
     key: PatchKey,
     segments: number,
-    /** The share of its cells' features the patch carries (scatter.ts). */
-    keep: number,
     urgency?: number,
-  ) => Promise<BuiltPatch>
-}
-
-/** A patch of ground and what stands on it, made together. */
-export interface BuiltPatch {
-  readonly patch: PatchData
-  readonly features: Scatter
+  ) => Promise<PatchData>
 }
 
 interface Queued {
@@ -133,14 +124,11 @@ export function createBuilder(cores: number): Builder {
       if (result.kind !== 'clouds') throw new Error('builder answered clouds with something else')
       return result.texture
     },
-    patch: async (seed, dials, key, segments, keep, urgency = 0) => {
+    patch: async (seed, dials, key, segments, urgency = 0) => {
       next += 1
-      const result = await run(
-        { id: next, kind: 'patch', seed, dials, key, segments, keep },
-        urgency,
-      )
+      const result = await run({ id: next, kind: 'patch', seed, dials, key, segments }, urgency)
       if (result.kind !== 'patch') throw new Error('builder answered a patch with something else')
-      return { patch: result.patch, features: result.features }
+      return result.patch
     },
   }
 }
