@@ -16,7 +16,20 @@
  * shadow to the ground's colour rather than replacing it.
  */
 export const TILE = 256
-export const GROUND_KINDS = ['grass', 'litter', 'sand', 'stone', 'snow', 'basalt'] as const
+export const GROUND_KINDS = [
+  'grass',
+  'litter',
+  'sand',
+  'stone',
+  'snow',
+  'basalt',
+  // Each biome's own ground (see `groundOf` in patches/patch-data.ts).
+  'needles',
+  'savanna',
+  'tundra',
+  'ash',
+  'salt',
+] as const
 export type GroundKind = (typeof GROUND_KINDS)[number]
 
 export interface GroundTile {
@@ -150,6 +163,35 @@ function texelOf(kind: GroundKind, u: number, v: number): Texel {
       const pits = pfbm(u, v, 40, 3, 15)
       const tone = (0.44 + id * 0.1 + (pits - 0.5) * 0.14) * (1 - joint * 0.6)
       return [tone, tone * 0.97, tone * 0.95, clamp01(0.6 - joint * 0.5 + (pits - 0.5) * 0.3)]
+    }
+    // The biome grounds' stand-ins until their photographs arrive: rough
+    // cousins of the kinds above, enough to give the first frame grain.
+    case 'needles': {
+      const needles = pnoise(u * 160, v * 40, 160, 40, 16) * 0.6 + pfbm(u, v, 6, 4, 17) * 0.4
+      const tone = 0.34 + needles * 0.2
+      return [tone * 1.08, tone * 0.9, tone * 0.7, clamp01(0.3 + needles * 0.5)]
+    }
+    case 'savanna': {
+      const tufts = pfbm(u, v, 10, 4, 18)
+      const blades = pnoise(u * 120, v * 30, 120, 30, 19)
+      const tone = 0.44 + tufts * 0.16 + blades * 0.1
+      return [tone * 1.05, tone, tone * 0.8, clamp01(0.3 + tufts * 0.5 + blades * 0.2)]
+    }
+    case 'tundra': {
+      const cushions = pfbm(u, v, 9, 5, 20)
+      const tone = 0.4 + cushions * 0.2
+      return [tone * 0.95, tone * 1.02, tone * 0.9, clamp01(0.3 + cushions * 0.6)]
+    }
+    case 'ash': {
+      const grains = pfbm(u, v, 40, 3, 21)
+      const tone = 0.42 + (grains - 0.5) * 0.2
+      return [tone, tone * 0.98, tone * 0.97, clamp01(0.4 + (grains - 0.5) * 0.6)]
+    }
+    case 'salt': {
+      const [f1, f2] = pcells(u, v, 6, 22)
+      const ridge = 1 - clamp01((f2 - f1) * 8)
+      const tone = 0.52 + ridge * 0.12 + (pfbm(u, v, 20, 3, 23) - 0.5) * 0.08
+      return [tone, tone, tone * 0.98, clamp01(0.4 + ridge * 0.4)]
     }
   }
 }

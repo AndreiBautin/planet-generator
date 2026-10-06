@@ -2,7 +2,7 @@ import { surfaceAt, type Planet, type Surface } from '@/generation/planet'
 import { groupingsAt } from '@/generation/grouping'
 import { fbm } from '@/generation/noise'
 import { fineReliefAt, reliefWeightAt } from '@/generation/relief'
-import { floorAt, FREEZES, patternAt } from '@/generation/features'
+import { featuresAt, floorAt, FREEZES, patternAt } from '@/generation/features'
 
 import { fromPalette } from '../colour'
 import { liftOf } from '../surface-data'
@@ -59,6 +59,12 @@ export interface PatchData {
    * angle the water was seen at.
    */
   readonly ice: Float32Array
+  /**
+   * Each biome's own ground, four weights a vertex — forest needles,
+   * savanna, tundra, and salt flat (ash on a molten world) — then the same
+   * four as the parent patch has them: eight a vertex. See `groundOf`.
+   */
+  readonly ground: Float32Array
 }
 
 /** Vertices in a patch: the grid, then four edges' worth of skirt. */
@@ -136,6 +142,7 @@ export function samplePatch(planet: Planet, key: PatchKey, segments: number): Pa
   const surfaces: Surface[] = []
   const pattern = new Float32Array(vertexCount(segments) * 4)
   const ice = new Float32Array(vertexCount(segments) * 2)
+  const ground = new Float32Array(vertexCount(segments) * 8)
   let hasSea = false
 
   for (let j = -2; j <= segments + 2; j += 1) {
@@ -230,6 +237,8 @@ export function samplePatch(planet: Planet, key: PatchKey, segments: number): Pa
         pattern[at + 1] = look.sand * (1 - stony * 0.7)
         pattern[at + 2] = look.snow
         pattern[at + 3] = Math.min(1, look.stone + stony * 0.8)
+        const kinds = groundOf(planet, here, steep, look)
+        for (let k = 0; k < 4; k += 1) ground[(j * side + i) * 8 + k] = kinds[k] ?? 0
         if (stony > 0 && height > 0) {
           const k = stony * 0.55
           colours[out] = mix(colours[out] ?? 0, stone.r, k)
@@ -357,6 +366,10 @@ export function samplePatch(planet: Planet, key: PatchKey, segments: number): Pa
             (coarsePattern[vertex * 4 + k] ?? 0) + (pattern[from * 4 + k] ?? 0) * share
         }
         ice[vertex * 2 + 1] = (ice[vertex * 2 + 1] ?? 0) + (ice[from * 2] ?? 0) * share
+        for (let k = 0; k < 4; k += 1) {
+          ground[vertex * 8 + 4 + k] =
+            (ground[vertex * 8 + 4 + k] ?? 0) + (ground[from * 8 + k] ?? 0) * share
+        }
         const [px, py, pz] = parentNormal(ei, ej)
         const length = Math.hypot(px, py, pz) || 1
         nx += px / length
@@ -394,6 +407,7 @@ export function samplePatch(planet: Planet, key: PatchKey, segments: number): Pa
         coarsePattern[skirt * 4 + k] = coarsePattern[vertex * 4 + k] ?? 0
       ice[skirt * 2] = ice[vertex * 2] ?? 0
       ice[skirt * 2 + 1] = ice[vertex * 2 + 1] ?? 0
+      for (let k = 0; k < 8; k += 1) ground[skirt * 8 + k] = ground[vertex * 8 + k] ?? 0
       skirt += 1
     }
   }
@@ -409,6 +423,7 @@ export function samplePatch(planet: Planet, key: PatchKey, segments: number): Pa
     coarseColours,
     coarsePattern,
     ice,
+    ground,
   }
 }
 
@@ -516,4 +531,43 @@ export function quarterIndex(segments: number, quarter: number): Uint16Array {
   const index = Uint16Array.from(out)
   quarters.set(name, index)
   return index
+}
+
+const smooth = (from: number, to: number, value: number): number => {
+  const t = Math.min(1, Math.max(0, (value - from) / (to - from)))
+  return t * t * (3 - 2 * t)
+}
+
+/**
+ * Which of the biome grounds a point wears, each 0 to 1: forest needles
+ * where the woods are conifer, savanna where it is warm and dry, tundra
+ * where it is cold but not yet snow, and a salt flat on the driest low
+ * ground — or, on a molten world, ash wherever the lava is not.
+ */
+export function groundOf(
+  planet: Planet,
+  surface: Surface,
+  steep: number,
+  look: {
+    readonly canopy: number
+    readonly sand: number
+    readonly snow: number
+    readonly stone: number
+  },
+): readonly [number, number, number, number] {
+  if (surface.height <= 0) return [0, 0, 0, 0]
+  if (planet.molten)
+    return [0, 0, 0, Math.max(0, 0.75 - look.sand) * (1 - smooth(0.06, 0.2, steep))]
+  const growth = featuresAt(planet, surface, steep)
+  const trees = growth.broadleaf + growth.conifer
+  const needles = trees > 0 ? look.canopy * (growth.conifer / trees) : 0
+  const open = (1 - look.sand) * (1 - look.stone) * (1 - look.snow)
+  const savanna =
+    open * smooth(0.15, 0.45, surface.warmth) * (1 - smooth(0.3, 0.55, surface.moisture))
+  const tundra = open * (1 - smooth(-0.25, 0.02, surface.warmth))
+  const salt =
+    (1 - smooth(0.1, 0.28, surface.moisture)) *
+    (1 - smooth(0.02, 0.14, surface.height)) *
+    (1 - smooth(0.04, 0.12, steep))
+  return [needles, savanna * (1 - needles), tundra * (1 - needles), salt]
 }

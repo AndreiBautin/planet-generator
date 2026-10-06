@@ -1,6 +1,7 @@
 import * as THREE from 'three'
 
 import { HAZE_SUN } from './haze'
+import type { GroundKind } from './ground-atlas'
 import type { GroundTextures } from './textures'
 
 /**
@@ -254,7 +255,7 @@ export function withGroundDetail(
     // shape: a vertex drawn where the parent puts it, painted as the parent
     // paints it.
     shader.vertexShader =
-      'attribute vec3 coarseColour;\nattribute vec4 coarsePattern;\n' +
+      'attribute vec3 coarseColour;\nattribute vec4 coarsePattern;\nattribute vec4 ground;\nattribute vec4 coarseGround;\nvarying vec4 v_ground;\n' +
       shader.vertexShader
         .replace(
           '#include <color_vertex>',
@@ -268,18 +269,29 @@ export function withGroundDetail(
           /* glsl */ `vDetailPosition = transformed;
   vDetailNormal = objectNormal;
   v_pattern = mix(pattern, coarsePattern, terrainMorph);
+  v_ground = mix(ground, coarseGround, terrainMorph);
 #include <project_vertex>`,
         )
-    const layers = ['grass', 'litter', 'sand', 'stone', 'snow', 'basalt'] as const
-    let declare = ''
+    // Only the photographs this kind of world uses: a phone allows about
+    // sixteen textures to a shader, and every kind at once is twenty-two.
+    // The biome grounds on land bring colour and grain; the relief comes
+    // from the main photographs' normal maps.
+    const layers: readonly GroundKind[] = molten
+      ? ['basalt', 'ash']
+      : ['grass', 'sand', 'stone', 'snow', 'needles', 'savanna', 'tundra', 'salt']
+    const flat: ReadonlySet<GroundKind> = new Set(['needles', 'savanna', 'tundra', 'salt'])
+    let declare = 'varying vec4 v_ground;\n'
     for (const kind of layers) {
       const name = kind.charAt(0).toUpperCase() + kind.slice(1)
       // The same uniform objects for every material, so a photograph that
       // arrives later reaches every planet's ground at once.
       shader.uniforms[`ground${name}`] = textures[kind].color
-      shader.uniforms[`ground${name}Normal`] = textures[kind].normal
       shader.uniforms[`ground${name}Mean`] = textures[kind].mean
-      declare += `uniform sampler2D ground${name};\nuniform sampler2D ground${name}Normal;\nuniform float ground${name}Mean;\n`
+      declare += `uniform sampler2D ground${name};\nuniform float ground${name}Mean;\n`
+      if (!flat.has(kind)) {
+        shader.uniforms[`ground${name}Normal`] = textures[kind].normal
+        declare += `uniform sampler2D ground${name}Normal;\n`
+      }
     }
     shader.fragmentShader =
       declare +
@@ -317,6 +329,19 @@ export function withGroundDetail(
         albedo += mix(vec3(lum), c, 0.35) * share;
         relief += (near.a * 0.65 + broad.a * 0.35) * share;
         if (share > 0.2) tilt += (groundTriNormal(normalMap, p, w) * 0.7 + groundTriNormal(normalMap, q, w) * 0.3) * share;
+      }
+      // A ground with no normal map of its own: colour and grain only.
+      void groundFlat(
+        sampler2D colorMap, float mean, float share,
+        vec3 p, vec3 q, vec3 w, inout vec3 albedo, inout float relief
+      ) {
+        if (share < 0.02) return;
+        vec4 near = groundTri(colorMap, p, w);
+        vec4 broad = groundTri(colorMap, q, w);
+        vec3 c = (near.rgb * 0.65 + broad.rgb * 0.35) / (mean * 2.0);
+        float lum = dot(c, vec3(0.2126, 0.7152, 0.0722));
+        albedo += mix(vec3(lum), c, 0.35) * share;
+        relief += (near.a * 0.65 + broad.a * 0.35) * share;
       }
       ` +
       shader.fragmentShader
@@ -379,17 +404,29 @@ export function withGroundDetail(
             ${
               molten
                 ? /* glsl */ `
+            float wAsh = v_ground.w;
             float total = 1.0;
-            groundLayer(groundBasalt, groundBasaltNormal, groundBasaltMean, 1.0, p, q, w, albedo, relief, detailTilt);`
+            groundLayer(groundBasalt, groundBasaltNormal, groundBasaltMean, 1.0 - wAsh, p, q, w, albedo, relief, detailTilt);
+            groundLayer(groundAsh, groundAshNormal, groundAshMean, wAsh, p, q, w, albedo, relief, detailTilt);`
                 : /* glsl */ `
-            float wLitter = v_pattern.x * stand;
             float wSand = v_pattern.y;
             float wSnow = v_pattern.z;
             float wStone = v_pattern.w;
-            float wGrass = max(0.0, 1.0 - (wLitter + wSand + wSnow + wStone));
-            float total = max(0.001, wLitter + wSand + wSnow + wStone + wGrass);
+            // The biome grounds take their share from the grass and sand
+            // they stand in for: savanna and tundra are grassland of a kind,
+            // a salt flat is a desert floor, needles lie under conifers.
+            float wNeedles = v_ground.x;
+            float wSavanna = v_ground.y;
+            float wTundra = v_ground.z;
+            float wSalt = v_ground.w * (1.0 - wSnow);
+            float wGrass = max(0.0, 1.0 - (wSand + wSnow + wStone + wNeedles + wSavanna + wTundra));
+            wSand *= 1.0 - wSalt;
+            float total = max(0.001, wSand + wSnow + wStone + wGrass + wNeedles + wSavanna + wTundra + wSalt);
             groundLayer(groundGrass, groundGrassNormal, groundGrassMean, wGrass, p, q, w, albedo, relief, detailTilt);
-            groundLayer(groundLitter, groundLitterNormal, groundLitterMean, wLitter, p, q, w, albedo, relief, detailTilt);
+            groundFlat(groundNeedles, groundNeedlesMean, wNeedles, p, q, w, albedo, relief);
+            groundFlat(groundSavanna, groundSavannaMean, wSavanna, p, q, w, albedo, relief);
+            groundFlat(groundTundra, groundTundraMean, wTundra, p, q, w, albedo, relief);
+            groundFlat(groundSalt, groundSaltMean, wSalt, p, q, w, albedo, relief);
             groundLayer(groundSand, groundSandNormal, groundSandMean, wSand, p, q, w, albedo, relief, detailTilt);
             groundLayer(groundSnow, groundSnowNormal, groundSnowMean, wSnow, p, q, w, albedo, relief, detailTilt);
             groundLayer(groundStone, groundStoneNormal, groundStoneMean, wStone, p, q, w, albedo, relief, detailTilt);`

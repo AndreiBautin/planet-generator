@@ -61,6 +61,7 @@ export function transferables(result: WorkResult): Transferable[] {
         result.patch.coarseColours.buffer,
         result.patch.coarsePattern.buffer,
         result.patch.ice.buffer,
+        result.patch.ground.buffer,
       ]
     case 'features':
       return Object.values(result.features).map((features) => features.buffer)

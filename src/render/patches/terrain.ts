@@ -398,6 +398,10 @@ export class Terrain {
     ground.setAttribute('coarseNormal', new THREE.BufferAttribute(patch.coarseNormals, 3))
     ground.setAttribute('coarseColour', new THREE.BufferAttribute(patch.coarseColours, 3))
     ground.setAttribute('coarsePattern', new THREE.BufferAttribute(patch.coarsePattern, 4))
+    // Eight floats a vertex: its own four biome grounds, then its parent's.
+    const kinds = new THREE.InterleavedBuffer(patch.ground, 8)
+    ground.setAttribute('ground', new THREE.InterleavedBufferAttribute(kinds, 4, 0))
+    ground.setAttribute('coarseGround', new THREE.InterleavedBufferAttribute(kinds, 4, 4))
     ground.setIndex(new THREE.BufferAttribute(this.index, 1))
     ground.computeBoundingSphere()
     const landArrival = new THREE.BufferAttribute(new Float32Array(patch.positions.length / 3), 1)

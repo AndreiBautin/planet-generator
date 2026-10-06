@@ -3,7 +3,14 @@ import { describe, expect, it } from 'vitest'
 import { createPlanet } from '@/generation/planet'
 import { parseSeed, type Seed } from '@/generation/seed'
 
-import { groundRadiusAt, patchIndex, quarterIndex, samplePatch, vertexCount } from './patch-data'
+import {
+  groundOf,
+  groundRadiusAt,
+  patchIndex,
+  quarterIndex,
+  samplePatch,
+  vertexCount,
+} from './patch-data'
 import { SEA_RADIUS } from '../water'
 
 const parsed = parseSeed('2257afq')
@@ -124,5 +131,32 @@ describe('quarterIndex', () => {
     const whole = triangles(patchIndex(8)).sort()
     const parts = [0, 1, 2, 3].flatMap((q) => triangles(quarterIndex(8, q))).sort()
     expect(parts).toEqual(whole)
+  })
+})
+
+describe('groundOf', () => {
+  const land = (warmth: number, moisture: number, height = 0.1) =>
+    ({ height, biome: 'land', colour: [0.3, 0.5, 0.2], moisture, warmth }) as const
+  const open = { canopy: 0, sand: 0, snow: 0, stone: 0 }
+
+  it('lays tundra on cold land, savanna on warm dry land, and neither where it is temperate', () => {
+    const [, coldSavanna, coldTundra] = groundOf(planet, land(-0.28, 0.5), 0, open)
+    expect(coldTundra).toBeGreaterThan(0.8)
+    expect(coldSavanna).toBe(0)
+    const [, warmSavanna, warmTundra] = groundOf(planet, land(0.6, 0.15), 0, open)
+    expect(warmSavanna).toBeGreaterThan(0.8)
+    expect(warmTundra).toBe(0)
+    const [, mildSavanna, mildTundra] = groundOf(planet, land(0.05, 0.7), 0, open)
+    expect(mildSavanna + mildTundra).toBeLessThan(0.1)
+  })
+
+  it('lays salt only on the driest low, flat ground', () => {
+    expect(groundOf(planet, land(0.5, 0.05, 0.01), 0, open)[3]).toBeGreaterThan(0.8)
+    expect(groundOf(planet, land(0.5, 0.05, 0.3), 0, open)[3]).toBe(0)
+    expect(groundOf(planet, land(0.5, 0.6, 0.01), 0, open)[3]).toBe(0)
+  })
+
+  it('lays nothing under the sea', () => {
+    expect(groundOf(planet, land(0.5, 0.05, -0.1), 0, open)).toEqual([0, 0, 0, 0])
   })
 })

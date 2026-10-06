@@ -21,10 +21,12 @@ const PUBLIC_FILES = [
   'icons/apple-touch-icon.png',
   'icons/favicon-32.png',
   // The ground's photographs (CC0, ambientCG), colour and normal per kind.
-  ...['grass', 'litter', 'sand', 'stone', 'snow', 'basalt'].flatMap((kind) => [
+  ...['grass', 'litter', 'sand', 'stone', 'snow', 'basalt', 'ash'].flatMap((kind) => [
     `textures/${kind}-color.jpg`,
     `textures/${kind}-normal.jpg`,
   ]),
+  // The biome grounds on land carry colour only (see detail.ts).
+  ...['needles', 'savanna', 'tundra', 'salt'].map((kind) => `textures/${kind}-color.jpg`),
 ]
 
 /**
