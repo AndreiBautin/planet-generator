@@ -26,18 +26,54 @@ import { DETAIL_TIME, NOISE } from './detail'
 export const CLOUD_RADIUS = 1.035
 export const CLOUD_OPACITY = 0.8
 
-export function cloudsFromTexture(planet: Planet, data: Uint8Array, width: number): THREE.Mesh {
-  const texture = new THREE.DataTexture(data, width, width / 2)
-  texture.wrapS = THREE.RepeatWrapping
-  texture.magFilter = THREE.LinearFilter
-  texture.minFilter = THREE.LinearFilter
-  texture.needsUpdate = true
+/**
+ * The layers drawn from one baked map. A single shell is a printed sheet
+ * however well it churns: seen at a grazing angle from a glide it has no
+ * body. So the deck is two shells — a greyer base, and above it brighter
+ * tops only where the cover is thickest — which part as the eye moves and
+ * read as height. Above both, a thin high layer of cirrus, streaked along
+ * the lines of latitude as high wind draws it, made in the shader with no
+ * map of its own.
+ */
+type Layer = 'base' | 'tops' | 'cirrus'
+const LAYERS: Readonly<Record<Layer, { readonly radius: number; readonly opacity: number }>> = {
+  base: { radius: CLOUD_RADIUS, opacity: CLOUD_OPACITY },
+  tops: { radius: CLOUD_RADIUS + 0.0035, opacity: 0.85 },
+  cirrus: { radius: 1.058, opacity: 0.3 },
+}
 
+const SHAPES: Readonly<Record<Layer, string>> = {
+  base: /* glsl */ `
+          float shaped = smoothstep(0.28, 0.78, cover + (billow - 0.5) * 0.5);
+          diffuseColor.a *= shaped;
+          // The underside of the deck: greyer, and greyest under the thickest cloud.
+          diffuseColor.rgb *= (0.74 + billow * 0.26) * (1.0 - smoothstep(0.6, 1.0, cover) * 0.18);`,
+  tops: /* glsl */ `
+          float shaped = smoothstep(0.52, 0.9, cover + (billow - 0.5) * 0.6);
+          diffuseColor.a *= shaped;
+          // Sunlit tops: the brightest thing in the sky after the sun.
+          diffuseColor.rgb *= 1.02 + billow * 0.12;`,
+  cirrus: /* glsl */ `
+          vec3 d = vCloudDir;
+          // Streaks: fine across latitude, long along it. The latitude they
+          // are read at is bent by a broad noise so they sweep in arcs, and
+          // a second noise along them breaks each into wisps, or they read
+          // as ruled lines.
+          float bend = (detailNoise(d * 4.0 + t * 0.4) - 0.5) * 0.09 + (detailNoise(d * 11.0 - t * 0.6) - 0.5) * 0.025;
+          float streak = detailNoise(vec3(d.x * 3.0, (d.y + bend) * 46.0, d.z * 3.0) + vec3(t, 0.0, -t));
+          float wisps = smoothstep(0.35, 0.7, detailNoise(vec3(d.x * 22.0, d.y * 9.0, d.z * 22.0) - t * 0.8));
+          float patches = smoothstep(0.5, 0.78, detailNoise(d * 2.2 + 31.0 - t * 0.3));
+          // Sparse where the low cloud is thick, as weather fills the sky one way or the other.
+          diffuseColor.a *= smoothstep(0.58, 0.9, streak) * wisps * patches * (1.0 - cover * 0.7);
+          diffuseColor.rgb *= 1.05;`,
+}
+
+function layerMaterial(planet: Planet, texture: THREE.Texture, layer: Layer): THREE.Material {
   const material = new THREE.MeshStandardMaterial({
     color: fromPalette(KINDS[planet.kind].cloudColour),
     alphaMap: texture,
     transparent: true,
-    opacity: CLOUD_OPACITY,
+    opacity: LAYERS[layer].opacity,
     depthWrite: false,
     roughness: 1,
     metalness: 0,
@@ -68,18 +104,39 @@ export function cloudsFromTexture(planet: Planet, data: Uint8Array, width: numbe
           float billow =
             detailNoise(vCloudDir * 48.0 + vec3(t * 1.6, -t, t * 0.7)) * 0.6 +
             detailNoise(vCloudDir * 130.0 - vec3(t * 2.5, t * 1.1, -t * 1.8)) * 0.4;
-          float shaped = smoothstep(0.28, 0.78, cover + (billow - 0.5) * 0.5);
-          diffuseColor.a *= shaped;
-          // Thicker cloud is brighter on top and greyer underneath.
-          diffuseColor.rgb *= 0.78 + billow * 0.3;
+          ${SHAPES[layer]}
         }`,
       )
   }
-  material.customProgramCacheKey = () => 'planet-clouds'
-  const mesh = new THREE.Mesh(new THREE.SphereGeometry(CLOUD_RADIUS, 192, 96), material)
-  mesh.renderOrder = 2
-  mesh.userData.cloud = { data, width }
-  return mesh
+  material.customProgramCacheKey = () => `planet-clouds-${layer}`
+  return material
+}
+
+export function cloudsFromTexture(planet: Planet, data: Uint8Array, width: number): THREE.Mesh {
+  const texture = new THREE.DataTexture(data, width, width / 2)
+  texture.wrapS = THREE.RepeatWrapping
+  texture.magFilter = THREE.LinearFilter
+  texture.minFilter = THREE.LinearFilter
+  texture.needsUpdate = true
+
+  const shell = (layer: Layer, segments: number): THREE.Mesh => {
+    const mesh = new THREE.Mesh(
+      new THREE.SphereGeometry(LAYERS[layer].radius, segments, segments / 2),
+      layerMaterial(planet, texture, layer),
+    )
+    mesh.userData.layer = layer
+    return mesh
+  }
+  const base = shell('base', 192)
+  base.renderOrder = 2
+  const tops = shell('tops', 192)
+  tops.renderOrder = 3
+  const cirrus = shell('cirrus', 96)
+  cirrus.renderOrder = 4
+  // Children of the base deck, so they turn, scale and are released with it.
+  base.add(tops, cirrus)
+  base.userData.cloud = { data, width }
+  return base
 }
 
 /** The baked cloud map a layer was made from, for reading the cover over a point. */
@@ -106,15 +163,21 @@ export function cloudsSeenFrom(
   scale: number,
   strength: number,
 ): void {
-  const material: unknown = clouds.material
-  if (!(material instanceof THREE.Material)) return
-  const layer = CLOUD_RADIUS * scale
-  const side = distance < layer ? THREE.DoubleSide : THREE.FrontSide
-  if (material.side !== side) {
-    material.side = side
-    material.needsUpdate = true
-  }
-  const gap = Math.abs(distance - layer)
-  const t = Math.min(1, Math.max(0, (gap - 0.004) / 0.03))
-  material.opacity = CLOUD_OPACITY * strength * t * t * (3 - 2 * t)
+  clouds.traverse((node) => {
+    if (!(node instanceof THREE.Mesh)) return
+    const material: unknown = node.material
+    const held: unknown = node.userData.layer
+    if (!(material instanceof THREE.Material) || typeof held !== 'string' || !(held in LAYERS))
+      return
+    const { radius, opacity } = LAYERS[held as Layer]
+    const layer = radius * scale
+    const side = distance < layer ? THREE.DoubleSide : THREE.FrontSide
+    if (material.side !== side) {
+      material.side = side
+      material.needsUpdate = true
+    }
+    const gap = Math.abs(distance - layer)
+    const t = Math.min(1, Math.max(0, (gap - 0.004) / 0.03))
+    material.opacity = opacity * strength * t * t * (3 - 2 * t)
+  })
 }

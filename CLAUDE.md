@@ -346,3 +346,13 @@ Colour, surf and reflection are all read from the water's true depth
 - **The mirror reads the sky the reflection meets**: `DETAIL_SKY` (the haze)
   at a grazing angle, `DETAIL_ZENITH` (thinner, bluer) looking down. From
   orbit the zenith is black, as there is no sky above the sea there.
+
+## Clouds are three shells from one map
+
+`cloudsFromTexture` returns the base deck with two children: brighter tops
+3.5 thousandths higher, drawn only over the thickest cover, and a thin high
+cirrus layer made in the shader alone. Children so that turning, scaling,
+fading (`cloudsSeenFrom` walks them, each by its own radius) and release
+all carry over unchanged; rain, cloud shadows and `cloudDataOf` still read
+the base deck's map. **Cirrus streaks need bending and breaking**: plain
+latitude-stretched noise read as evenly ruled corduroy from orbit.
