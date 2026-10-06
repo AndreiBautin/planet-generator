@@ -26,6 +26,7 @@ import {
   DETAIL_NORMAL_MATRIX,
   DETAIL_RANGE,
   DETAIL_SKY,
+  DETAIL_ZENITH,
   DETAIL_TIME,
   withGroundDetail,
   terrainDepthMaterial,
@@ -639,6 +640,11 @@ export function startScene(
         airColour.multiply(hazeTint.copy(sunTint).lerp(WHITE, 0.45))
         fog.color.copy(airColour)
         DETAIL_SKY.value.copy(airColour)
+        // Overhead the air is thinner and bluer than the haze along the
+        // horizon; from orbit there is no sky above the sea at all.
+        DETAIL_ZENITH.value
+          .setRGB(value.r * 0.55, value.g * 0.75, value.b * 1.05, THREE.SRGBColorSpace)
+          .multiplyScalar(day * low)
         // The sky lights the ground from above in its own colour, the
         // ground bounces its own back, both fading with the day; the
         // ambient left is the night's.

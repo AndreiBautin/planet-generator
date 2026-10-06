@@ -53,6 +53,8 @@ export const DETAIL_NORMAL_MATRIX = { value: new THREE.Matrix3() }
  * black band under a bright sky.
  */
 export const DETAIL_SKY = { value: new THREE.Color(0, 0, 0) }
+/** The sky overhead, deeper than the haze at the horizon: what calm water mirrors looking down. */
+export const DETAIL_ZENITH = { value: new THREE.Color(0, 0, 0) }
 
 export const NOISE = /* glsl */ `
   // A hash that holds up at large coordinates, unlike the sin() kind,
@@ -570,12 +572,12 @@ export function withWaterDetail(material: THREE.Material): THREE.Material {
     shader.uniforms.terrainMorphLod = TERRAIN_MORPH
     shader.vertexShader = (
       MORPH_DECLARE +
-      'attribute float coarseDepth;\nattribute vec2 ice;\nattribute float inland;\nvarying float v_ice;\nvarying float v_inland;\n' +
+      'attribute float coarseDepth;\nattribute vec2 ice;\nattribute float inland;\nvarying float v_ice;\nvarying float v_inland;\nvarying vec3 v_up;\n' +
       shader.vertexShader
     )
       .replace(
         'void main() {',
-        'void main() {\n  float seaMorph = terrainMorphAt(position);\n  float seaDepth = mix(depth, coarseDepth, seaMorph);\n  v_ice = mix(ice.x, ice.y, seaMorph);\n  v_inland = inland;',
+        'void main() {\n  float seaMorph = terrainMorphAt(position);\n  float seaDepth = mix(depth, coarseDepth, seaMorph);\n  v_ice = mix(ice.x, ice.y, seaMorph);\n  v_inland = inland;\n  v_up = normalize(normalMatrix * normalize(position));',
       )
       .replace('v_depth = depth;', 'v_depth = seaDepth;')
       .replace('smoothstep(0.0, 0.0004, depth)', 'smoothstep(0.0, 0.0004, seaDepth)')
@@ -639,12 +641,13 @@ export function withWaterDetail(material: THREE.Material): THREE.Material {
         transformed += waveOffset;`,
         )
     shader.uniforms.seaSky = DETAIL_SKY
+    shader.uniforms.seaZenith = DETAIL_ZENITH
     const seaIce: unknown = material.userData.seaIce
     shader.uniforms.seaIce = {
       value: seaIce instanceof THREE.Color ? seaIce : new THREE.Color(0.9, 0.94, 0.97),
     }
     shader.fragmentShader =
-      'uniform vec3 seaSky;\nuniform vec3 seaIce;\nvarying float v_ice;\nvarying float v_inland;\nvarying float v_jac;\nvarying float v_heave;\n' +
+      'uniform vec3 seaSky;\nuniform vec3 seaZenith;\nuniform vec3 seaIce;\nvarying vec3 v_up;\nvarying float v_ice;\nvarying float v_inland;\nvarying float v_jac;\nvarying float v_heave;\n' +
       shader.fragmentShader
     shader.fragmentShader = shader.fragmentShader
       .replace(
@@ -662,12 +665,23 @@ export function withWaterDetail(material: THREE.Material): THREE.Material {
         float inlandShallows = 1.0 - smoothstep(0.0, 0.0003, v_depth);
         shallows = mix(shallows, inlandShallows * 0.5, v_inland);
         diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(0.55, 0.75, 0.7), v_inland * 0.6);
-        diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * 1.7, shallows * 0.45);
+        // Turquoise where the floor shows through, the sea's own colour
+        // over the shelf, darkening to ink over the deep: read by the true
+        // depth, so a reef or a sandbank shows as a paler patch out at sea.
+        diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(1.15, 2.0, 1.75), shallows * 0.5);
+        float abyss = smoothstep(0.004, 0.025, v_depth) * (1.0 - v_inland);
+        diffuseColor.rgb *= mix(vec3(1.0), vec3(0.5, 0.62, 0.85), abyss);
         diffuseColor.rgb *= 1.0 + v_heave * 0.18;
         // Foam where the sea meets the land, broken and moving.
         float shore = (1.0 - smoothstep(0.0, 0.0009, v_depth)) * (1.0 - v_inland);
         float churn = detailNoise(vDetailPosition * 1500.0 + drift * 1500.0);
         float foam = shore * smoothstep(0.45, 0.8, churn + shore * 0.35) * (1.0 - smoothstep(0.05, 0.5, seaDistance));
+        // Lines of surf a little way out, parallel to the shore and running
+        // in to it: the same depth everywhere along a line, so they follow
+        // the coast's shape, broken by the churn so no line is unbroken.
+        float surfZone = (1.0 - smoothstep(0.0006, 0.0028, v_depth)) * (1.0 - v_inland) * (1.0 - smoothstep(0.4, 0.9, v_ice));
+        float surfLine = smoothstep(0.82, 0.97, sin(v_depth * 7800.0 + detailTime * 1.6));
+        foam = max(foam, surfZone * surfLine * smoothstep(0.3, 0.7, churn) * 0.8 * (1.0 - smoothstep(0.08, 0.6, seaDistance)));
         // Breaking crests: where the wave has squeezed the surface most,
         // streaked by a noise so the foam is ragged, and the odd cap at sea.
         float breaking = smoothstep(0.62, 0.42, v_jac);
@@ -704,7 +718,13 @@ export function withWaterDetail(material: THREE.Material): THREE.Material {
           // colour looking down. Opaque where it mirrors, as water is.
           float facing = clamp(dot(normalize(vViewPosition), normal), 0.0, 1.0);
           float mirror = 0.02 + 0.98 * pow(1.0 - facing, 5.0);
-          totalEmissiveRadiance += seaSky * mirror * (1.0 - white);
+          // What it mirrors is the sky the reflected ray meets: the haze at
+          // the horizon at a grazing angle, the deeper sky overhead looking
+          // down — so the sea is not one flat sheet of the horizon's colour.
+          vec3 bounced = reflect(normalize(-vViewPosition), normal);
+          float rise = clamp(dot(bounced, normalize(v_up)), 0.0, 1.0);
+          vec3 mirrored = mix(seaSky, seaZenith, smoothstep(0.0, 0.45, rise));
+          totalEmissiveRadiance += mirrored * mirror * (1.0 - white);
           diffuseColor.a = mix(diffuseColor.a, 1.0, mirror * 0.85);
         }`,
       )

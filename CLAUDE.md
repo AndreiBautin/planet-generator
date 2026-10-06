@@ -332,3 +332,17 @@ from the first patch that holds it — nothing about it arrives late.
   are steeper than any hillside.
 - The recorder has `diveFrom()` and `glideFrom(position, heading)` so a
   look can start on a chosen feature rather than wherever Fly lands.
+
+## The sea
+
+Colour, surf and reflection are all read from the water's true depth
+(`depth` on the water mesh) and the reflected ray, in `withWaterDetail`:
+
+- **Turquoise over the shallows, ink over the deep** (`abyss`), so a
+  sandbank shows as a paler patch out at sea.
+- **Surf lines** are bands of equal depth moving shorewards, broken by the
+  churn noise: they follow the coast's shape without anything knowing where
+  the coast is. Not on inland water or under ice.
+- **The mirror reads the sky the reflection meets**: `DETAIL_SKY` (the haze)
+  at a grazing angle, `DETAIL_ZENITH` (thinner, bluer) looking down. From
+  orbit the zenith is black, as there is no sky above the sea there.
