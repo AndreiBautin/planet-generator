@@ -151,6 +151,9 @@ export class Lightning {
   private nextAt = 0
   private startedAt = -1e9
   private readonly where = new THREE.Vector3(0, 1, 0)
+  /** Counted up at every strike, so a listener can tell a new one; and how far from the eye it was, radians. */
+  strikes = 0
+  lastAngle = 0
 
   /**
    * `eye` is the camera's direction in the cloud layer's frame, `low` how
@@ -176,6 +179,8 @@ export class Lightning {
           if (coverAt(data, width, p) > STORM + 0.04) {
             this.where.set(...p)
             this.startedAt = seconds
+            this.strikes += 1
+            this.lastAngle = d
             break
           }
         }

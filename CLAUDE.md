@@ -452,3 +452,17 @@ where the cover passes `STORM` (0.82), and nowhere else (`weather.ts`).
   world.
 - **Snow falls instead of rain on a frozen world** (`Rain.snows`):
   slower, short flakes, swaying. Not yet seen on screen.
+
+## Sound
+
+`render/sound.ts`, made in the browser from two seconds of seeded noise:
+wind (band-passed, louder and higher with speed, silent in orbit), surf
+(low-passed, in sets, only low over a coast, `coastAround` sampling sea
+and land round the eye every few frames), rain (high-passed, the shower's
+own strength) and thunder after each lightning strike, delayed and
+softened by how far off it struck. **`mixFor` and `thunderFrom` are the
+whole decision and are pure and tested**; the class only follows them.
+Off until the speaker is pressed: browsers start audio only inside a
+gesture. **Not heard by the agent** — the preview plays nothing; what was
+checked is the gains moving with the flight (wind ~0.5 in a glide, surf
+rising at a coast).

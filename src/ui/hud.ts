@@ -16,6 +16,8 @@ export interface HudHandlers {
   readonly onTour: () => void
   /** Take a picture of the view. */
   readonly onPhoto: () => void
+  /** Sound on or off. */
+  readonly onSound: () => void
 }
 
 export interface Hud {
@@ -25,6 +27,8 @@ export interface Hud {
   readonly flying: (flying: boolean) => void
   /** Say whether the glide is flying itself. */
   readonly touring: (touring: boolean) => void
+  /** Say whether the sound is on. */
+  readonly sounding: (on: boolean) => void
 }
 
 const element = <T extends HTMLElement>(id: string, type: new () => T): T => {
@@ -56,6 +60,8 @@ export function attachHud(handlers: HudHandlers): Hud {
   const tour = element('tour', HTMLButtonElement)
   tour.addEventListener('click', handlers.onTour)
   element('photo', HTMLButtonElement).addEventListener('click', handlers.onPhoto)
+  const soundButton = element('sound', HTMLButtonElement)
+  soundButton.addEventListener('click', handlers.onSound)
   tune.addEventListener('click', () => {
     panel.hidden = !panel.hidden
     tune.setAttribute('aria-pressed', String(!panel.hidden))
@@ -93,6 +99,10 @@ export function attachHud(handlers: HudHandlers): Hud {
       fly.textContent = flying ? 'Land' : 'Fly'
       fly.setAttribute('aria-pressed', String(flying))
       document.body.classList.toggle('flying', flying)
+    },
+    sounding: (on) => {
+      soundButton.setAttribute('aria-pressed', String(on))
+      soundButton.setAttribute('aria-label', on ? 'Sound off' : 'Sound on')
     },
     touring: (touring) => {
       tour.setAttribute('aria-pressed', String(touring))

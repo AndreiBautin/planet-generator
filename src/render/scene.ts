@@ -22,6 +22,7 @@ import { cloudDataOf, cloudsFromTexture, cloudsSeenFrom } from './clouds'
 import { fromPalette } from './colour'
 import { buildHeavens, type Heavens } from './heavens'
 import { coverAt, Rain } from './rain'
+import { Soundscape } from './sound'
 import { Lightning, rainShafts, SHAFT_LIGHT } from './weather'
 import {
   DETAIL_CLOUD_SPIN,
@@ -78,6 +79,8 @@ export interface Scene {
   readonly capture: () => Promise<Blob | null>
   /** The three.js scene itself, for the development recorder to inspect. */
   readonly root: THREE.Scene
+  /** Sound on or off (sound.ts), from inside a press; says which it is now. */
+  readonly toggleSound: () => boolean
   /** Where the sun is, as a direction in the planet's own frame, as it is turned now. */
   readonly sunInPlanet: () => Vec3
   readonly dispose: () => void
@@ -367,6 +370,13 @@ export function startScene(
   // Rain around the eye where the cloud over it is heavy, while flying low.
   const rain = new Rain()
   const lightning = new Lightning()
+  const sound = new Soundscape()
+  let heardStrikes = 0
+  let soundFrame = 0
+  let coast = 0
+  const lastEye = new THREE.Vector3()
+  let lastEyeAt = 0
+  let speed = 0
   scene.add(rain.object)
   const rainEye = new THREE.Vector3()
 
@@ -761,7 +771,8 @@ export function startScene(
       DETAIL_NORMAL_MATRIX.value.getNormalMatrix(modelView)
       cloudsSeenFrom(shown.clouds, camera.position.length(), stage.scale, stage.clouds)
       shown.terrain.update(inPlanetFrame(camera.position, turn, stage.scale), viewCone(turn))
-      rain.update(rainEye.copy(camera.position), rainOver(shown.clouds, turn))
+      const shower = rainOver(shown.clouds, turn)
+      rain.update(rainEye.copy(camera.position), shower)
       // Lightning in a storm near the eye, lighting the land a moment.
       const held = cloudDataOf(shown.clouds)
       const above = camera.position.length() / stage.scale - 1
@@ -773,6 +784,23 @@ export function startScene(
         held?.width ?? 0,
       )
       skylight.intensity += flash * 2.5
+      if (sound.playing) {
+        // How fast the eye goes, smoothed, and how much coast is under it,
+        // read every few frames: sea and land both within a short way.
+        const dt = Math.max(1e-3, (now - lastEyeAt) / 1000)
+        const moved = camera.position.distanceTo(lastEye) / stage.scale / dt
+        speed += (Math.min(moved, 0.2) - speed) * Math.min(1, dt * 3)
+        lastEye.copy(camera.position)
+        lastEyeAt = now
+        soundFrame += 1
+        if (soundFrame % 12 === 0)
+          coast = coastAround(shown.world, inPlanetFrame(camera.position, turn, 1))
+        sound.update({ speed, above, coast, rain: shower }, now / 1000)
+        if (lightning.strikes !== heardStrikes) {
+          heardStrikes = lightning.strikes
+          sound.thunder(lightning.lastAngle)
+        }
+      }
     }
     if (composer === undefined) renderer.render(scene, camera)
     else composer.render()
@@ -817,6 +845,7 @@ export function startScene(
     },
     step: tick,
     root: scene,
+    toggleSound: () => sound.toggle(),
     sunInPlanet: () => inPlanetFrame(sunDirection, lastTurn, 1),
     capture: () =>
       new Promise((resolve) => {
@@ -925,6 +954,37 @@ function treeColours(world: Planet): { conifer: THREE.Color; broadleaf: THREE.Co
     broadleaf: lush.clone().multiplyScalar(1.05),
     conifer: lush.clone().multiply(new THREE.Color(0.75, 0.9, 0.85)),
   }
+}
+
+/** How much of the ground round a point is coast, 0 to 1: sea and land both within a short way. */
+function coastAround(world: Planet, eye: Vec3): number {
+  const length = Math.hypot(...eye) || 1
+  const u: Vec3 = [eye[0] / length, eye[1] / length, eye[2] / length]
+  const side: Vec3 = Math.abs(u[1]) < 0.9 ? [0, 1, 0] : [1, 0, 0]
+  const a: Vec3 = [
+    u[1] * side[2] - u[2] * side[1],
+    u[2] * side[0] - u[0] * side[2],
+    u[0] * side[1] - u[1] * side[0],
+  ]
+  const al = Math.hypot(...a) || 1
+  const e1: Vec3 = [a[0] / al, a[1] / al, a[2] / al]
+  const e2: Vec3 = [
+    u[1] * e1[2] - u[2] * e1[1],
+    u[2] * e1[0] - u[0] * e1[2],
+    u[0] * e1[1] - u[1] * e1[0],
+  ]
+  let sea = 0
+  const samples = 9
+  for (let k = 0; k < samples; k += 1) {
+    const reach = k === 0 ? 0 : 0.012
+    const angle = (k / (samples - 1)) * Math.PI * 2
+    const x = u[0] + (e1[0] * Math.cos(angle) + e2[0] * Math.sin(angle)) * reach
+    const y = u[1] + (e1[1] * Math.cos(angle) + e2[1] * Math.sin(angle)) * reach
+    const z = u[2] + (e1[2] * Math.cos(angle) + e2[2] * Math.sin(angle)) * reach
+    if (surfaceAt(world, x, y, z).height < 0) sea += 1
+  }
+  const share = sea / samples
+  return Math.min(1, share * (1 - share) * 4)
 }
 
 /** Hand the rings' bands to the ground, for the shadow they cast; none, for a world without. */

@@ -126,6 +126,9 @@ const hud = attachHud({
   onPhoto: () => {
     takePicture()
   },
+  onSound: () => {
+    hud.sounding(scene.toggleSound())
+  },
   onDials: (next) => {
     dials = next
     // Replaced rather than pushed: a dial dragged across its range is one

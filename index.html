@@ -58,8 +58,8 @@
         top: max(16px, env(safe-area-inset-top));
         left: var(--gutter);
         right: var(--gutter);
-        /* Clear of the picture button in the top-right corner. */
-        padding-right: 56px;
+        /* Clear of the sound and picture buttons in the top-right corner. */
+        padding-right: 114px;
         pointer-events: none;
         text-shadow: 0 1px 12px rgba(0, 0, 0, 0.8);
       }
@@ -98,6 +98,23 @@
         display: grid;
         place-items: center;
       }
+      /* Sound sits beside the picture button: off until pressed. */
+      .sound {
+        position: fixed;
+        top: max(16px, env(safe-area-inset-top));
+        right: calc(var(--gutter) + 58px);
+        width: 48px;
+        padding: 0;
+        display: grid;
+        place-items: center;
+      }
+      .sound .waves,
+      .sound[aria-pressed='true'] .mute {
+        display: none;
+      }
+      .sound[aria-pressed='true'] .waves {
+        display: inline;
+      }
       /* A shutter's blink when a picture is taken: once, fast, never a loop. */
       .flash {
         position: fixed;
@@ -124,6 +141,7 @@
       }
       /* Touring, the chrome steps back so the view is the show. */
       .touring .title,
+      .touring .sound,
       .touring .photo {
         opacity: 0.35;
         transition: opacity 0.6s;
@@ -345,6 +363,33 @@
           stroke-linejoin="round"
         />
         <circle cx="12" cy="13" r="3.6" fill="none" stroke="currentColor" stroke-width="1.6" />
+      </svg>
+    </button>
+    <button type="button" class="sound" id="sound" aria-pressed="false" aria-label="Sound on">
+      <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
+        <path
+          d="M4 9.5h3.5L12 6v12l-4.5-3.5H4z"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.6"
+          stroke-linejoin="round"
+        />
+        <path
+          class="waves"
+          d="M15.5 9a4 4 0 0 1 0 6M18 7a7 7 0 0 1 0 10"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.6"
+          stroke-linecap="round"
+        />
+        <path
+          class="mute"
+          d="M15.5 9.5l5 5M20.5 9.5l-5 5"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.6"
+          stroke-linecap="round"
+        />
       </svg>
     </button>
     <div class="flash" id="flash" aria-hidden="true"></div>
