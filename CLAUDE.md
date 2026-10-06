@@ -382,3 +382,28 @@ alone. Share sheet where it takes files, a download otherwise.
 **Five buttons fit a 375-pixel phone only with the narrow-screen gap and
 padding** in `index.html`; a sixth needs a different layout, not less
 padding.
+
+## Measuring the ground's lateness
+
+`recorder.terrain()` reports how many wanted leaves are drawn coarser
+than asked and how near the nearest is; `recorder.root` is the three.js
+scene, for bisecting what draws a given pixel (collapse half the patches
+with `scale`, `recorder.step(0)`, read the pixel back). **Measure at
+real-time pace** (a 33 ms sleep per 33 ms step): at 3–8 ms the workers
+are starved and a coarse stand-in close up — a flat snowy lid on a
+stretched rock face, a square of land in the shallows — looks like a bug
+in whatever was last changed. At real pace on a desktop, nothing within
+0.02 of the eye is ever drawn coarse, and within 0.04 in about a tenth of
+frames.
+
+- **Stitch is a band, not an edge row**: a finer patch beside a coarser
+  one eases into the coarse shape over a quarter of its width, so a
+  stand-in meets its finer neighbours without a straight seam.
+- **A dry vertex holds the water sheet just under its own ground** (`DRY`
+  in patch-data), and the sheet runs one vertex past every shore —
+  sea included — level. At sea level, a plateau lake's sheet dived to the
+  sea's height and could stand out of the hillside below.
+- **Rivers carve through snow**; only their water is withheld there.
+  Skipped on snow, the bed stopped dead at the snow line.
+- **The cloud tops fade at grazing angles**: edge-on, two shells read as
+  a slab with its sides missing.

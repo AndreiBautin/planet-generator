@@ -4,7 +4,16 @@ import type { Planet } from '@/generation/planet'
 
 import type { Builder } from '../builder'
 import { SEA_RADIUS } from '../water'
-import { childrenOf, keyOf, neighboursOf, parentOf, ROOTS, type PatchKey, type Vec3 } from './cube'
+import {
+  childrenOf,
+  keyOf,
+  neighboursOf,
+  parentOf,
+  patchAngle,
+  ROOTS,
+  type PatchKey,
+  type Vec3,
+} from './cube'
 import { aheadOf, ancestorAt, centreOf, selectLeaves, type LodParams, type ViewCone } from './lod'
 import { featureMaterial, featuresFor } from './feature-models'
 import { patchIndex, quarterIndex, type PatchData } from './patch-data'
@@ -219,6 +228,23 @@ export class Terrain {
     }
     const drawn = new Map<string, number>()
     for (const root of ROOTS) cover(root, drawn)
+    // For the recorder: how many of the leaves wanted are drawn coarser than
+    // asked, and how near the nearest is, so lateness is measured, not guessed.
+    let standIns = 0
+    let nearest = Number.POSITIVE_INFINITY
+    for (const leaf of leaves) {
+      if (this.entries.get(keyOf(leaf))?.node !== undefined) continue
+      standIns += 1
+      const c = centreOf(leaf)
+      const gap =
+        Math.hypot(camera[0] - c[0], camera[1] - c[1], camera[2] - c[2]) -
+        patchAngle(leaf.level) * 0.75
+      nearest = Math.min(nearest, Math.max(0, gap))
+    }
+    TERRAIN_STATS.standIns = standIns
+    TERRAIN_STATS.nearestStandIn = nearest
+    TERRAIN_STATS.pending = this.waiting
+    TERRAIN_STATS.coarsen = this.coarsen
     const shown = new Set(drawn.keys())
     // What is drawn, and everything above it, stays held: a patch's parents
     // are its stand-ins, and evicting them as idle left nothing to fall back
@@ -307,13 +333,29 @@ export class Terrain {
       const side = this.options.segments + 1
       const grid = side * side
       values.fill(0)
+      // Not the edge row alone but a band in from it, easing from the
+      // coarse shape at the edge to the patch's own a quarter of the way in.
+      // Bent at the edge only, the two levels met at a straight line, and
+      // where they disagree most — a flat coast, land in one and shallows in
+      // the other — that line drew a square of land standing in the sea.
+      const band = Math.max(2, (side - 1) / 4)
+      const ease = (distance: number): number => {
+        const t = Math.min(1, distance / band)
+        return 1 - t * t * (3 - 2 * t)
+      }
+      for (let j = 0; j < side; j += 1) {
+        for (let i = 0; i < side; i += 1) {
+          const reach = [j, side - 1 - j, i, side - 1 - i]
+          let weight = 0
+          reach.forEach((distance, edge) => {
+            const on = edges[edge] ?? 0
+            if (on > 0 && distance < band) weight = Math.max(weight, on * ease(distance))
+          })
+          values[j * side + i] = weight
+        }
+      }
       for (let k = 0; k < side; k += 1) {
-        const along = [k, (side - 1) * side + k, k * side, k * side + side - 1]
-        along.forEach((vertex, edge) => {
-          const weight = edges[edge] ?? 0
-          values[vertex] = Math.max(values[vertex] ?? 0, weight)
-          values[grid + edge * side + k] = weight
-        })
+        for (let edge = 0; edge < 4; edge += 1) values[grid + edge * side + k] = edges[edge] ?? 0
       }
       entry.stitch.needsUpdate = true
     }
@@ -473,9 +515,8 @@ export class Terrain {
         const y = patch.positions[vertex * 3 + 1] ?? 0
         const z = patch.positions[vertex * 3 + 2] ?? 1
         const length = Math.hypot(x, y, z) || 1
-        // The water's own surface here: the sea, a lake, or a river (run on
-        // one vertex past its edge, level, by patch-data). Anywhere else the
-        // sea's level, under the land, as the sea's sheet always was.
+        // The water's own surface here: the sea, a lake, or a river, and past
+        // their shores a sheet held under the dry ground (patch-data.ts).
         const level = patch.water[vertex] ?? 0
         const surface = level > 0 ? level : SEA_RADIUS
         inland[vertex] = level > SEA_RADIUS + 1e-6 ? 1 : 0
@@ -547,6 +588,14 @@ export class Terrain {
       this.sliding.delete(entry)
     }
   }
+}
+
+/** What the last frame's selection looked like, for the development recorder to read. */
+export const TERRAIN_STATS = {
+  standIns: 0,
+  nearestStandIn: Number.POSITIVE_INFINITY,
+  pending: 0,
+  coarsen: 1,
 }
 
 /** How far ahead the ground is asked for, in frames at the eye's present pace (about 1.5 s at 30 fps). */

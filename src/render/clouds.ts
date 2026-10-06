@@ -50,7 +50,11 @@ const SHAPES: Readonly<Record<Layer, string>> = {
           diffuseColor.rgb *= (0.74 + billow * 0.26) * (1.0 - smoothstep(0.6, 1.0, cover) * 0.18);`,
   tops: /* glsl */ `
           float shaped = smoothstep(0.52, 0.9, cover + (billow - 0.5) * 0.6);
-          diffuseColor.a *= shaped;
+          // Only from above. Seen edge-on, from a glide near the clouds'
+          // height, the two shells read as a slab with its sides missing,
+          // the gaps in the billows hanging down it as streaks of sky.
+          float looking = abs(dot(normalize(vViewPosition), normalize(vNormal)));
+          diffuseColor.a *= shaped * smoothstep(0.12, 0.35, looking);
           // Sunlit tops: the brightest thing in the sky after the sun.
           diffuseColor.rgb *= 1.02 + billow * 0.12;`,
   cirrus: /* glsl */ `

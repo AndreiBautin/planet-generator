@@ -70,6 +70,8 @@ export interface Scene {
    * not kept between frames.
    */
   readonly capture: () => Promise<Blob | null>
+  /** The three.js scene itself, for the development recorder to inspect. */
+  readonly root: THREE.Scene
   readonly dispose: () => void
 }
 
@@ -767,6 +769,7 @@ export function startScene(
       return { position, heading: alongTheLand(shown.world, position, unit(heading)) }
     },
     step: tick,
+    root: scene,
     capture: () =>
       new Promise((resolve) => {
         tick()

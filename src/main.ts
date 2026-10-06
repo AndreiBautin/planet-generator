@@ -11,6 +11,7 @@ import { startScene } from '@/render/scene'
 import { logger, setLogLevel } from '@/shared/logger'
 import { attachGestures } from '@/ui/controls'
 import { attachHud } from '@/ui/hud'
+import { TERRAIN_STATS } from '@/render/patches/terrain'
 import { createRig } from '@/ui/rig'
 import { savePicture, shareLink } from '@/ui/share'
 
@@ -216,6 +217,10 @@ if (recording) {
       nudge: (turn: number, climb: number) => {
         rig.nudge(turn, climb)
       },
+      /** The three.js scene, to inspect what is drawn. */
+      root: scene.root,
+      /** The terrain's last selection: stand-ins, the nearest, patches pending. */
+      terrain: () => ({ ...TERRAIN_STATS }),
       /** Where Fly would start the glide now. */
       diveFrom: () => scene.diveFrom(),
       /** Start the glide from a point of the planet, heading this way (its own frame). */

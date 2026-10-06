@@ -38,8 +38,8 @@ export interface PatchData {
   readonly hasSea: boolean
   /**
    * How far from the centre the water's surface is at each vertex: the sea,
-   * a lake's level, or a river running a little below its banks; nought
-   * where there is no water.
+   * a lake's level, or a river running a little below its banks; past the
+   * shore, the sheet's height under the dry ground.
    */
   readonly water: Float32Array
   /**
@@ -75,6 +75,8 @@ export interface PatchData {
 }
 
 /** Vertices in a patch: the grid, then four edges' worth of skirt. */
+/** How far under its own ground a dry vertex holds the water's sheet, so it never shows. */
+const DRY = 0.0004
 /** How far fine relief lifts the ground, in surface-height units. */
 const FINE_RELIEF = 0.2
 /** Steepness (one minus the cosine of the slope) where rock starts and where it is all rock. */
@@ -152,9 +154,10 @@ export function samplePatch(planet: Planet, key: PatchKey, segments: number): Pa
   const ground = new Float32Array(vertexCount(segments) * 8)
   const water = new Float32Array(vertexCount(segments))
   const wetted = new Float32Array(side * side)
-  // Inland water's surface radius over the whole ring, borders included, so
-  // a shore at a patch's edge is read the same from both sides of it.
-  const inland = new Float32Array(ring * ring)
+  // Any water's surface radius — sea, lake or river — over the whole ring,
+  // borders included, so a shore at a patch's edge is read the same from
+  // both sides of it.
+  const wet = new Float32Array(ring * ring)
   // The planet's rivers and lakes, made once and shared by every patch
   // (generation/hydrology.ts). A molten world's lowland runs with lava, not water.
   const hydrology = planet.molten ? undefined : hydrologyOf(planet)
@@ -172,16 +175,23 @@ export function samplePatch(planet: Planet, key: PatchKey, segments: number): Pa
       let level = Number.NEGATIVE_INFINITY
       let river = 0
       if (surface.height < 0) level = 0
-      else if (hydrology !== undefined && surface.biome !== 'snow') {
+      else if (hydrology !== undefined) {
+        // Carved wherever the river runs, snow or not; only the water is
+        // withheld on snow, where a river lies frozen. Skipped on snow
+        // altogether, the bed stopped dead at the snow line, and the uncut
+        // snow stood over the cut channel as a white lid on a wall.
         const here = waterAt(planet, hydrology, [x, y, z], near)
         river = here.river
         bed = drawn - here.carve
-        if (here.river > 0.35) level = drawn - here.carve * 0.45
-        if (bed < here.lake) level = Math.max(level, here.lake)
+        if (surface.biome !== 'snow') {
+          if (here.river > 0.35) level = drawn - here.carve * 0.45
+          if (bed < here.lake) level = Math.max(level, here.lake)
+        }
       }
       const radius = 1 + liftOf(bed, planet.relief)
-      if (Number.isFinite(level) && surface.height >= 0)
-        inland[(j + 2) * ring + (i + 2)] = Math.max(SEA_RADIUS, 1 + liftOf(level, planet.relief))
+      if (Number.isFinite(level))
+        wet[(j + 2) * ring + (i + 2)] =
+          surface.height < 0 ? SEA_RADIUS : Math.max(SEA_RADIUS, 1 + liftOf(level, planet.relief))
       const at = ((j + 2) * ring + (i + 2)) * 3
       wide[at] = x * radius
       wide[at + 1] = y * radius
@@ -229,20 +239,32 @@ export function samplePatch(planet: Planet, key: PatchKey, segments: number): Pa
     }
   }
 
-  // The water's surface runs on one vertex past a lake's or river's edge,
-  // level, under the bank: the sheet then meets the ground where the two
-  // cross. Left to follow the ground there instead, it climbed the bank
-  // and stood out of it as a jagged wall.
+  // The water's surface runs on one vertex past any shore, level, under
+  // the bank: the sheet then meets the ground where the two cross. Left to
+  // follow the ground there it climbed the bank and stood out of it as a
+  // jagged wall. Never above the vertex's own ground: between a high lake
+  // and a lower river, the higher level would stand water on dry land.
+  // Further in, every dry vertex keeps the sheet just under its own ground
+  // (`DRY` below). At sea level, as it once was everywhere, a lake on a
+  // plateau dropped its sheet a long way down to the sea's height, and
+  // where the hill fell away faster than the sheet it stood out of the
+  // hillside as blue walls under a white lid of mirrored sky.
   for (let j = 0; j <= segments; j += 1) {
     for (let i = 0; i <= segments; i += 1) {
-      if ((water[j * side + i] ?? 0) > 0) continue
+      const vertex = j * side + i
+      if ((water[vertex] ?? 0) > 0) continue
       let spill = 0
       for (let dj = -1; dj <= 1; dj += 1) {
         for (let di = -1; di <= 1; di += 1) {
-          spill = Math.max(spill, inland[(j + 2 + dj) * ring + (i + 2 + di)] ?? 0)
+          spill = Math.max(spill, wet[(j + 2 + dj) * ring + (i + 2 + di)] ?? 0)
         }
       }
-      if (spill > 0) water[j * side + i] = spill
+      const ground = Math.hypot(
+        positions[vertex * 3] ?? 0,
+        positions[vertex * 3 + 1] ?? 0,
+        positions[vertex * 3 + 2] ?? 0,
+      )
+      water[vertex] = spill > 0 ? Math.min(spill, ground - DRY) : ground - DRY
     }
   }
 
