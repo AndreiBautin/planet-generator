@@ -837,3 +837,21 @@ not all one coast), up to 150 towns kept apart, the best sites largest.
   Puffs like the volcanic plumes, low and pale, gone from orbit.
 - **Found in the build worker** (`falls` job): it needs the drainage map,
   ~0.4 s when the page had to make its own.
+
+## Birds
+
+- **Where** (`generation/birds.ts`, tested): at most one flock to a cell of
+  the drainage map, decided by the cell and the seed alone, so a flock is
+  always over the same valley. Gulls over the sea, mostly near coasts; dark
+  land birds over the ground, fewer the drier it is. None on a molten
+  world or where the water would ice.
+- **Drawn** (`render/birds.ts`): a few triangles a bird — body and two long
+  narrow wings bent at the elbow (broad wings read as scraps of paper) —
+  instanced, every turn, bank, wingbeat and glide a function of time in the
+  vertex shader. Gulls white with black tips, beating slower and gliding
+  more; land birds near black, flying clear of the canopy. Gone to roost at
+  dusk.
+- **No popping**: the flocks are those of two rings of cells round the eye,
+  re-gathered only when the eye changes cell, each kept in its slot; a bird
+  fades out by 0.02 radii, well inside the rings' reach, so a flock joining
+  or leaving the set is never seen to. Nothing at all above 0.06.

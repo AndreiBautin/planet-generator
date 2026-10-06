@@ -27,6 +27,7 @@ import { auroraFor, auroraStrength } from './aurora'
 import { VALLEY_FOG } from './valley-fog'
 import { Embers, plumes, PLUME_SUN } from './volcanic'
 import { spray } from './waterfalls'
+import { Birds } from './birds'
 import { volcanoesOf } from '@/generation/volcanoes'
 import { cityLights } from './city-lights'
 import { CITY_GLOW_WIDTH } from './work'
@@ -419,6 +420,8 @@ export function startScene(
   scene.add(rain.object)
   const embers = new Embers()
   scene.add(embers.object)
+  const birds = new Birds()
+  scene.add(birds.object)
   const rainEye = new THREE.Vector3()
 
   const { quality, builder } = options
@@ -531,6 +534,7 @@ export function startScene(
       }
     }
     scene.add(next.terrain.group)
+    birds.setWorld(next.world)
     // Smoke from a molten world's peaks, turning with its ground.
     const smoke = plumes(next.world, volcanoesOf(next.world))
     if (smoke !== undefined) {
@@ -899,6 +903,11 @@ export function startScene(
       const shower = rainOver(shown.clouds, turn)
       rain.update(rainEye.copy(camera.position), shower)
       PLUME_SUN.value.copy(sunDirection)
+      birds.update(
+        inPlanetFrame(camera.position, turn, stage.scale),
+        shown.terrain.group.matrixWorld,
+        stage.scale,
+      )
       embers.update(
         rainEye,
         shown.world.molten
