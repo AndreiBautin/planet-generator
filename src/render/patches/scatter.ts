@@ -1,18 +1,12 @@
-import {
-  FEATURES,
-  featuresAt,
-  floorAt,
-  NOTHING,
-  type Feature,
-  type Growth,
-} from '@/generation/features'
+import { FEATURES, featuresAt, NOTHING, type Feature, type Growth } from '@/generation/features'
 import { groupingsAt } from '@/generation/grouping'
+import { hydrologyOf, waterAt } from '@/generation/hydrology'
 import { surfaceAt, type Planet, type Surface } from '@/generation/planet'
 import { hashSeed } from '@/generation/rng'
 
 import { fromPalette } from '../colour'
 import { SEA_RADIUS } from '../water'
-import { directionOn, patchUv, type PatchKey } from './cube'
+import { directionOn, patchAngle, patchUv, type PatchKey } from './cube'
 import { groundRadiusAt, groundRadiusWith } from './patch-data'
 
 /**
@@ -33,17 +27,46 @@ import { groundRadiusAt, groundRadiusWith } from './patch-data'
  * cacti into outcrops and stands, basalt columns into pavements. Ice floes
  * and cones lie where they fell.
  *
- * Features come in tiles of their own, patches at `SCATTER_LEVEL` asked for
- * near the camera whatever level the ground there is drawn at (see
- * flora.ts). Each stands on the true ground, which the drawn ground at that
- * distance follows to well within a feature's height; a floe floats on the
- * sea.
+ * Features ride in the ground's own patches, built with them in the same
+ * request, so a tree can never arrive after the ground it stands on — the
+ * way they once did in tiles of their own, springing up as the eye reached
+ * them. Every cell has a rank, a hash of the cell; a patch carries the
+ * cells ranked under its `keep` (`treesKept`), and the shader shows a
+ * feature only where its rank is under the density its distance allows.
+ * A coarse patch carries the few low ranks that can show as far away as
+ * it is ever drawn, its children those and more: the same trees, at the
+ * same spots, so a patch giving way to its children changes nothing.
+ *
+ * Only what stands — trees, cacti, spires, cones, floes. The floor's
+ * scrub and stone stay painted on the ground. Each stands on the true
+ * ground, which the drawn ground follows to well within a feature's
+ * height; a floe floats on the sea. None stands in a river or a lake.
  */
-export const SCATTER_LEVEL = 7
+export const TREE_LEVEL = 5
 /** Grid spacing on a face, in face coordinates (−1 to 1 across the face). */
 export const CELL = 0.0009
-/** Floats per feature: position (3), size, turn, colour (3). */
-export const STRIDE = 8
+/** Floats per feature: position (3), size, turn, colour (3), rank. */
+export const STRIDE = 9
+
+/**
+ * The share of cells a patch at `level` must carry. `reach` is the distance
+ * inside which every feature shows (the shader's density is
+ * `(reach / distance)²`); `lodScale` is segments × the loosest detail
+ * threshold the ground may be drawn at, so `angle / lodScale` is the
+ * nearest a patch of this level is ever drawn. The finest level carries
+ * everything, as nothing finer will take over from it.
+ */
+export function treesKept(
+  level: number,
+  maxLevel: number,
+  reach: number,
+  lodScale: number,
+): number {
+  if (reach <= 0 || level < TREE_LEVEL) return 0
+  if (level >= maxLevel) return 1
+  const nearest = patchAngle(level) / lodScale
+  return Math.min(1, (reach / nearest) ** 2)
+}
 
 export type Scatter = Readonly<Partial<Record<Feature, Float32Array>>>
 
@@ -94,8 +117,10 @@ function pick(growth: Growth, groups: Groupings, roll: number): Feature | undefi
   return undefined
 }
 
-export function scatterPatch(planet: Planet, key: PatchKey): Scatter {
-  if (key.level < SCATTER_LEVEL) return {}
+export function scatterPatch(planet: Planet, key: PatchKey, keep = 1): Scatter {
+  if (key.level < TREE_LEVEL || keep <= 0) return {}
+  const hydrology = planet.molten ? undefined : hydrologyOf(planet)
+  const near = new Map<number, readonly number[]>()
   const [u0, v0] = patchUv(key, 0, 0)
   const [u1, v1] = patchUv(key, 1, 1)
   const word = hashSeed(`${planet.seed}/features`)[0]
@@ -130,13 +155,14 @@ export function scatterPatch(planet: Planet, key: PatchKey): Scatter {
     here: number,
     surface: Surface,
     rolls: readonly [number, number, number],
+    rank: number,
   ): void => {
     const [a, b, c] = rolls
     const size = sizeOf(feature, a)
     const colour = colourOf(feature, palette, surface, planet.molten, b, c)
     const [x, y, z] = direction
     const radius = radiusOf(feature, here, size, surface)
-    found[feature].push(x * radius, y * radius, z * radius, size, c * Math.PI * 2, ...colour)
+    found[feature].push(x * radius, y * radius, z * radius, size, c * Math.PI * 2, ...colour, rank)
   }
 
   // The ground's height at the cell corners, read once and shared by the
@@ -156,6 +182,9 @@ export function scatterPatch(planet: Planet, key: PatchKey): Scatter {
   // the edge two patches share belongs to exactly one of them.
   for (let j = Math.ceil(v0 / CELL); j * CELL < v1; j += 1) {
     for (let i = Math.ceil(u0 / CELL); i * CELL < u1; i += 1) {
+      // Ranked first, as it costs a hash: a coarse patch skips nearly all.
+      const rank = cellHash(word, key.face, i, j, 13)
+      if (rank >= keep) continue
       const u = (i + 0.1 + cellHash(word, key.face, i, j, 1) * 0.8) * CELL
       const v = (j + 0.1 + cellHash(word, key.face, i, j, 2) * 0.8) * CELL
       const direction = directionOn(key.face, u, v)
@@ -164,6 +193,10 @@ export function scatterPatch(planet: Planet, key: PatchKey): Scatter {
       const atSea = surface.height < 0
       // Open water carries nothing: skip the slope sampling there.
       if (atSea && featuresAt(planet, surface, 0) === NOTHING) continue
+      if (!atSea && hydrology !== undefined) {
+        const water = waterAt(planet, hydrology, direction, near)
+        if (water.river > 0.1 || water.lake > surface.height) continue
+      }
 
       const here = groundRadiusWith(planet, x, y, z, surface)
       let steep = 0
@@ -196,25 +229,18 @@ export function scatterPatch(planet: Planet, key: PatchKey): Scatter {
         cellHash(word, key.face, i, j, 3),
       )
       if (standing !== undefined) {
-        place(standing, direction, here, surface, [
-          cellHash(word, key.face, i, j, 4),
-          cellHash(word, key.face, i, j, 5),
-          cellHash(word, key.face, i, j, 6),
-        ])
-      }
-      if (atSea) continue
-
-      const cover = pick(floorAt(planet, surface, steep), groups, cellHash(word, key.face, i, j, 7))
-      if (cover !== undefined) {
-        // The floor's own spot in the cell, so it is not under the trunk.
-        const fu = (i + 0.1 + cellHash(word, key.face, i, j, 8) * 0.8) * CELL
-        const fv = (j + 0.1 + cellHash(word, key.face, i, j, 9) * 0.8) * CELL
-        const at = directionOn(key.face, fu, fv)
-        place(cover, at, groundRadiusAt(planet, at), surface, [
-          cellHash(word, key.face, i, j, 10),
-          cellHash(word, key.face, i, j, 11),
-          cellHash(word, key.face, i, j, 12),
-        ])
+        place(
+          standing,
+          direction,
+          here,
+          surface,
+          [
+            cellHash(word, key.face, i, j, 4),
+            cellHash(word, key.face, i, j, 5),
+            cellHash(word, key.face, i, j, 6),
+          ],
+          rank,
+        )
       }
     }
   }

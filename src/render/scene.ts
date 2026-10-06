@@ -369,10 +369,8 @@ export function startScene(
         peak: world.relief * 1.1 + 0.005,
         inFlight: quality.inFlight,
         cached: quality.patchCache,
-        flora: {
-          range: quality.featureRange,
-          inFlight: quality.featureInFlight,
-          cached: 480,
+        features: {
+          reach: quality.featureRange,
           stone: world.molten ? ground.basalt : ground.stone,
         },
       },

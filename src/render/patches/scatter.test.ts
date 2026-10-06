@@ -7,7 +7,9 @@ import { FEATURES } from '@/generation/features'
 import { childrenOf, type PatchKey } from './cube'
 import { groundRadiusAt } from './patch-data'
 import { SEA_RADIUS } from '../water'
-import { SCATTER_LEVEL, scatterPatch, STRIDE, type Scatter } from './scatter'
+import { scatterPatch, STRIDE, TREE_LEVEL, treesKept, type Scatter } from './scatter'
+
+const SCATTER_LEVEL = TREE_LEVEL + 2
 
 const parsed = parseSeed('2257afq')
 if (parsed === undefined) throw new Error('test seed must parse')
@@ -45,7 +47,7 @@ const key = landPatch()
 
 describe('scatterPatch', () => {
   it('scatters nothing on a coarse patch', () => {
-    expect(scatterPatch(planet, { face: 4, level: SCATTER_LEVEL - 1, x: 3, y: 3 })).toEqual({})
+    expect(scatterPatch(planet, { face: 4, level: TREE_LEVEL - 1, x: 3, y: 3 })).toEqual({})
   })
 
   it('is the same plants every time', () => {
@@ -88,5 +90,29 @@ describe('scatterPatch', () => {
     }
     expect(sizes.size).toBeGreaterThan(3)
     expect(shades.size).toBeGreaterThan(3)
+  })
+
+  it('carries in a coarse patch only trees its children carry too, at the same spots', () => {
+    // What makes a patch giving way to its children invisible: the coarse
+    // patch's trees are the low-ranked few of the same trees.
+    const coarse = plants(scatterPatch(planet, key, 0.3))
+    const fine = new Set(
+      childrenOf(key).flatMap((child) => plants(scatterPatch(planet, child, 0.6))),
+    )
+    expect(coarse.length).toBeGreaterThan(0)
+    for (const plant of coarse) expect(fine.has(plant)).toBe(true)
+    expect(fine.size).toBeGreaterThan(coarse.length)
+  })
+
+  it('asks a finer level for at least as many trees as a coarser one, and the finest for all', () => {
+    let last = 0
+    for (let level = TREE_LEVEL; level <= 9; level += 1) {
+      const keep = treesKept(level, 9, 0.012, 32 * 0.006 * 3)
+      expect(keep).toBeGreaterThanOrEqual(last)
+      last = keep
+    }
+    expect(last).toBe(1)
+    expect(treesKept(TREE_LEVEL - 1, 9, 0.012, 0.5)).toBe(0)
+    expect(treesKept(9, 9, 0, 0.5)).toBe(0)
   })
 })

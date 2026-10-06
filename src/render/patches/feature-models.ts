@@ -3,7 +3,7 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 
 import { FEATURES, type Feature } from '@/generation/features'
 
-import { DETAIL_NORMAL_MATRIX, DETAIL_RANGE, DETAIL_TIME, NOISE } from '../detail'
+import { DETAIL_NORMAL_MATRIX, DETAIL_RANGE, NOISE } from '../detail'
 import { HAZE_SUN } from '../haze'
 import type { GroundLayer } from '../textures'
 import { STRIDE, type Scatter } from './scatter'
@@ -347,23 +347,19 @@ const modelsFor = (feature: Feature): THREE.BufferGeometry[] => {
   return made
 }
 
-/** How long a tile's features take to grow up out of the ground, in seconds. */
-export const GROW_SECONDS = 0.8
-
 /**
- * The material for one tile's features. One per tile rather than one for
- * all, because each carries the time its tile arrived: its features grow
- * up out of the ground over `GROW_SECONDS` rather than appearing, which is
- * what made a tile arriving late read as a glitch. The program is shared —
- * the cache key is the same — so a tile costs a few uniforms, not a compile.
+ * The one material every patch's features share. What shows is decided per
+ * instance in the vertex shader, from the instance's `rank` (scatter.ts)
+ * against the density its distance allows, `(reach / distance)²`: near the
+ * eye every feature stands, and further out fewer, each going at its own
+ * rank, over a short stretch of distance, so a wood thins towards the
+ * horizon a tree at a time and nothing switches as a patch changes level.
  *
- * Each instance also shrinks into the ground over the last stretch of the
- * feature range, so a wood thins out towards the horizon rather than
- * stopping at a line where the tiles do; stone wears the ground's stone
- * photograph; and a crown is darker underneath than on top, which is most
- * of what makes a tree read as a solid thing rather than a green blob.
+ * Stone wears the ground's stone photograph, and a crown is darker
+ * underneath than on top, which is most of what makes a tree read as a
+ * solid thing rather than a green blob.
  */
-export function featureMaterial(born: number, stone: GroundLayer): THREE.MeshStandardMaterial {
+export function featureMaterial(stone: GroundLayer): THREE.MeshStandardMaterial {
   const material = new THREE.MeshStandardMaterial({
     vertexColors: true,
     roughness: 0.88,
@@ -371,47 +367,28 @@ export function featureMaterial(born: number, stone: GroundLayer): THREE.MeshSta
     // The conifers' tiers are open cones, seen from beneath as often as above.
     side: THREE.DoubleSide,
   })
-  // When the tile was last made visible after a while hidden (flora.ts).
-  const shownAt = { value: -1e9 }
-  material.userData.shownAt = shownAt
   material.onBeforeCompile = (shader) => {
     shader.uniforms.featureRange = DETAIL_RANGE
-    shader.uniforms.featureNow = DETAIL_TIME
-    shader.uniforms.featureBorn = { value: born }
-    shader.uniforms.featureShownAt = shownAt
     shader.uniforms.featureStone = stone.color
     shader.uniforms.featureStoneNormal = stone.normal
     shader.uniforms.featureStoneMean = stone.mean
     shader.uniforms.featureNormalMatrix = DETAIL_NORMAL_MATRIX
     shader.uniforms.hazeSun = HAZE_SUN
     shader.vertexShader =
-      'uniform float featureRange;\nuniform float featureNow;\nuniform float featureBorn;\nuniform float featureShownAt;\nattribute float stony;\nvarying float vFeatureFade;\nvarying float vFeatureSmall;\nvarying vec3 vFeatureUp;\nvarying vec3 vFeaturePlanet;\nvarying vec3 vFeatureNormal;\nvarying float vFeatureStony;\nvarying float vFeatureHeight;\n' +
+      'uniform float featureRange;\nattribute float stony;\nattribute float rank;\nvarying float vFeatureFade;\nvarying float vFeatureSmall;\nvarying vec3 vFeatureUp;\nvarying vec3 vFeaturePlanet;\nvarying vec3 vFeatureNormal;\nvarying float vFeatureStony;\nvarying float vFeatureHeight;\n' +
       shader.vertexShader.replace(
         '#include <begin_vertex>',
         /* glsl */ `#include <begin_vertex>
         {
           vec3 featureFoot = (instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0)).xyz;
           float featureGap = length((modelViewMatrix * vec4(featureFoot, 1.0)).xyz);
-          float grown = smoothstep(0.0, ${GROW_SECONDS.toFixed(2)}, featureNow - featureBorn);
-          // Out at the edge of the range a wood thins out a whole tree at a
-          // time, each with its own fixed threshold from where it stands, so
-          // nothing flickers as the eye moves. Shrinking every tree read as
-          // dark specks, and a per-pixel dither read as static.
-          vFeatureFade = 1.0 - smoothstep(featureRange * 0.55, featureRange, featureGap);
-          // A tile that comes into view inside the range brings its features
-          // in over a moment, each at its own threshold below, rather than
-          // all at once.
-          vFeatureFade *= smoothstep(0.0, 0.6, featureNow - featureShownAt);
-          vec3 featureSeed = fract(featureFoot * 7919.17);
-          featureSeed += dot(featureSeed, featureSeed.yzx + 19.19);
-          float featureKeep = fract((featureSeed.x + featureSeed.y) * featureSeed.z);
-          // Each grows in over a short stretch of distance from its own
-          // threshold, rather than switching on: switched, every tree and
-          // rock in the band popped into being as the eye crossed its line,
-          // which read as things appearing as you flew over them.
-          float featureStart = featureKeep * 0.85;
-          float featureShown = smoothstep(featureStart, featureStart + 0.15, vFeatureFade);
-          transformed *= grown * featureShown;
+          // Under its rank's density it stands; it grows in over the next
+          // third of the density, so crossing the line is a tree growing,
+          // not one appearing. Every patch that carries it agrees.
+          float featureDensity = min(1.0, pow(featureRange / max(featureGap, 1e-6), 2.0));
+          float featureShown = featureRange > 0.0 ? smoothstep(rank, rank * 1.3 + 1e-4, featureDensity) : 0.0;
+          vFeatureFade = featureShown;
+          transformed *= featureShown;
           // How small it stands on screen: its height over its distance, as
           // a share of the view's height. A tree a few pixels tall cannot
           // hold shading detail still while it moves — its dark underside,
@@ -512,7 +489,7 @@ const size = new THREE.Vector3()
 const matrix = new THREE.Matrix4()
 const tint = new THREE.Color()
 
-/** The instanced meshes for a tile's features: one per shape of each kind present. */
+/** The instanced meshes for a patch's features: one per shape of each kind present. */
 export function featuresFor(scatter: Scatter, material: THREE.Material): THREE.InstancedMesh[] {
   const meshes: THREE.InstancedMesh[] = []
   for (const feature of FEATURES) {
@@ -527,7 +504,19 @@ export function featuresFor(scatter: Scatter, material: THREE.Material): THREE.I
     shapes.forEach((shape, which) => {
       const members = byShape[which] ?? []
       if (members.length === 0) return
-      const mesh = new THREE.InstancedMesh(shape, material, members.length)
+      // A geometry of its own over the shared model's attributes, to carry
+      // the instances' ranks; freed with the patch (terrain.ts), which
+      // only means the model is uploaded again for the next.
+      const geometry = new THREE.BufferGeometry()
+      for (const [name, attribute] of Object.entries(shape.attributes))
+        geometry.setAttribute(name, attribute)
+      geometry.setIndex(shape.index)
+      const ranks = new Float32Array(members.length)
+      members.forEach((at, slot) => {
+        ranks[slot] = data[at * STRIDE + 8] ?? 1
+      })
+      geometry.setAttribute('rank', new THREE.InstancedBufferAttribute(ranks, 1))
+      const mesh = new THREE.InstancedMesh(geometry, material, members.length)
       mesh.castShadow = true
       mesh.receiveShadow = true
       members.forEach((at, slot) => {

@@ -6,8 +6,10 @@ import type { Builder } from '../builder'
 import { SEA_RADIUS } from '../water'
 import { childrenOf, keyOf, neighboursOf, parentOf, ROOTS, type PatchKey, type Vec3 } from './cube'
 import { aheadOf, ancestorAt, centreOf, selectLeaves, type LodParams, type ViewCone } from './lod'
-import { Flora, type FloraOptions } from './flora'
+import { featureMaterial, featuresFor } from './feature-models'
 import { patchIndex, quarterIndex, type PatchData } from './patch-data'
+import { treesKept, type Scatter } from './scatter'
+import type { GroundLayer } from '../textures'
 import { DETAIL_TIME, TERRAIN_MORPH } from '../detail'
 
 /**
@@ -17,8 +19,13 @@ import { DETAIL_TIME, TERRAIN_MORPH } from '../detail'
  * so there is always a planet to draw, however coarse.
  */
 export interface TerrainOptions extends LodParams {
-  /** The features standing on the ground near the camera. */
-  readonly flora: FloraOptions
+  /** What stands on the ground: trees and the like (scatter.ts). */
+  readonly features: {
+    /** Inside this distance, in planet radii, every feature stands; nought for none. */
+    readonly reach: number
+    /** The ground's stone photograph, which rock and columns wear. */
+    readonly stone: GroundLayer
+  }
   /** Requests out at once; more is faster to fill and slower to change its mind. */
   readonly inFlight: number
   /** Patches kept after they stop being drawn, for flying back over them. */
@@ -68,7 +75,7 @@ export class Terrain {
   private readonly builder: Builder
   private readonly options: TerrainOptions
   private readonly materials: TerrainMaterials
-  private readonly flora: Flora
+  private readonly featureMaterial: THREE.Material
 
   constructor(
     world: Planet,
@@ -80,10 +87,8 @@ export class Terrain {
     this.builder = builder
     this.options = options
     this.materials = materials
-    // Features ride with the ground: a child of its group, they turn with the
-    // planet and grow with it as it is born.
-    this.flora = new Flora(world, builder, options.flora)
-    this.group.add(this.flora.group)
+    // Features ride in the ground's own patches (scatter.ts), one material for all.
+    this.featureMaterial = featureMaterial(options.features.stone)
     // One array of triangles for every patch; each geometry wraps it in an
     // attribute of its own, because disposing a geometry frees its index's
     // GPU buffer and a shared attribute would be freed from under the rest.
@@ -108,7 +113,6 @@ export class Terrain {
   update(camera: Vec3, view?: ViewCone): void {
     if (this.disposed) return
     this.frame += 1
-    this.flora.update(camera, view)
     // The detail asked for is what the builders can keep up with. Fine
     // ground that lands after the eye has arrived is ground sharpening
     // under you as you fly; a picture a step coarser that is all there is
@@ -347,7 +351,7 @@ export class Terrain {
     this.materials.ground.dispose()
     this.materials.groundDepth.dispose()
     this.materials.water.dispose()
-    this.flora.dispose()
+    this.featureMaterial.dispose()
   }
 
   private request(key: PatchKey, urgency = 0): void {
@@ -369,13 +373,22 @@ export class Terrain {
     entry.requested = true
     this.entries.set(name, entry)
     this.waiting += 1
+    // Carried for the nearest this level is ever drawn, at the loosest the
+    // governor lets the detail go, so no distance it is drawn at asks for a
+    // feature it lacks.
+    const keep = treesKept(
+      key.level,
+      this.options.maxLevel,
+      this.options.features.reach,
+      this.options.segments * this.options.threshold * COARSEST,
+    )
     void this.builder
-      .patch(this.world.seed, this.world.dials, key, this.options.segments, urgency)
-      .then((patch) => {
+      .patch(this.world.seed, this.world.dials, key, this.options.segments, keep, urgency)
+      .then(({ patch, features }) => {
         this.waiting -= 1
         // A planet replaced while its patches were being made: drop them.
         if (this.disposed || this.entries.get(name) !== entry) return
-        entry.node = this.nodeFor(patch, entry.arrival, entry.whole, entry.quarters)
+        entry.node = this.nodeFor(patch, features, entry.arrival, entry.whole, entry.quarters)
         entry.stitch = entry.node.userData.stitch as THREE.BufferAttribute
         entry.node.visible = false
         this.group.add(entry.node)
@@ -384,11 +397,15 @@ export class Terrain {
 
   private nodeFor(
     patch: PatchData,
+    features: Scatter,
     arrival: THREE.BufferAttribute[],
     whole: THREE.Object3D[],
     quarters: THREE.Object3D[][],
   ): THREE.Group {
     const node = new THREE.Group()
+    // What stands on it, shown with it whole whatever quarters are drawn: a
+    // quarter left to the children is drawn by them with the same features.
+    for (const mesh of featuresFor(features, this.featureMaterial)) node.add(mesh)
     const ground = new THREE.BufferGeometry()
     ground.setAttribute('position', new THREE.BufferAttribute(patch.positions, 3))
     ground.setAttribute('normal', new THREE.BufferAttribute(patch.normals, 3))
@@ -540,7 +557,7 @@ const GOVERN_EVERY = 0.5
 const LATE = 0.5
 const CAUGHT_UP = 0.15
 /** The loosest the threshold goes: three steps coarser, about one and a half levels. */
-const COARSEST = 3
+export const COARSEST = 3
 
 /** Every quarter of a patch drawn: the patch whole. */
 const WHOLE = 0b1111
@@ -579,6 +596,9 @@ function free(node: THREE.Group): void {
   node.traverse((child) => {
     if (child instanceof THREE.InstancedMesh) {
       child.dispose()
+      // Its own geometry, over the shared model's attributes (feature-models.ts).
+      const geometry: unknown = child.geometry
+      if (geometry instanceof THREE.BufferGeometry) geometry.dispose()
       return
     }
     if (child instanceof THREE.Mesh) {

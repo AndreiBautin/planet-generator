@@ -84,10 +84,8 @@ checks nothing. The pre-push hook runs `pnpm verify`; CI runs the same.
   (`render/patches/scatter.ts`) takes two candidates per grid cell of
   `CELL` on each cube face, decided by a hash of the cell, so a feature is
   the same one whatever patch carries it and a parent tile is exactly the
-  union of its children (tested). They stream in their own level-7 tiles
-  near the camera (`flora.ts`, owned by `Terrain` so they turn with the
-  planet), because the ground's finest patches only reach a flight's
-  height away and a forest that existed only underneath is no forest.
+  union of its children (tested). They ride in the ground's own patches
+  — see "Trees ride with the ground" below.
   **Each instance shrinks into the ground over the last stretch of the
   range** (`featureMaterial`), because a wood that stopped at the tile
   line was the plainest sign of assets on a base. Past the range the
@@ -240,16 +238,24 @@ checks nothing. The pre-push hook runs `pnpm verify`; CI runs the same.
   from that work should come back as a default-UI feature; a flag or a
   separate page, if at all.
 
-- **The scattered features are off (`featureRange: 0` in `quality.ts`),
-  and the woods are painted on the ground instead.** Trees, rocks and
-  cacti are built in tiles, and on a phone a tile built after the eye
-  reaches it is a wood springing up in plain view. A day went into
-  narrowing that down — one queue most urgent first, trees before
-  ground, cheaper tiles, tiles fading in — and it was still visible, so
-  the call was to set them aside and make what never pops look good.
-  The machinery stays; a range brings them back. With the range at
-  nought `stand` is 0 in the ground shader, so the painted canopy
-  covers every wood at every distance.
+- **Trees ride with the ground, and the tiles are gone.** They were built
+  in tiles of their own, and on a phone a tile built after the eye
+  reached it was a wood springing up in plain view; a day of narrowing
+  that down did not remove it, and they were switched off. Now each
+  ground patch is built with the standing features on it, in the same
+  request, so a tree cannot arrive after its ground. A patch carries the
+  cells ranked under `treesKept` — every feature at the finest level,
+  the low-ranked few at coarse ones, sized for the nearest the level is
+  ever drawn at the governor's loosest threshold — and the shader shows
+  an instance where its rank is under `(reach / distance)²`. A coarse
+  patch's trees are the same trees its children carry (tested), so a
+  patch giving way to its children changes nothing. Only what stands is
+  scattered; floor cover stays painted. None stands in a river or lake.
+  **What can still go wrong is the ground being late**: a coarse
+  ancestor standing in close up carries too few trees for that distance.
+  Judge that in real time — the recorder at 8 ms of sleep a frame gives
+  the workers a quarter of the time a real frame does, and made the
+  trees look as if they vanished when at real pace they held.
 - **The terrain governs its own detail** (`govern` in `terrain.ts`): it
   measures how many levels behind the drawn ground runs and loosens the
   detail threshold while patches are late, tightening again once they

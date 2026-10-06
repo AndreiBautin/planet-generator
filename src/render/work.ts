@@ -39,9 +39,8 @@ export function answer(request: WorkRequest): WorkResult {
         id: request.id,
         kind: 'patch',
         patch: samplePatch(planet, request.key, request.segments),
+        features: scatterPatch(planet, request.key, request.keep),
       }
-    case 'features':
-      return { id: request.id, kind: 'features', features: scatterPatch(planet, request.key) }
   }
 }
 
@@ -63,8 +62,7 @@ export function transferables(result: WorkResult): Transferable[] {
         result.patch.ice.buffer,
         result.patch.ground.buffer,
         result.patch.water.buffer,
+        ...Object.values(result.features).map((features) => features.buffer),
       ]
-    case 'features':
-      return Object.values(result.features).map((features) => features.buffer)
   }
 }

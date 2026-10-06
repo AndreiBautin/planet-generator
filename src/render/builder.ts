@@ -29,9 +29,16 @@ export interface Builder {
     dials: Dials,
     key: PatchKey,
     segments: number,
+    /** The share of its cells' features the patch carries (scatter.ts). */
+    keep: number,
     urgency?: number,
-  ) => Promise<PatchData>
-  readonly features: (seed: Seed, dials: Dials, key: PatchKey, urgency?: number) => Promise<Scatter>
+  ) => Promise<BuiltPatch>
+}
+
+/** A patch of ground and what stands on it, made together. */
+export interface BuiltPatch {
+  readonly patch: PatchData
+  readonly features: Scatter
 }
 
 interface Queued {
@@ -126,18 +133,14 @@ export function createBuilder(cores: number): Builder {
       if (result.kind !== 'clouds') throw new Error('builder answered clouds with something else')
       return result.texture
     },
-    patch: async (seed, dials, key, segments, urgency = 0) => {
+    patch: async (seed, dials, key, segments, keep, urgency = 0) => {
       next += 1
-      const result = await run({ id: next, kind: 'patch', seed, dials, key, segments }, urgency)
+      const result = await run(
+        { id: next, kind: 'patch', seed, dials, key, segments, keep },
+        urgency,
+      )
       if (result.kind !== 'patch') throw new Error('builder answered a patch with something else')
-      return result.patch
-    },
-    features: async (seed, dials, key, urgency = 0) => {
-      next += 1
-      const result = await run({ id: next, kind: 'features', seed, dials, key }, urgency)
-      if (result.kind !== 'features')
-        throw new Error('builder answered features with something else')
-      return result.features
+      return { patch: result.patch, features: result.features }
     },
   }
 }
