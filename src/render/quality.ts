@@ -37,6 +37,14 @@ export interface Quality {
   readonly shadowMap: number
   /** Cloud texture width; its height is half. */
   readonly cloudWidth: number
+  /**
+   * How the cloud shells are drawn: segments round each, and whether the
+   * high cirrus layer is drawn at all. Each shell is a transparent layer
+   * over most of the screen, and on a modest phone the fill rate runs out
+   * before anything else does.
+   */
+  readonly cloudSegments: number
+  readonly cirrus: boolean
   readonly pixelRatio: number
   /** Whether the frame goes through the post pass — bloom, vignette, MSAA — or straight to the screen. */
   readonly post: boolean
@@ -61,6 +69,8 @@ export function pickQuality(device: Device): Quality {
     featureRange: 0.25,
     shadowMap: phone ? (modest ? 0 : 1024) : 2048,
     cloudWidth: phone ? 512 : 1024,
+    cloudSegments: phone ? (modest ? 112 : 144) : 192,
+    cirrus: !(phone && modest),
     pixelRatio: Math.min(device.pixelRatio, modest ? 1.5 : 2),
     post: !(phone && modest),
   }

@@ -487,3 +487,39 @@ receiver to receiver into the sea or a lake, the lake is over water.
   spot directly below named something out of frame.
 - Time of day is wherever the planet's turn puts it; a sight can be
   reached at dusk.
+
+## Phone performance
+
+Measured on the modest phone profile (`?record&cores=4`, 375×812, pixel
+ratio 1.5, seed 83tzj46, a 600-frame tour at real-time pace) with
+`recorder.stats()`, which reads `renderer.info` for the whole frame
+(`autoReset` is off and the scene resets it once per tick, or it reports
+only the last pass). Medians / p95:
+
+|        | Draw calls | Triangles     | Script ms   |
+| ------ | ---------- | ------------- | ----------- |
+| Before | 191 / 221  | 0.86M / 1.18M | 13.6 / 29.7 |
+| After  | 160 / 189  | 0.87M / 1.24M | 7.0 / 10.2  |
+
+**Measured on a desktop GPU with the phone profile**, so the script time
+is real and the fill cost is not. A real phone's frame time is unmeasured.
+
+What cost most and showed least:
+
+- **The stitch band allocated per vertex.** It rebuilt a closure and its
+  neighbour list for every vertex of every patch on every neighbour
+  change — 4.7 ms of the frame. The falloff is one array computed once
+  (`stitchFalloff`) and a patch's neighbours are cached on its entry.
+- **Trees were two draws per patch**, a trunk and a crown of each kind.
+  One lathe model now morphs conifer to broadleaf per instance (the
+  `broadleaf` attribute, `treeFate.z`), bark and leaf by vertex colour:
+  one draw per patch, 77 calls down to about half.
+- **Cirrus is off and the cloud shells coarser on a modest phone**
+  (`quality.cirrus`, `quality.cloudSegments`). A third transparent shell
+  over the whole screen is fill a phone pays for and a glance at a phone
+  does not show.
+
+**Measure at real-time pace.** Stepping the recorder with short sleeps
+starves the build workers, so patches arrive late, stand-ins stay up and
+the numbers describe a frame nobody flies. `?cores=N` pretends the
+hardware count for `pickQuality`, development builds only.

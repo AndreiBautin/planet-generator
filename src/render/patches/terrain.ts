@@ -52,6 +52,8 @@ interface Entry {
   /** Which edges are stitched to a coarser neighbour, a bit each, and the attribute that says so. */
   edges: number[]
   stitch: THREE.BufferAttribute | undefined
+  /** Its four neighbours at its own level (`neighboursOf`), found once. */
+  neighbours?: readonly PatchKey[]
   /** Its trees (forest.ts), shown by what ground is drawn rather than with its own node. */
   trees: THREE.Mesh[]
   shownAt: number | undefined
@@ -82,6 +84,8 @@ export class Terrain {
   private readonly treeMaterial: THREE.Material
   private readonly treeDepth: THREE.Material
   private readonly forest = new THREE.Group()
+  /** How far a coarser edge bends the vertices in from it, by rows from the edge (see `stitch`). */
+  private readonly stitchFalloff: Float32Array
 
   constructor(
     world: Planet,
@@ -101,6 +105,12 @@ export class Terrain {
     // attribute of its own, because disposing a geometry frees its index's
     // GPU buffer and a shared attribute would be freed from under the rest.
     this.index = patchIndex(options.segments)
+    const side = options.segments + 1
+    const band = Math.max(2, (side - 1) / 4)
+    this.stitchFalloff = Float32Array.from({ length: side }, (_, k) => {
+      const t = Math.min(1, k / band)
+      return 1 - t * t * (3 - 2 * t)
+    })
     for (const root of ROOTS) this.request(root)
   }
 
@@ -331,7 +341,9 @@ export class Terrain {
     for (const name of drawn.keys()) {
       const entry = this.entries.get(name)
       if (entry?.stitch === undefined) continue
-      const goals = neighboursOf(entry.key).map((neighbour) => (coarser(neighbour) ? 1 : 0))
+      // A patch's neighbours never change; found once, not every frame.
+      entry.neighbours ??= neighboursOf(entry.key)
+      const goals = entry.neighbours.map((neighbour) => (coarser(neighbour) ? 1 : 0))
       const fresh = !this.lastShown.has(name)
       const edges = entry.edges.map((weight, edge) => {
         const goal = goals[edge] ?? 0
@@ -344,26 +356,26 @@ export class Terrain {
       const values = entry.stitch.array as Float32Array
       const side = this.options.segments + 1
       const grid = side * side
-      values.fill(0)
       // Not the edge row alone but a band in from it, easing from the
       // coarse shape at the edge to the patch's own a quarter of the way in.
       // Bent at the edge only, the two levels met at a straight line, and
       // where they disagree most — a flat coast, land in one and shallows in
       // the other — that line drew a square of land standing in the sea.
-      const band = Math.max(2, (side - 1) / 4)
-      const ease = (distance: number): number => {
-        const t = Math.min(1, distance / band)
-        return 1 - t * t * (3 - 2 * t)
-      }
+      // The falloff by distance from an edge is worked out once
+      // (`stitchFalloff`); this runs every frame an edge eases, and built
+      // per vertex it was a third of the frame's script on a phone profile.
+      const fall = this.stitchFalloff
+      const [bottom = 0, top = 0, left = 0, right = 0] = edges
       for (let j = 0; j < side; j += 1) {
+        const fromBottom = bottom * (fall[j] ?? 0)
+        const fromTop = top * (fall[side - 1 - j] ?? 0)
+        const rows = Math.max(fromBottom, fromTop)
         for (let i = 0; i < side; i += 1) {
-          const reach = [j, side - 1 - j, i, side - 1 - i]
-          let weight = 0
-          reach.forEach((distance, edge) => {
-            const on = edges[edge] ?? 0
-            if (on > 0 && distance < band) weight = Math.max(weight, on * ease(distance))
-          })
-          values[j * side + i] = weight
+          values[j * side + i] = Math.max(
+            rows,
+            left * (fall[i] ?? 0),
+            right * (fall[side - 1 - i] ?? 0),
+          )
         }
       }
       for (let k = 0; k < side; k += 1) {

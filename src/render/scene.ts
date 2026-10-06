@@ -79,6 +79,16 @@ export interface Scene {
   readonly capture: () => Promise<Blob | null>
   /** The three.js scene itself, for the development recorder to inspect. */
   readonly root: THREE.Scene
+  /** What the last frame drew, across every pass: for the development recorder. */
+  readonly stats: () => {
+    readonly calls: number
+    readonly triangles: number
+    readonly lines: number
+    readonly points: number
+    readonly geometries: number
+    readonly textures: number
+    readonly pixelRatio: number
+  }
   /** Sound on or off (sound.ts), from inside a press; says which it is now. */
   readonly toggleSound: () => boolean
   /** Where the sun is, as a direction in the planet's own frame, as it is turned now. */
@@ -300,6 +310,8 @@ export function startScene(
   installHaze()
   if (!installSteadyShadows()) logger.warn('shadows.filter-unpatched')
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: !options.quality.post })
+  // Counted over the whole frame, every pass of the composer, not only the last.
+  renderer.info.autoReset = false
   let pixelRatio = options.quality.pixelRatio
   renderer.setPixelRatio(pixelRatio)
   renderer.toneMapping = THREE.ACESFilmicToneMapping
@@ -435,7 +447,11 @@ export function startScene(
       coming = next
       if (!keepClouds) {
         void builder.clouds(world.seed, world.dials, quality.cloudWidth).then((texture) => {
-          if (coming === next) next.clouds = cloudsFromTexture(world, texture, quality.cloudWidth)
+          if (coming === next)
+            next.clouds = cloudsFromTexture(world, texture, quality.cloudWidth, {
+              segments: quality.cloudSegments,
+              cirrus: quality.cirrus,
+            })
         })
       }
     })
@@ -718,6 +734,7 @@ export function startScene(
   }
 
   const tick = (): void => {
+    renderer.info.reset()
     const now = clock.now()
     frames.push(now - lastFrameAt)
     lastFrameAt = now
@@ -846,6 +863,12 @@ export function startScene(
     step: tick,
     root: scene,
     toggleSound: () => sound.toggle(),
+    stats: () => ({
+      ...renderer.info.render,
+      geometries: renderer.info.memory.geometries,
+      textures: renderer.info.memory.textures,
+      pixelRatio: renderer.getPixelRatio(),
+    }),
     sunInPlanet: () => inPlanetFrame(sunDirection, lastTurn, 1),
     capture: () =>
       new Promise((resolve) => {

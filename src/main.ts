@@ -39,11 +39,19 @@ const opened = parseLink(window.location.search)
 let seed: Seed = opened.seed ?? freshSeed()
 let dials: Dials = opened.dials
 
+// Development only: `?cores=4` picks the quality a modest phone would get,
+// so its costs can be measured on a desktop.
+const pretendCores = config.developer
+  ? Number(new URLSearchParams(window.location.search).get('cores'))
+  : Number.NaN
 const quality = pickQuality({
   width: window.innerWidth,
   height: window.innerHeight,
   pixelRatio: window.devicePixelRatio,
-  cores: navigator.hardwareConcurrency,
+  cores:
+    Number.isFinite(pretendCores) && pretendCores > 0
+      ? pretendCores
+      : navigator.hardwareConcurrency,
 })
 logger.info('quality.picked', { ...quality })
 
@@ -233,6 +241,8 @@ if (recording) {
       },
       /** The three.js scene, to inspect what is drawn. */
       root: scene.root,
+      /** What the last frame drew, across every pass. */
+      stats: () => scene.stats(),
       sun: () => scene.sunInPlanet(),
       /** The terrain's last selection: stand-ins, the nearest, patches pending. */
       terrain: () => ({ ...TERRAIN_STATS }),

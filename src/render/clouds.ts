@@ -140,7 +140,12 @@ function layerMaterial(planet: Planet, texture: THREE.Texture, layer: Layer): TH
   return material
 }
 
-export function cloudsFromTexture(planet: Planet, data: Uint8Array, width: number): THREE.Mesh {
+export function cloudsFromTexture(
+  planet: Planet,
+  data: Uint8Array,
+  width: number,
+  shells: { readonly segments: number; readonly cirrus: boolean } = { segments: 192, cirrus: true },
+): THREE.Mesh {
   const texture = new THREE.DataTexture(data, width, width / 2)
   texture.wrapS = THREE.RepeatWrapping
   texture.magFilter = THREE.LinearFilter
@@ -155,14 +160,19 @@ export function cloudsFromTexture(planet: Planet, data: Uint8Array, width: numbe
     mesh.userData.layer = layer
     return mesh
   }
-  const base = shell('base', 192)
+  // Segments in pairs, as a sphere's are: round, and half as many up it.
+  const round = Math.max(32, Math.round(shells.segments / 2) * 2)
+  const base = shell('base', round)
   base.renderOrder = 2
-  const tops = shell('tops', 192)
+  const tops = shell('tops', round)
   tops.renderOrder = 3
-  const cirrus = shell('cirrus', 96)
-  cirrus.renderOrder = 4
   // Children of the base deck, so they turn, scale and are released with it.
-  base.add(tops, cirrus)
+  base.add(tops)
+  if (shells.cirrus) {
+    const cirrus = shell('cirrus', Math.max(32, round / 2))
+    cirrus.renderOrder = 4
+    base.add(cirrus)
+  }
   base.userData.cloud = { data, width }
   return base
 }

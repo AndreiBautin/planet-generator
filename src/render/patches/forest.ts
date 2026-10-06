@@ -1,5 +1,4 @@
 import * as THREE from 'three'
-import { mergeGeometries, mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
 
 import { DETAIL_NORMAL_MATRIX, TERRAIN_MORPH } from '../detail'
 import type { PatchData } from './patch-data'
@@ -36,63 +35,75 @@ const TREE_HEIGHT = 0.0015
 const TRUNK = new THREE.Color(0.3, 0.22, 0.15)
 const LEAF = new THREE.Color(1, 1, 1)
 
-function painted(geometry: THREE.BufferGeometry, colour: THREE.Color): THREE.BufferGeometry {
-  const plain = geometry
-  const count = plain.getAttribute('position').count
+/**
+ * Both trees as one model: the same lathe — rings of the same number of
+ * points about the trunk — drawn to two outlines, a conifer's stepped
+ * tiers (`position`) and a broadleaf's rounded crown (`broadleaf`), which
+ * an instance blends between by its kind. One draw a patch where two
+ * meshes, one per kind, were half the frame's draw calls on a phone, and
+ * no vertices spent on the kind not drawn.
+ *
+ * Each outline runs from the foot of the trunk to the tip: the first two
+ * points are bark, the rest leaf.
+ */
+const CONIFER: readonly (readonly [number, number])[] = [
+  [0.05, 0],
+  [0.05, 0.25],
+  [0.34, 0.27],
+  [0.06, 0.55],
+  [0.25, 0.53],
+  [0.05, 0.8],
+  [0.001, 1.05],
+]
+const BROADLEAF: readonly (readonly [number, number])[] = [
+  [0.06, 0],
+  [0.06, 0.32],
+  [0.3, 0.36],
+  [0.42, 0.56],
+  [0.36, 0.76],
+  [0.18, 0.92],
+  [0.001, 0.97],
+]
+/** Sides round the trunk: five reads as round at a tree's size on screen, and is sixty triangles a tree. */
+const AROUND = 5
+
+const MODEL = (() => {
+  const lathe = (outline: readonly (readonly [number, number])[]): THREE.LatheGeometry =>
+    new THREE.LatheGeometry(
+      outline.map(([r, y]) => new THREE.Vector2(r, y)),
+      AROUND,
+    )
+  const tree = lathe(CONIFER)
+  const crown = lathe(BROADLEAF)
+  // A broadleaf's crown is lumpy rather than turned: each of its points
+  // pushed in or out a little, by where it is.
+  const round = crown.getAttribute('position')
+  for (let k = 0; k < round.count; k += 1) {
+    const x = round.getX(k)
+    const y = round.getY(k)
+    const z = round.getZ(k)
+    const bump = y > 0.33 ? 1 + 0.14 * Math.sin(x * 23 + y * 17) * Math.cos(z * 19 - y * 11) : 1
+    round.setXYZ(k, x * bump, y, z * bump)
+  }
+  crown.computeVertexNormals()
+  tree.computeVertexNormals()
+  tree.setAttribute('broadleaf', round)
+  tree.setAttribute('broadleafNormal', crown.getAttribute('normal'))
+  // Bark below, leaf above: the lathe's points go round each ring in turn.
+  const count = tree.getAttribute('position').count
   const colours = new Float32Array(count * 3)
+  const rings = CONIFER.length
   for (let k = 0; k < count; k += 1) {
-    colours[k * 3] = colour.r
-    colours[k * 3 + 1] = colour.g
-    colours[k * 3 + 2] = colour.b
+    const ring = k % rings
+    const bark = ring < 2
+    colours[k * 3] = bark ? TRUNK.r : LEAF.r
+    colours[k * 3 + 1] = bark ? TRUNK.g : LEAF.g
+    colours[k * 3 + 2] = bark ? TRUNK.b : LEAF.b
   }
-  plain.setAttribute('color', new THREE.BufferAttribute(colours, 3))
-  plain.deleteAttribute('uv')
-  // Normals are found once the parts are merged, the same way for every part.
-  plain.deleteAttribute('normal')
-  return plain
-}
-
-/** A conifer: three stacked cones on a short trunk. Few faces, as a tree a few pixels tall needs. */
-function conifer(): THREE.BufferGeometry {
-  const parts = [
-    painted(new THREE.CylinderGeometry(0.04, 0.06, 0.25, 5, 1, true).translate(0, 0.125, 0), TRUNK),
-    // Closed cones, drawn one-sided: open ones showed their dark insides as shards.
-    painted(new THREE.ConeGeometry(0.34, 0.42, 7).translate(0, 0.42, 0), LEAF),
-    painted(new THREE.ConeGeometry(0.26, 0.38, 7).translate(0, 0.66, 0), LEAF),
-    painted(new THREE.ConeGeometry(0.16, 0.32, 7).translate(0, 0.88, 0), LEAF),
-  ]
-  const merged = mergeGeometries(parts)
-  merged.computeVertexNormals()
-  return merged
-}
-
-/** A broadleaf: a rounded crown, a little lumpy, on a trunk. */
-function broadleaf(): THREE.BufferGeometry {
-  // Indexed, as the trunk is: the two are merged into one model.
-  const crown = mergeVertices(
-    new THREE.IcosahedronGeometry(0.36, 0).deleteAttribute('normal').deleteAttribute('uv'),
-  )
-  const positions = crown.getAttribute('position')
-  for (let k = 0; k < positions.count; k += 1) {
-    const x = positions.getX(k)
-    const y = positions.getY(k)
-    const z = positions.getZ(k)
-    const bump = 1 + 0.12 * Math.sin(x * 23 + y * 17) * Math.cos(z * 19 - y * 11)
-    positions.setXYZ(k, x * bump, y * bump * 0.85, z * bump)
-  }
-  const second = crown.clone().scale(0.75, 0.75, 0.75).rotateY(1.1)
-  const parts = [
-    painted(new THREE.CylinderGeometry(0.05, 0.07, 0.4, 5, 1, true).translate(0, 0.2, 0), TRUNK),
-    painted(crown.translate(0, 0.62, 0), LEAF),
-    // A second, smaller lump to one side, so a crown is not one gem.
-    painted(second.translate(0.2, 0.52, 0.1), LEAF),
-  ]
-  const merged = mergeGeometries(parts)
-  merged.computeVertexNormals()
-  return merged
-}
-
-const MODELS = { conifer: conifer(), broadleaf: broadleaf() } as const
+  tree.setAttribute('color', new THREE.BufferAttribute(colours, 3))
+  tree.deleteAttribute('uv')
+  return tree
+})()
 
 /** A hash of a direction, 0 to 1, the same whichever patch holds the vertex. */
 function hashOf(x: number, y: number, z: number, salt: number): number {
@@ -106,7 +117,7 @@ function hashOf(x: number, y: number, z: number, salt: number): number {
 }
 
 /** What a tree instance is told: where it stands at this level and the parent's, and how it is to fare. */
-const STRIDE = 13
+const STRIDE = 14
 
 /**
  * The trees of one patch, if it carries any (levels `TREE_COARSEST` to
@@ -123,7 +134,7 @@ export function forestFor(
 ): THREE.Mesh[] {
   if (level < TREE_COARSEST || level > TREE_LEVEL) return []
   const side = segments + 1
-  const found = { conifer: [] as number[], broadleaf: [] as number[] }
+  const found: number[] = []
   // Each vertex stands for 4^(TREE_LEVEL − level) trees, so is drawn that much bigger in area.
   const scale = 2 ** (TREE_LEVEL - level)
   for (let j = 0; j < side; j += 1) {
@@ -146,7 +157,7 @@ export function forestFor(
       const roll = hashOf(x, y, z, 13)
       const tint = tints[kind]
       const shade = 0.8 + hashOf(x, y, z, 17) * 0.4
-      found[kind].push(
+      found.push(
         x,
         y,
         z,
@@ -155,6 +166,7 @@ export function forestFor(
         patch.coarsePositions[v * 4 + 2] ?? z,
         level,
         shared ? 1 : 0,
+        kind === 'conifer' ? 0 : 1,
         chance,
         fine,
         coarse,
@@ -172,32 +184,27 @@ export function forestFor(
     )
     .getBoundingSphere(new THREE.Sphere())
   bounds.radius += TREE_HEIGHT * 1.5 * scale * 2
-  const meshes: THREE.Mesh[] = []
-  for (const kind of ['conifer', 'broadleaf'] as const) {
-    const data = found[kind]
-    const count = data.length / STRIDE
-    if (count === 0) continue
-    const model = MODELS[kind]
-    const geometry = new THREE.InstancedBufferGeometry()
-    for (const [name, attribute] of Object.entries(model.attributes))
-      geometry.setAttribute(name, attribute)
-    geometry.setIndex(model.index)
-    const buffer = new THREE.InstancedInterleavedBuffer(Float32Array.from(data), STRIDE, 1)
-    geometry.setAttribute('treeFine', new THREE.InterleavedBufferAttribute(buffer, 3, 0))
-    geometry.setAttribute('treeCoarse', new THREE.InterleavedBufferAttribute(buffer, 3, 3))
-    geometry.setAttribute('treeFate', new THREE.InterleavedBufferAttribute(buffer, 2, 6))
-    geometry.setAttribute('treeWood', new THREE.InterleavedBufferAttribute(buffer, 3, 8))
-    geometry.setAttribute('treeLook', new THREE.InterleavedBufferAttribute(buffer, 2, 11))
-    geometry.instanceCount = count
-    // Culled by the patch's own bounds, grown by the tallest a tree here
-    // can stand: the model's own bounds know nothing of where instances go.
-    geometry.boundingSphere = bounds.clone()
-    const mesh = new THREE.Mesh(geometry, material)
-    mesh.castShadow = true
-    mesh.receiveShadow = true
-    mesh.customDepthMaterial = depth
-    meshes.push(mesh)
-  }
+  const count = found.length / STRIDE
+  if (count === 0) return []
+  const geometry = new THREE.InstancedBufferGeometry()
+  for (const [name, attribute] of Object.entries(MODEL.attributes))
+    geometry.setAttribute(name, attribute)
+  geometry.setIndex(MODEL.index)
+  const buffer = new THREE.InstancedInterleavedBuffer(Float32Array.from(found), STRIDE, 1)
+  geometry.setAttribute('treeFine', new THREE.InterleavedBufferAttribute(buffer, 3, 0))
+  geometry.setAttribute('treeCoarse', new THREE.InterleavedBufferAttribute(buffer, 3, 3))
+  geometry.setAttribute('treeFate', new THREE.InterleavedBufferAttribute(buffer, 3, 6))
+  geometry.setAttribute('treeWood', new THREE.InterleavedBufferAttribute(buffer, 3, 9))
+  geometry.setAttribute('treeLook', new THREE.InterleavedBufferAttribute(buffer, 2, 12))
+  geometry.instanceCount = count
+  // Culled by the patch's own bounds, grown by the tallest a tree here
+  // can stand: the model's own bounds know nothing of where instances go.
+  geometry.boundingSphere = bounds
+  const mesh = new THREE.Mesh(geometry, material)
+  mesh.castShadow = true
+  mesh.receiveShadow = true
+  mesh.customDepthMaterial = depth
+  const meshes = [mesh]
   return meshes
 }
 
@@ -210,7 +217,9 @@ const TREE_VERTEX = /* glsl */ `
 uniform vec2 terrainMorphLod;
 attribute vec3 treeFine;
 attribute vec3 treeCoarse;
-attribute vec2 treeFate;
+attribute vec3 treeFate;
+attribute vec3 broadleaf;
+attribute vec3 broadleafNormal;
 attribute vec3 treeWood;
 attribute vec2 treeLook;
 varying vec3 vTreeTint;
@@ -246,7 +255,9 @@ const TREE_PLACE = /* glsl */ `
   vec3 up = normalize(ground);
   mat3 frame = treeFrame(up, treeWood.x * 40.0);
   // Set a little into the ground, so a trunk on a slope is not floating.
-  transformed = ground - up * size * 0.08 + frame * (position * size);
+  // A conifer's outline or a broadleaf's, by the tree's kind.
+  vec3 shape = mix(position, broadleaf, treeFate.z);
+  transformed = ground - up * size * 0.08 + frame * (shape * size);
 `
 
 export function treeMaterial(): THREE.MeshStandardMaterial {
@@ -264,7 +275,7 @@ export function treeMaterial(): THREE.MeshStandardMaterial {
         /* glsl */ `#include <beginnormal_vertex>
         {
           vec3 up0 = normalize(mix(treeFine, treeCoarse, treeMorph()));
-          objectNormal = treeFrame(up0, treeWood.x * 40.0) * objectNormal;
+          objectNormal = treeFrame(up0, treeWood.x * 40.0) * normalize(mix(objectNormal, broadleafNormal, treeFate.z));
         }`,
       )
       .replace(
