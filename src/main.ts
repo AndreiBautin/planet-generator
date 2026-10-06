@@ -27,6 +27,8 @@ import {
 } from '@/ui/postcard'
 import { composePostcard } from '@/ui/postcard-card'
 import { attachPostcard } from '@/ui/postcard-panel'
+import { systemOf, type SystemWorld } from '@/generation/system'
+import { attachSystem } from '@/ui/system-panel'
 import { keep, picture, visit } from '@/app/atlas'
 import { attachAtlas, pictureOf } from '@/ui/atlas-panel'
 import { loadAtlas, saveAtlas } from '@/ui/atlas-store'
@@ -53,6 +55,9 @@ const freshSeed = (): Seed =>
 const opened = parseLink(window.location.search)
 let seed: Seed = opened.seed ?? freshSeed()
 let dials: Dials = opened.dials
+// The home of the star system this planet is in (generation/system.ts):
+// itself unless the link came from one of its siblings.
+let home: Seed = opened.home ?? seed
 
 // Development only: `?cores=4` picks the quality a modest phone would get,
 // so its costs can be measured on a desktop.
@@ -125,7 +130,8 @@ const hud = attachHud({
     hud.flying(false)
     seed = freshSeed()
     dials = DEFAULT_DIALS
-    window.history.pushState(null, '', linkFor(seed, dials))
+    home = seed
+    window.history.pushState(null, '', linkFor(seed, dials, undefined, home))
     void show(true)
   },
   onShare: () => {
@@ -168,7 +174,7 @@ const hud = attachHud({
     dials = next
     // Replaced rather than pushed: a dial dragged across its range is one
     // decision, not forty steps for Back to walk through.
-    window.history.replaceState(null, '', linkFor(seed, dials))
+    window.history.replaceState(null, '', linkFor(seed, dials, undefined, home))
     void show(false)
   },
 })
@@ -255,7 +261,7 @@ function sendCard(): void {
     hourHere(),
     facing?.tilt,
   )
-  const url = new URL(linkFor(seed, dials, shot), window.location.href).href
+  const url = new URL(linkFor(seed, dials, shot, home), window.location.href).href
   const name = `${planet.name} postcard`.replace(/[^\w -]+/g, '').trim()
   const title = card.caption.trim() === '' ? planet.name : card.caption.trim()
   blink()
@@ -338,7 +344,8 @@ const atlasPanel = attachAtlas({
     const changed = entry.seed !== seed
     seed = entry.seed
     dials = entry.dials
-    window.history.pushState(null, '', linkFor(seed, dials))
+    home = seed
+    window.history.pushState(null, '', linkFor(seed, dials, undefined, home))
     void show(changed)
   },
   onKeep: (which, kept) => {
@@ -350,6 +357,46 @@ const atlasPanel = attachAtlas({
 document.getElementById('atlas-button')?.addEventListener('click', () => {
   atlasPanel.show(atlas, seed)
 })
+
+/**
+ * The star system: zooming out past the farthest orbit, or the system
+ * button, shows the star and its worlds; choosing one flies there in one
+ * unbroken shot — the camera draws far back from this world with the
+ * system's picture up, the next world is made and born where this one was,
+ * and the camera comes in to it.
+ */
+const pause = (ms: number): Promise<void> =>
+  new Promise((resolve) => {
+    setTimeout(resolve, ms)
+  })
+let journeying = false
+async function travel(world: SystemWorld): Promise<void> {
+  if (journeying || world.seed === seed) return
+  journeying = true
+  const system = systemOf(home)
+  letGo()
+  rig.cut()
+  hud.flying(false)
+  systemPanel.travelling(system, seed, world.seed)
+  rig.dolly(18, 1700)
+  await pause(1700)
+  seed = world.seed
+  dials = DEFAULT_DIALS
+  window.history.pushState(null, '', linkFor(seed, dials, undefined, home))
+  await show(true)
+  systemPanel.hide()
+  rig.dolly(3.2, 2800)
+  journeying = false
+}
+const systemPanel = attachSystem((world) => {
+  void travel(world)
+})
+const openSystem = (): void => {
+  if (journeying || postcard.isOpen()) return
+  systemPanel.show(systemOf(home), seed)
+}
+rig.onBeyond(openSystem)
+document.getElementById('system-button')?.addEventListener('click', openSystem)
 
 const flash = document.getElementById('flash')
 function blink(): void {
@@ -375,6 +422,10 @@ function takePicture(): void {
 window.addEventListener('keydown', (event) => {
   if (atlasPanel.isOpen()) {
     if (event.key === 'Escape') atlasPanel.hide()
+    return
+  }
+  if (systemPanel.isOpen()) {
+    if (event.key === 'Escape' && !journeying) systemPanel.hide()
     return
   }
   if (postcard.isOpen()) {
@@ -420,10 +471,11 @@ window.addEventListener('popstate', () => {
   const changed = link.seed !== seed
   seed = link.seed ?? freshSeed()
   dials = link.dials
+  home = link.home ?? seed
   void show(changed)
 })
 
-window.history.replaceState(null, '', linkFor(seed, dials))
+window.history.replaceState(null, '', linkFor(seed, dials, undefined, home))
 // A postcard link opens on its place, already there: no birth to watch.
 if (opened.shot !== undefined) openShot(opened.shot)
 void show(opened.shot === undefined)

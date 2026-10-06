@@ -739,3 +739,32 @@ star keeps it. Stored in this browser only — no account, nothing sent.
 - **In the agent's hidden pane nothing is filed** unless frames are stepped
   with `?record`: a world only counts as shown once its ground has arrived,
   which needs frames.
+
+## Star systems
+
+Zooming out past the farthest orbit (wheel or pinch, a deliberate push
+rather than one notch: `rig.onBeyond`) or the system button shows the
+planet's star and its worlds; choosing one flies there.
+
+- **The system is decided by one seed, its home** (`generation/system.ts`,
+  tested): three to six worlds, the home among them, the others' seeds
+  derived from the home's, orbits widening outwards by a ratio. A sibling's
+  link carries `sys=<home>` (`app/link.ts`), so every member opens the same
+  system; without one a planet is the home of its own. New planet makes a
+  new home; reopening from the atlas does too (the atlas does not keep the
+  home — a sibling kept there becomes its own system's home).
+- **The journey is one unbroken shot**: `rig.dolly` eases the orbit out to
+  18 radii (past the usual limit, by ratio so the far end is not a crawl)
+  with the system's picture up and the destination ringed; the next world
+  is made and born where this one was (`show(true)`, the birth animation);
+  then the camera dollies in to 3.2. The old world stays on screen, small,
+  until the new one's ground has arrived.
+- **The picture is SVG** (`ui/system-panel.ts`): orbits as slanted
+  ellipses, each world a lit globe in its kind's sea and land, nearer ones
+  drawn over further, with a list of buttons under it for a finger or a
+  keyboard. The view's own controls step aside while it is up
+  (`.systeming`).
+- Checked: from 83tzj46, opened the system (Xarzuhu, four worlds) and flew
+  to Quique, which arrived as a frozen world with `sys=83tzj46` in its link.
+  The journey's middle was not caught on screen — a canvas grab in the
+  hidden pane took only a corner of the device-pixel buffer.

@@ -17,6 +17,12 @@ export interface Link {
   readonly dials: Dials
   /** Where a postcard was taken from, when the link is one; absent for a plain planet. */
   readonly shot: Shot | undefined
+  /**
+   * The home of the star system the planet belongs to (generation/system.ts),
+   * when it is not its own: so a sibling opened from a link is still in the
+   * system it was reached in.
+   */
+  readonly home: Seed | undefined
 }
 
 /**
@@ -109,15 +115,17 @@ export function parseLink(search: string): Link {
       season: readDial(params, 'season'),
     },
     shot: parseShot(params.get('shot')),
+    home: parseSeed(params.get('sys')),
   }
 }
 
-export function linkFor(seed: Seed, dials: Dials, shot?: Shot): string {
+export function linkFor(seed: Seed, dials: Dials, shot?: Shot, home?: Seed): string {
   const params = new URLSearchParams({ seed })
   for (const dial of ['water', 'temperature', 'roughness', 'season'] as const) {
     const percent = Math.round(dials[dial] * 100)
     if (percent !== Math.round(DEFAULT_DIALS[dial] * 100)) params.set(KEYS[dial], String(percent))
   }
+  if (home !== undefined && home !== seed) params.set('sys', home)
   if (shot !== undefined) params.set('shot', shotParam(shot))
   return `?${params.toString()}`
 }

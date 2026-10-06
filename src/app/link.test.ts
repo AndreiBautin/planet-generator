@@ -41,6 +41,16 @@ describe('link', () => {
   })
 })
 
+describe('a link within a star system', () => {
+  it('names the system home when it is not the planet itself, and only then', () => {
+    const home = parseSeed('k3m9xqa')
+    if (home === undefined) throw new Error('test seed must parse')
+    expect(parseLink(linkFor(seed, DEFAULT_DIALS, undefined, home)).home).toBe(home)
+    expect(linkFor(home, DEFAULT_DIALS, undefined, home)).not.toContain('sys=')
+    expect(parseLink('?seed=k7fq2xm&sys=nonsense!').home).toBeUndefined()
+  })
+})
+
 describe('a postcard link', () => {
   const dials = DEFAULT_DIALS
   it('round-trips a glide to its stored precision', () => {

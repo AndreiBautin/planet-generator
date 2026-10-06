@@ -92,6 +92,13 @@ export interface Rig {
     { readonly position: Vec3; readonly heading: Vec3; readonly tilt: number } | undefined
   /** Put the camera straight at a spot, no dive: for a link that opens on one. */
   readonly place: (spot: Spot) => void
+  /**
+   * Draw the orbit in or out to `distance` over `ms`, eased, and past its
+   * usual limits if asked — the journey between worlds pulls far back.
+   */
+  readonly dolly: (distance: number, ms: number) => void
+  /** Told when a hand keeps zooming out past the farthest orbit: asking to see the system. */
+  readonly onBeyond: (listener: () => void) => void
 }
 
 export type Hold = 'frame' | 'still'
@@ -131,6 +138,22 @@ export function createRig(clock: Clock, ground: () => Ground): Rig {
   let arrive: (stop: GuideStop) => void = () => undefined
   let held: Hold | undefined
   let released: () => void = () => undefined
+  let travel: { from: number; to: number; since: number; ms: number } | undefined
+  let beyond: () => void = () => undefined
+  // How far a hand has pushed past the farthest orbit, so a single notch
+  // of the wheel does not open the system by accident.
+  let pushedOut = 0
+  const outward = (amount: number): void => {
+    if (steersGlide(flight) || orbit.distance < MAX_DISTANCE - 1e-6) {
+      pushedOut = 0
+      return
+    }
+    pushedOut += amount
+    if (pushedOut > 1) {
+      pushedOut = 0
+      beyond()
+    }
+  }
   const setTouring = (on: boolean): void => {
     if (touring === on) return
     touring = on
@@ -157,6 +180,13 @@ export function createRig(clock: Clock, ground: () => Ground): Rig {
       setTouring(false)
     }
     orbit = settle(orbit, seconds)
+    if (travel !== undefined) {
+      const t = Math.min(1, (now - travel.since) / travel.ms)
+      const eased = t * t * (3 - 2 * t)
+      // Eased by ratio, so the far end of a long pull-back is not a crawl.
+      orbit = { ...orbit, distance: travel.from * Math.pow(travel.to / travel.from, eased) }
+      if (t >= 1) travel = undefined
+    }
     if (glide !== undefined && touring && steersGlide(flight) && seconds > 0) {
       touredFor += seconds
       let target: Vec3 | undefined
@@ -213,7 +243,10 @@ export function createRig(clock: Clock, ground: () => Ground): Rig {
         return
       }
       if (steersGlide(flight) && glide !== undefined) glide = pinchGlide(glide, factor)
-      else orbit = pinch(orbit, factor)
+      else {
+        if (factor < 1) outward((1 / factor - 1) * 4)
+        orbit = pinch(orbit, factor)
+      }
     },
     wheel: (deltaY) => {
       if (held === 'frame' && glide !== undefined) {
@@ -223,7 +256,10 @@ export function createRig(clock: Clock, ground: () => Ground): Rig {
       }
       if (steersGlide(flight) && glide !== undefined)
         glide = pinchGlide(glide, Math.exp(-deltaY * 0.0015))
-      else orbit = wheel(orbit, deltaY)
+      else {
+        if (deltaY > 0) outward(deltaY / 400)
+        orbit = wheel(orbit, deltaY)
+      }
     },
   }
 
@@ -299,6 +335,12 @@ export function createRig(clock: Clock, ground: () => Ground): Rig {
       glide !== undefined && steersGlide(flight)
         ? { position: glide.position, heading: glide.heading, tilt: glide.pitch }
         : undefined,
+    dolly: (distance, ms) => {
+      travel = { from: orbit.distance, to: distance, since: clock.now(), ms: Math.max(1, ms) }
+    },
+    onBeyond: (listener) => {
+      beyond = listener
+    },
     place: (spot) => {
       setTouring(false)
       if (spot.kind === 'glide') {
