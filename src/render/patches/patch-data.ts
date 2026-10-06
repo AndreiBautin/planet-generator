@@ -1,3 +1,4 @@
+import { hydrologyOf, waterAt } from '@/generation/hydrology'
 import { surfaceAt, type Planet, type Surface } from '@/generation/planet'
 import { groupingsAt } from '@/generation/grouping'
 import { fbm } from '@/generation/noise'
@@ -33,8 +34,14 @@ export interface PatchData {
   readonly positions: Float32Array
   readonly normals: Float32Array
   readonly colours: Float32Array
-  /** Whether any of the patch lies under the sea, so it needs water drawn over it. */
+  /** Whether any of the patch lies under water — sea, lake or river — so it needs water drawn over it. */
   readonly hasSea: boolean
+  /**
+   * How far from the centre the water's surface is at each vertex: the sea,
+   * a lake's level, or a river running a little below its banks; nought
+   * where there is no water.
+   */
+  readonly water: Float32Array
   /**
    * How the ground reads close up, four weights a vertex — canopy, sand,
    * snow, stone (see `patternAt`) — which the ground shader draws as tree
@@ -143,6 +150,15 @@ export function samplePatch(planet: Planet, key: PatchKey, segments: number): Pa
   const pattern = new Float32Array(vertexCount(segments) * 4)
   const ice = new Float32Array(vertexCount(segments) * 2)
   const ground = new Float32Array(vertexCount(segments) * 8)
+  const water = new Float32Array(vertexCount(segments))
+  const wetted = new Float32Array(side * side)
+  // Inland water's surface radius over the whole ring, borders included, so
+  // a shore at a patch's edge is read the same from both sides of it.
+  const inland = new Float32Array(ring * ring)
+  // The planet's rivers and lakes, made once and shared by every patch
+  // (generation/hydrology.ts). A molten world's lowland runs with lava, not water.
+  const hydrology = planet.molten ? undefined : hydrologyOf(planet)
+  const near = new Map<number, readonly number[]>()
   let hasSea = false
 
   for (let j = -2; j <= segments + 2; j += 1) {
@@ -150,13 +166,33 @@ export function samplePatch(planet: Planet, key: PatchKey, segments: number): Pa
       const [u, v] = patchUv(key, i / segments, j / segments)
       const [x, y, z] = directionOn(key.face, u, v)
       const { surface, fine, drawn } = drawnHeight(planet, x, y, z)
-      const radius = 1 + liftOf(drawn, planet.relief)
+      // A river cuts its bed into the ground, and carries water a little
+      // below its banks; a lake fills its hollow to the rim.
+      let bed = drawn
+      let level = Number.NEGATIVE_INFINITY
+      let river = 0
+      if (surface.height < 0) level = 0
+      else if (hydrology !== undefined && surface.biome !== 'snow') {
+        const here = waterAt(planet, hydrology, [x, y, z], near)
+        river = here.river
+        bed = drawn - here.carve
+        if (here.river > 0.35) level = drawn - here.carve * 0.45
+        if (bed < here.lake) level = Math.max(level, here.lake)
+      }
+      const radius = 1 + liftOf(bed, planet.relief)
+      if (Number.isFinite(level) && surface.height >= 0)
+        inland[(j + 2) * ring + (i + 2)] = Math.max(SEA_RADIUS, 1 + liftOf(level, planet.relief))
       const at = ((j + 2) * ring + (i + 2)) * 3
       wide[at] = x * radius
       wide[at + 1] = y * radius
       wide[at + 2] = z * radius
       if (i < 0 || j < 0 || i > segments || j > segments) continue
-      if (surface.height < 0) hasSea = true
+      if (Number.isFinite(level)) {
+        hasSea = true
+        water[j * side + i] =
+          surface.height < 0 ? SEA_RADIUS : Math.max(SEA_RADIUS, 1 + liftOf(level, planet.relief))
+      }
+      wetted[j * side + i] = river
       const out = (j * side + i) * 3
       positions[out] = x * radius
       positions[out + 1] = y * radius
@@ -193,6 +229,23 @@ export function samplePatch(planet: Planet, key: PatchKey, segments: number): Pa
     }
   }
 
+  // The water's surface runs on one vertex past a lake's or river's edge,
+  // level, under the bank: the sheet then meets the ground where the two
+  // cross. Left to follow the ground there instead, it climbed the bank
+  // and stood out of it as a jagged wall.
+  for (let j = 0; j <= segments; j += 1) {
+    for (let i = 0; i <= segments; i += 1) {
+      if ((water[j * side + i] ?? 0) > 0) continue
+      let spill = 0
+      for (let dj = -1; dj <= 1; dj += 1) {
+        for (let di = -1; di <= 1; di += 1) {
+          spill = Math.max(spill, inland[(j + 2 + dj) * ring + (i + 2 + di)] ?? 0)
+        }
+      }
+      if (spill > 0) water[j * side + i] = spill
+    }
+  }
+
   const stone = fromPalette(planet.palette.highland).lerp(fromPalette(planet.palette.peak), 0.25)
   const sample = (i: number, j: number, axis: number): number =>
     wide[((j + 2) * ring + (i + 2)) * 3 + axis] ?? 0
@@ -223,7 +276,12 @@ export function samplePatch(planet: Planet, key: PatchKey, segments: number): Pa
       const py = positions[out + 1] ?? 0
       const pz = positions[out + 2] ?? 0
       const radial = Math.hypot(px, py, pz) || 1
-      const steep = 1 - (nx * px + ny * py + nz * pz) / length / radial
+      // A river's banks are cut steeper than any hillside, and read as rock
+      // if left to the slope: a river runs between grassy banks, so the
+      // ground beside one is judged as though it were level.
+      const steep =
+        (1 - (nx * px + ny * py + nz * pz) / length / radial) *
+        (1 - Math.min(1, (wetted[j * side + i] ?? 0) * 8))
       const here = surfaces[j * side + i]
       if (here !== undefined) {
         const look = patternAt(planet, here, steep)
@@ -300,7 +358,9 @@ export function samplePatch(planet: Planet, key: PatchKey, segments: number): Pa
       // Rise is the mean sine of the horizon: above nought the ground is
       // cupped and sees less sky, below it the ground falls away.
       const cupped = rise / directions.length
-      const sky = Math.min(1.08, Math.max(0.5, 1 - cupped * 2.2))
+      // A river's bed and banks are darker for being wet.
+      const sky =
+        Math.min(1.08, Math.max(0.5, 1 - cupped * 2.2)) * (1 - (wetted[j * side + i] ?? 0) * 0.3)
       const out = (j * side + i) * 3
       colours[out] = (colours[out] ?? 0) * sky
       colours[out + 1] = (colours[out + 1] ?? 0) * sky
@@ -405,6 +465,7 @@ export function samplePatch(planet: Planet, key: PatchKey, segments: number): Pa
       coarsePositions[skirt * 4 + 3] = key.level
       for (let k = 0; k < 4; k += 1)
         coarsePattern[skirt * 4 + k] = coarsePattern[vertex * 4 + k] ?? 0
+      water[skirt] = water[vertex] ?? 0
       ice[skirt * 2] = ice[vertex * 2] ?? 0
       ice[skirt * 2 + 1] = ice[vertex * 2 + 1] ?? 0
       for (let k = 0; k < 8; k += 1) ground[skirt * 8 + k] = ground[vertex * 8 + k] ?? 0
@@ -424,6 +485,7 @@ export function samplePatch(planet: Planet, key: PatchKey, segments: number): Pa
     coarsePattern,
     ice,
     ground,
+    water,
   }
 }
 

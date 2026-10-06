@@ -570,12 +570,12 @@ export function withWaterDetail(material: THREE.Material): THREE.Material {
     shader.uniforms.terrainMorphLod = TERRAIN_MORPH
     shader.vertexShader = (
       MORPH_DECLARE +
-      'attribute float coarseDepth;\nattribute vec2 ice;\nvarying float v_ice;\n' +
+      'attribute float coarseDepth;\nattribute vec2 ice;\nattribute float inland;\nvarying float v_ice;\nvarying float v_inland;\n' +
       shader.vertexShader
     )
       .replace(
         'void main() {',
-        'void main() {\n  float seaMorph = terrainMorphAt(position);\n  float seaDepth = mix(depth, coarseDepth, seaMorph);\n  v_ice = mix(ice.x, ice.y, seaMorph);',
+        'void main() {\n  float seaMorph = terrainMorphAt(position);\n  float seaDepth = mix(depth, coarseDepth, seaMorph);\n  v_ice = mix(ice.x, ice.y, seaMorph);\n  v_inland = inland;',
       )
       .replace('v_depth = depth;', 'v_depth = seaDepth;')
       .replace('smoothstep(0.0, 0.0004, depth)', 'smoothstep(0.0, 0.0004, seaDepth)')
@@ -597,7 +597,8 @@ export function withWaterDetail(material: THREE.Material): THREE.Material {
           float seaView = length((modelViewMatrix * vec4(position, 1.0)).xyz);
           // And calm under ice, which damps the sea: waves lifted the water
           // over the floes as the eye came down, and the ice drowned.
-          float lift = (1.0 - smoothstep(0.02, 0.14, seaView)) * smoothstep(0.0, 0.0004, seaDepth) * (1.0 - smoothstep(0.05, 0.4, v_ice));
+          // And none on a lake or river: a swell needs a sea's fetch.
+          float lift = (1.0 - smoothstep(0.02, 0.14, seaView)) * smoothstep(0.0, 0.0004, seaDepth) * (1.0 - smoothstep(0.05, 0.4, v_ice)) * (1.0 - inland);
           float shoal = 1.0 + 0.7 * (1.0 - smoothstep(0.0, 0.004, depth));
           // (direction, wavelength, steepness, period) for four trains.
           vec4 trainA = vec4(0.3, 0.02, 0.16, 11.0);
@@ -643,7 +644,7 @@ export function withWaterDetail(material: THREE.Material): THREE.Material {
       value: seaIce instanceof THREE.Color ? seaIce : new THREE.Color(0.9, 0.94, 0.97),
     }
     shader.fragmentShader =
-      'uniform vec3 seaSky;\nuniform vec3 seaIce;\nvarying float v_ice;\nvarying float v_jac;\nvarying float v_heave;\n' +
+      'uniform vec3 seaSky;\nuniform vec3 seaIce;\nvarying float v_ice;\nvarying float v_inland;\nvarying float v_jac;\nvarying float v_heave;\n' +
       shader.fragmentShader
     shader.fragmentShader = shader.fragmentShader
       .replace(
@@ -655,17 +656,23 @@ export function withWaterDetail(material: THREE.Material): THREE.Material {
         // Lighter over the shallows, where the floor shows through, and
         // lighter on a crest than in a trough.
         float shallows = 1.0 - smoothstep(0.0, 0.004, v_depth);
+        // A river is a few ten-thousandths deep everywhere, which by the
+        // sea's measure is all shallows and all surf: inland water is read
+        // by its own depth, greener and darker, and its edge is not foam.
+        float inlandShallows = 1.0 - smoothstep(0.0, 0.0003, v_depth);
+        shallows = mix(shallows, inlandShallows * 0.5, v_inland);
+        diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(0.55, 0.75, 0.7), v_inland * 0.6);
         diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * 1.7, shallows * 0.45);
         diffuseColor.rgb *= 1.0 + v_heave * 0.18;
         // Foam where the sea meets the land, broken and moving.
-        float shore = 1.0 - smoothstep(0.0, 0.0009, v_depth);
+        float shore = (1.0 - smoothstep(0.0, 0.0009, v_depth)) * (1.0 - v_inland);
         float churn = detailNoise(vDetailPosition * 1500.0 + drift * 1500.0);
         float foam = shore * smoothstep(0.45, 0.8, churn + shore * 0.35) * (1.0 - smoothstep(0.05, 0.5, seaDistance));
         // Breaking crests: where the wave has squeezed the surface most,
         // streaked by a noise so the foam is ragged, and the odd cap at sea.
         float breaking = smoothstep(0.62, 0.42, v_jac);
         float streak = smoothstep(0.35, 0.75, detailNoise(vDetailPosition * 1800.0 + drift * 1200.0));
-        float caps = max(breaking * (0.4 + streak * 0.6), smoothstep(0.9, 0.98, detailNoise(vDetailPosition * 1100.0 - drift * 1100.0)) * 0.4) * seaNear;
+        float caps = (1.0 - v_inland) * max(breaking * (0.4 + streak * 0.6), smoothstep(0.9, 0.98, detailNoise(vDetailPosition * 1100.0 - drift * 1100.0)) * 0.4) * seaNear;
         float white = clamp(foam + caps, 0.0, 1.0);
         diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.92, 0.95, 0.97), white);
         diffuseColor.a = mix(diffuseColor.a, 0.95, white);
@@ -673,7 +680,7 @@ export function withWaterDetail(material: THREE.Material): THREE.Material {
         // where the floor is worth seeing. Clear everywhere, the floor under
         // it — and how much of it the angle let through — set the colour of
         // the open sea, which shifted as the glide pitched.
-        diffuseColor.a = mix(diffuseColor.a, 0.9, smoothstep(0.0, 0.012, v_depth));
+        diffuseColor.a = mix(diffuseColor.a, 0.9, max(smoothstep(0.0, 0.012, v_depth), v_inland * smoothstep(0.0, 0.0004, v_depth)));
         // Pack ice floats on the water, slabs split by dark leads, and does
         // not mirror the sky.
         float packIce = smoothstep(0.9, 1.0, v_ice);

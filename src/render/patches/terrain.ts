@@ -436,6 +436,9 @@ export class Terrain {
       const depth = new Float32Array(count)
       // And how deep the parent patch would say it is, to slide towards.
       const coarseDepth = new Float32Array(count)
+      // Whether the water here is a lake or a river rather than the sea: no
+      // swell and no surf on it, and its shallows read by its own depth.
+      const inland = new Float32Array(count)
       const edgeCoarse = new Map<string, number>()
       // The skirt's vertices sit under the edge's, lowered: read as their own
       // depth they made every patch boundary a line of deeper, darker water.
@@ -453,34 +456,41 @@ export class Terrain {
         const y = patch.positions[vertex * 3 + 1] ?? 0
         const z = patch.positions[vertex * 3 + 2] ?? 1
         const length = Math.hypot(x, y, z) || 1
+        // The water's own surface here: the sea, a lake, or a river (run on
+        // one vertex past its edge, level, by patch-data). Anywhere else the
+        // sea's level, under the land, as the sea's sheet always was.
+        const level = patch.water[vertex] ?? 0
+        const surface = level > 0 ? level : SEA_RADIUS
+        inland[vertex] = level > SEA_RADIUS + 1e-6 ? 1 : 0
         const coarse =
-          SEA_RADIUS -
+          surface -
           Math.hypot(
             patch.coarsePositions[vertex * 4] ?? 0,
             patch.coarsePositions[vertex * 4 + 1] ?? 0,
             patch.coarsePositions[vertex * 4 + 2] ?? 0,
           )
         if (vertex < grid) {
-          depth[vertex] = SEA_RADIUS - length
+          depth[vertex] = surface - length
           coarseDepth[vertex] = coarse
           edgeDepth.set(keyOf(x, y, z), depth[vertex] ?? 0)
           edgeCoarse.set(keyOf(x, y, z), coarse)
         } else {
-          depth[vertex] = edgeDepth.get(keyOf(x, y, z)) ?? SEA_RADIUS - length
+          depth[vertex] = edgeDepth.get(keyOf(x, y, z)) ?? surface - length
           coarseDepth[vertex] = edgeCoarse.get(keyOf(x, y, z)) ?? coarse
         }
         normals[vertex * 3] = x / length
         normals[vertex * 3 + 1] = y / length
         normals[vertex * 3 + 2] = z / length
-        positions[vertex * 3] = (x / length) * SEA_RADIUS
-        positions[vertex * 3 + 1] = (y / length) * SEA_RADIUS
-        positions[vertex * 3 + 2] = (z / length) * SEA_RADIUS
+        positions[vertex * 3] = (x / length) * surface
+        positions[vertex * 3 + 1] = (y / length) * surface
+        positions[vertex * 3 + 2] = (z / length) * surface
       }
       const water = new THREE.BufferGeometry()
       water.setAttribute('position', new THREE.BufferAttribute(positions, 3))
       water.setAttribute('normal', new THREE.BufferAttribute(normals, 3))
       water.setAttribute('depth', new THREE.BufferAttribute(depth, 1))
       water.setAttribute('coarseDepth', new THREE.BufferAttribute(coarseDepth, 1))
+      water.setAttribute('inland', new THREE.BufferAttribute(inland, 1))
       water.setAttribute('ice', new THREE.BufferAttribute(patch.ice, 2))
       water.setAttribute('coarsePosition', new THREE.BufferAttribute(patch.coarsePositions, 4))
       water.setIndex(new THREE.BufferAttribute(this.index, 1))

@@ -1,3 +1,4 @@
+import type { Vec3 } from '@/generation/cube'
 import { fixedClock, systemClock } from '@/app/clock'
 import { readConfig } from '@/app/config'
 import { linkFor, parseLink } from '@/app/link'
@@ -175,6 +176,12 @@ if (recording) {
       /** Turn and climb as the keyboard does. */
       nudge: (turn: number, climb: number) => {
         rig.nudge(turn, climb)
+      },
+      /** Where Fly would start the glide now. */
+      diveFrom: () => scene.diveFrom(),
+      /** Start the glide from a point of the planet, heading this way (its own frame). */
+      glideFrom: (position: Vec3, heading: Vec3) => {
+        rig.fly({ position, heading })
       },
       canvas,
     },

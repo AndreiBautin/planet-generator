@@ -307,3 +307,28 @@ it. Control → `ui/`, with the feel as pure functions beside the DOM wiring.
 Link format → `app/link.ts`. Config → `app/config.ts` plus `.env.example`.
 A new file the app needs offline from `public/` → `PUBLIC_FILES` in
 `vite.config.ts`.
+
+## Rivers and lakes
+
+`generation/hydrology.ts` works out the water for a whole planet once, on
+the patches' own level-7 grid: a priority flood from the sea inwards (each
+cell drains to the one it was reached from, so nothing flows uphill), then
+rain gathered downstream. A river is a run of cells carrying `RIVER_FLOW`;
+a lake is a hollow filled more than `LAKE_DEPTH` deep. It is deterministic
+and memoised per planet, so every worker agrees and a river is in the ground
+from the first patch that holds it — nothing about it arrives late.
+
+- **`LAKE_DEPTH` was 0.002 and drew sheets of shallows** a few thousandths
+  deep across whole river valleys. A shallower hollow is still filled so
+  water flows across it; it is just not drawn.
+- **The water's surface runs one vertex past a shore, level** (`inland` in
+  `patch-data.ts`). Left following the ground there, the sheet climbed the
+  bank and stood out of it as a jagged grey wall. Dry vertices otherwise
+  sit at sea level, as the sea's sheet always did.
+- **Inland water is flagged per vertex** (`inland` on the water mesh): no
+  swell, no surf, its own shallows. A river is a few ten-thousandths deep,
+  which by the sea's thresholds is all surf.
+- **A river's banks are judged as level** for rock and stone; carved, they
+  are steeper than any hillside.
+- The recorder has `diveFrom()` and `glideFrom(position, heading)` so a
+  look can start on a chosen feature rather than wherever Fly lands.
