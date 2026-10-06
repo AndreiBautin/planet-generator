@@ -64,6 +64,12 @@ export interface Scene {
   readonly orbitOver: (position: Vec3) => { readonly yaw: number; readonly pitch: number }
   /** Draw one frame now: for the development recorder, with `manual` set. */
   readonly step: () => void
+  /**
+   * The view as a picture, without the page's controls: a frame drawn now
+   * and read straight back, in the same task, since the drawing buffer is
+   * not kept between frames.
+   */
+  readonly capture: () => Promise<Blob | null>
   readonly dispose: () => void
 }
 
@@ -761,6 +767,11 @@ export function startScene(
       return { position, heading: alongTheLand(shown.world, position, unit(heading)) }
     },
     step: tick,
+    capture: () =>
+      new Promise((resolve) => {
+        tick()
+        canvas.toBlob(resolve, 'image/png')
+      }),
     orbitOver: (position) => {
       const [x, y, z] = intoRoom(position, lastTurn)
       return { yaw: Math.atan2(x, z), pitch: Math.asin(Math.max(-1, Math.min(1, y))) }

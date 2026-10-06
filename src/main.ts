@@ -12,7 +12,7 @@ import { logger, setLogLevel } from '@/shared/logger'
 import { attachGestures } from '@/ui/controls'
 import { attachHud } from '@/ui/hud'
 import { createRig } from '@/ui/rig'
-import { shareLink } from '@/ui/share'
+import { savePicture, shareLink } from '@/ui/share'
 
 /**
  * The composition root: read config, settle the seed, start the scene and
@@ -111,6 +111,20 @@ const hud = attachHud({
     else rig.fly(scene.diveFrom())
     hud.flying(rig.flying())
   },
+  onTour: () => {
+    if (rig.touring()) {
+      rig.tour(false)
+      return
+    }
+    if (!rig.flying()) {
+      rig.fly(scene.diveFrom())
+      hud.flying(true)
+    }
+    rig.tour(true)
+  },
+  onPhoto: () => {
+    takePicture()
+  },
   onDials: (next) => {
     dials = next
     // Replaced rather than pushed: a dial dragged across its range is one
@@ -120,9 +134,34 @@ const hud = attachHud({
   },
 })
 
-// Arrow keys steer a glide on a keyboard, and Escape lands.
+rig.onTour((touring) => {
+  hud.touring(touring)
+})
+
+const flash = document.getElementById('flash')
+function takePicture(): void {
+  // The shutter's blink restarts on every press.
+  flash?.classList.remove('shot')
+  flash?.getBoundingClientRect()
+  flash?.classList.add('shot')
+  const name = `${planet.name} ${planet.seed}`.replace(/[^\w -]+/g, '').trim()
+  void scene
+    .capture()
+    .then(async (blob) => (blob === null ? 'Could not take a picture' : savePicture(blob, name)))
+    .then((message) => {
+      if (message !== undefined) hud.toast(message)
+    })
+}
+
+// Arrow keys steer a glide on a keyboard, and Escape lands. P takes a
+// picture whether flying or not.
 window.addEventListener('keydown', (event) => {
-  if (!rig.flying() || event.target instanceof HTMLInputElement) return
+  if (event.target instanceof HTMLInputElement) return
+  if (event.key === 'p' || event.key === 'P') {
+    takePicture()
+    return
+  }
+  if (!rig.flying()) return
   const steps: Record<string, readonly [number, number]> = {
     ArrowLeft: [-0.04, 0],
     ArrowRight: [0.04, 0],

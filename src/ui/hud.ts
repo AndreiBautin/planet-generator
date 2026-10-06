@@ -12,6 +12,10 @@ export interface HudHandlers {
   readonly onDials: (dials: Dials) => void
   /** Fly when orbiting, land when flying. */
   readonly onFly: () => void
+  /** Start a tour (flying off if in orbit), or stop one. */
+  readonly onTour: () => void
+  /** Take a picture of the view. */
+  readonly onPhoto: () => void
 }
 
 export interface Hud {
@@ -19,6 +23,8 @@ export interface Hud {
   readonly toast: (message: string) => void
   /** Say whether the camera is flying: the button's word, and the hint. */
   readonly flying: (flying: boolean) => void
+  /** Say whether the glide is flying itself. */
+  readonly touring: (touring: boolean) => void
 }
 
 const element = <T extends HTMLElement>(id: string, type: new () => T): T => {
@@ -47,6 +53,9 @@ export function attachHud(handlers: HudHandlers): Hud {
   element('share', HTMLButtonElement).addEventListener('click', handlers.onShare)
   const fly = element('fly', HTMLButtonElement)
   fly.addEventListener('click', handlers.onFly)
+  const tour = element('tour', HTMLButtonElement)
+  tour.addEventListener('click', handlers.onTour)
+  element('photo', HTMLButtonElement).addEventListener('click', handlers.onPhoto)
   tune.addEventListener('click', () => {
     panel.hidden = !panel.hidden
     tune.setAttribute('aria-pressed', String(!panel.hidden))
@@ -84,6 +93,10 @@ export function attachHud(handlers: HudHandlers): Hud {
       fly.textContent = flying ? 'Land' : 'Fly'
       fly.setAttribute('aria-pressed', String(flying))
       document.body.classList.toggle('flying', flying)
+    },
+    touring: (touring) => {
+      tour.setAttribute('aria-pressed', String(touring))
+      document.body.classList.toggle('touring', touring)
     },
     toast: (message) => {
       toastLine.textContent = message

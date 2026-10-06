@@ -362,3 +362,23 @@ fading (`cloudsSeenFrom` walks them, each by its own radius) and release
 all carry over unchanged; rain, cloud shadows and `cloudDataOf` still read
 the base deck's map. **Cirrus streaks need bending and breaking**: plain
 latitude-stretched noise read as evenly ruled corduroy from orbit.
+
+## Tour and photo
+
+**Tour** (`ui/tour.ts`, pure and tested) is an autopilot that only turns:
+it looks ahead, left and right for land and banks towards it, and meanders
+on a slow swing where it is land every way. Height stays the glide's own,
+so a pinch still changes it mid-tour; a grab, a drag or a key takes over.
+`stickFor` turns a wanted turn rate into the stick input the glide reads,
+through the glide's own decay, so the tour flies the same aircraft a
+finger does. **`heading × up` points right**, which the first draft had
+backwards; the test flies it beside a coast to hold that.
+
+**Photo** (the camera top right, or P) draws a frame and reads it back in
+the same task (`scene.capture`), since the drawing buffer is not kept; the
+page's controls are HTML over the canvas, so the picture is the view
+alone. Share sheet where it takes files, a download otherwise.
+
+**Five buttons fit a 375-pixel phone only with the narrow-screen gap and
+padding** in `index.html`; a sixth needs a different layout, not less
+padding.

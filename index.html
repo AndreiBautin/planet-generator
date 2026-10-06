@@ -58,6 +58,8 @@
         top: max(16px, env(safe-area-inset-top));
         left: var(--gutter);
         right: var(--gutter);
+        /* Clear of the picture button in the top-right corner. */
+        padding-right: 56px;
         pointer-events: none;
         text-shadow: 0 1px 12px rgba(0, 0, 0, 0.8);
       }
@@ -84,6 +86,47 @@
         font-family: ui-monospace, 'Cascadia Mono', Menlo, monospace;
         color: var(--ink);
         opacity: 0.85;
+      }
+
+      /* The picture button sits apart, top right, out of the dock's crowd. */
+      .photo {
+        position: fixed;
+        top: max(16px, env(safe-area-inset-top));
+        right: var(--gutter);
+        width: 48px;
+        padding: 0;
+        display: grid;
+        place-items: center;
+      }
+      /* A shutter's blink when a picture is taken: once, fast, never a loop. */
+      .flash {
+        position: fixed;
+        inset: 0;
+        background: #fff;
+        opacity: 0;
+        pointer-events: none;
+      }
+      .flash.shot {
+        animation: shot 0.35s ease-out;
+      }
+      @keyframes shot {
+        from {
+          opacity: 0.55;
+        }
+        to {
+          opacity: 0;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .flash.shot {
+          animation: none;
+        }
+      }
+      /* Touring, the chrome steps back so the view is the show. */
+      .touring .title,
+      .touring .photo {
+        opacity: 0.35;
+        transition: opacity 0.6s;
       }
 
       .dock {
@@ -138,6 +181,16 @@
       .actions button {
         padding: 0 12px;
         white-space: nowrap;
+      }
+      /* Five buttons across a phone: closer together, so the bar fits a
+         375-pixel screen without scrolling sideways. */
+      @media (max-width: 420px) {
+        .actions {
+          gap: 6px;
+        }
+        .actions button {
+          padding: 0 9px;
+        }
       }
       .primary {
         flex: 1;
@@ -277,10 +330,24 @@
         <button type="button" id="tune" aria-pressed="false" aria-controls="dials">Tune</button>
         <button type="button" id="new" class="primary">New planet</button>
         <button type="button" id="fly" aria-pressed="false">Fly</button>
+        <button type="button" id="tour" aria-pressed="false">Tour</button>
         <button type="button" id="share">Share</button>
       </nav>
     </div>
 
+    <button type="button" class="photo" id="photo" aria-label="Take a picture">
+      <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
+        <path
+          d="M4 8h3l2-2.5h6L17 8h3v11H4z"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.6"
+          stroke-linejoin="round"
+        />
+        <circle cx="12" cy="13" r="3.6" fill="none" stroke="currentColor" stroke-width="1.6" />
+      </svg>
+    </button>
+    <div class="flash" id="flash" aria-hidden="true"></div>
     <p class="hint" id="hint">Drag to steer and climb · pinch to change height</p>
     <p class="toast" id="toast" role="status" aria-live="polite"></p>
     <script type="module" src="/src/main.ts"></script>
