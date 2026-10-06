@@ -647,7 +647,7 @@ from 5 to 8.
   function of time in the shader, nothing moved per frame. Brown-grey ash
   lit on top and shadowed beneath, near black on the night side, and orange
   at the foot from the vent. Children of the terrain group, released with
-  it (`userData.plume`).
+  it (`userData.withGround`).
 - **Embers** are the rain's arrangement going upwards: points in a box
   round the eye, additive, flickering, dying as they rise, on a molten
   world below about 0.05 radii.
@@ -790,3 +790,27 @@ planet's star and its worlds; choosing one flies there.
   whole canvas buffer scaled down (the earlier grab drew only a corner of
   the device-pixel buffer) shows the home world shrinking away, the next
   born small in its place and growing as the camera comes in.
+
+## City lights
+
+Temperate and ocean worlds are lived on (`generation/settlements.ts`,
+tested): every land cell of the drainage map scored for coast, a big river,
+low ground and a mild climate (with a little chance, so the best sites are
+not all one coast), up to 150 towns kept apart, the best sites largest.
+
+- **Lights**: each town a cluster of points, gaussian round its heart,
+  never on water; roads of fainter points between near neighbours, bending
+  a little. Additive, warm sodium or cold white, lit only where it is dark
+  (on through the dusk). Lifted in proportion to how far off they are seen,
+  so a coarse patch drawn over the true ground does not swallow them.
+- **Glow**: points alone are a few sparks from a glide, so the towns also
+  bake a glow map (`townGlow`, 1024 × 512, read in the ground's light block
+  as `detailCities`) — warm light on the ground round each town at night.
+- **Made in the build worker** (`lights` job in `work.ts`): scoring the
+  planet's land is ~0.6 s, a hitch on every arrival when it ran on the
+  page. Asked for after the ground near the eye, and dropped if the planet
+  changed before it came.
+- **The worker's planet cache now keys on every dial.** It left out the
+  season, so moving the Season dial within a session handed back the old
+  planet and the ground kept the old snow line — a bug from the seasons
+  round, caught while adding the job.

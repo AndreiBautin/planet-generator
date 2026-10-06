@@ -67,6 +67,9 @@ export const DETAIL_ZENITH = { value: new THREE.Color(0, 0, 0) }
  * already near the number of textures a phone allows.
  */
 export const DETAIL_RINGS = { value: new THREE.Vector2(0, 0) }
+/** The towns' glow on the ground (settlements.ts, `townGlow`), and how strongly it shows: nought with none. */
+export const DETAIL_CITIES: { value: THREE.Texture | null } = { value: null }
+export const DETAIL_CITY_LIGHT = { value: 0 }
 /** How strongly the aurora (aurora.ts) lights the ground under it on the night side; nought with none. */
 export const DETAIL_AURORA = { value: 0 }
 export const DETAIL_RING_BANDS = {
@@ -155,7 +158,7 @@ function passThrough(
     )
   const varying = extra === undefined ? '' : `varying ${extra.type} v_${extra.attribute};\n`
   shader.fragmentShader =
-    `uniform float detailTime;\nuniform float detailRange;\nuniform sampler2D detailClouds;\nuniform float detailCloudSpin;\nuniform vec3 detailCloudSun;\nuniform mat3 detailNormalMatrix;\nuniform vec2 detailRings;\nuniform vec4 detailRingBands[16];\nuniform float detailAurora;\nvarying vec3 vDetailPosition;\nvarying vec3 vDetailNormal;\n${varying}` +
+    `uniform float detailTime;\nuniform float detailRange;\nuniform sampler2D detailClouds;\nuniform float detailCloudSpin;\nuniform vec3 detailCloudSun;\nuniform mat3 detailNormalMatrix;\nuniform vec2 detailRings;\nuniform vec4 detailRingBands[16];\nuniform float detailAurora;\nuniform sampler2D detailCities;\nuniform float detailCityLight;\nvarying vec3 vDetailPosition;\nvarying vec3 vDetailNormal;\n${varying}` +
     NOISE +
     CLOUD_SHADOW +
     RING_SHADOW +
@@ -169,6 +172,8 @@ function passThrough(
   shader.uniforms.detailRings = DETAIL_RINGS
   shader.uniforms.detailRingBands = DETAIL_RING_BANDS
   shader.uniforms.detailAurora = DETAIL_AURORA
+  shader.uniforms.detailCities = DETAIL_CITIES
+  shader.uniforms.detailCityLight = DETAIL_CITY_LIGHT
   shader.uniforms.hazeSun = HAZE_SUN
 }
 
@@ -641,6 +646,16 @@ export function withGroundDetail(
           reflectedLight.directSpecular *= groundDay;
           // Under the aurora's band, on the night side, the ground takes a
           // little of its green: snow most, being brightest.
+          // The towns' glow on the ground round them, at night: what makes
+          // a town a place from a glide, where its lights alone are a few
+          // sparks. Off by day, on through the dusk.
+          if (detailCityLight > 0.0) {
+            vec3 cityUp = normalize(vDetailPosition);
+            vec2 cityUv = vec2(atan(cityUp.z, -cityUp.x) / 6.2831853 + 0.5, 1.0 - acos(clamp(cityUp.y, -1.0, 1.0)) / 3.1415927);
+            float cityDark = 1.0 - smoothstep(-0.12, 0.04, dot(cityUp, detailCloudSun));
+            float town = texture2D(detailCities, cityUv).r;
+            totalEmissiveRadiance += vec3(1.0, 0.62, 0.3) * town * town * cityDark * detailCityLight;
+          }
           if (detailAurora > 0.0) {
             vec3 up = normalize(vDetailPosition);
             float band = exp(-pow((acos(abs(up.y)) - 0.37) / 0.13, 2.0));

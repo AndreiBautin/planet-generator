@@ -27,9 +27,13 @@ import { auroraFor, auroraStrength } from './aurora'
 import { VALLEY_FOG } from './valley-fog'
 import { Embers, plumes, PLUME_SUN } from './volcanic'
 import { volcanoesOf } from '@/generation/volcanoes'
+import { cityLights } from './city-lights'
+import { CITY_GLOW_WIDTH } from './work'
 import { Lightning, rainShafts, SHAFT_LIGHT } from './weather'
 import {
   DETAIL_AURORA,
+  DETAIL_CITIES,
+  DETAIL_CITY_LIGHT,
   DETAIL_CLOUD_LAYER_SUN,
   DETAIL_CLOUD_SPIN,
   DETAIL_CLOUD_SUN,
@@ -512,7 +516,7 @@ export function startScene(
     if (previous !== undefined) {
       scene.remove(previous.terrain.group)
       for (const child of previous.terrain.group.children) {
-        if (child.userData.plume === true) release(child)
+        if (child.userData.withGround === true) release(child)
       }
       previous.terrain.dispose()
       if (!keep) {
@@ -529,8 +533,28 @@ export function startScene(
     // Smoke from a molten world's peaks, turning with its ground.
     const smoke = plumes(next.world, volcanoesOf(next.world))
     if (smoke !== undefined) {
-      smoke.userData.plume = true
+      smoke.userData.withGround = true
       next.terrain.group.add(smoke)
+    }
+    // The towns' lights, on a world that has towns: made in a worker, and
+    // added if this ground is still the one on screen when they come.
+    DETAIL_CITY_LIGHT.value = 0
+    if (next.world.kind === 'temperate' || next.world.kind === 'oceanic') {
+      const ground = next.terrain
+      void options.builder.lights(next.world.seed, next.world.dials).then(({ lights, glow }) => {
+        if (shown?.terrain !== ground) return
+        const points = cityLights(lights)
+        if (points === undefined) return
+        points.userData.withGround = true
+        ground.group.add(points)
+        const map = new THREE.DataTexture(glow, CITY_GLOW_WIDTH, CITY_GLOW_WIDTH / 2)
+        map.magFilter = THREE.LinearFilter
+        map.minFilter = THREE.LinearFilter
+        map.needsUpdate = true
+        DETAIL_CITIES.value?.dispose()
+        DETAIL_CITIES.value = map
+        DETAIL_CITY_LIGHT.value = 0.5
+      })
     }
     if (!keep) scene.add(clouds, air, sky, heavens.group)
     const animate = next.born && !options.reducedMotion

@@ -1,7 +1,9 @@
 import { createPlanet, type Planet } from '@/generation/planet'
 
 import type { WorkRequest, WorkResult } from './build-protocol'
-import { samplePatch } from './patches/patch-data'
+import { settlementsOf, townGlow } from '@/generation/settlements'
+
+import { groundRadiusAt, samplePatch } from './patches/patch-data'
 import { bakeClouds } from './surface-data'
 
 /**
@@ -15,8 +17,11 @@ import { bakeClouds } from './surface-data'
 const planets = new Map<string, Planet>()
 
 function planetFor(request: WorkRequest): Planet {
-  const { water, temperature, roughness } = request.dials
-  const name = `${request.seed}|${String(water)}|${String(temperature)}|${String(roughness)}`
+  // Every dial in the name: a planet kept under a name that left one out
+  // (the season, once) was handed back after that dial moved, and the
+  // ground came out as it was before.
+  const { water, temperature, roughness, season } = request.dials
+  const name = `${request.seed}|${String(water)}|${String(temperature)}|${String(roughness)}|${String(season)}`
   const known = planets.get(name)
   if (known !== undefined) return known
   const planet = createPlanet(request.seed, request.dials)
@@ -39,7 +44,33 @@ export function answer(request: WorkRequest): WorkResult {
         kind: 'patch',
         patch: samplePatch(planet, request.key, request.segments),
       }
+    case 'lights':
+      return {
+        id: request.id,
+        kind: 'lights',
+        lights: placedLights(planet),
+        glow: townGlow(settlementsOf(planet).towns, CITY_GLOW_WIDTH),
+      }
   }
+}
+
+/** How wide the towns' glow map is: a texel is about a hundredth of a radius at the equator. */
+export const CITY_GLOW_WIDTH = 1024
+
+/** The towns' lights stood on the drawn ground: the costly part of them, so made here, off the page. */
+function placedLights(planet: Planet): Float32Array {
+  const lights = settlementsOf(planet).lights
+  const out = new Float32Array(lights.length)
+  for (let k = 0; k < lights.length; k += 5) {
+    const d: [number, number, number] = [lights[k] ?? 0, lights[k + 1] ?? 0, lights[k + 2] ?? 1]
+    const radius = groundRadiusAt(planet, d) + 0.0002
+    out[k] = d[0] * radius
+    out[k + 1] = d[1] * radius
+    out[k + 2] = d[2] * radius
+    out[k + 3] = lights[k + 3] ?? 0.5
+    out[k + 4] = lights[k + 4] ?? 0.8
+  }
+  return out
 }
 
 /** The buffers a result can hand over rather than copy. */
@@ -47,6 +78,8 @@ export function transferables(result: WorkResult): Transferable[] {
   switch (result.kind) {
     case 'clouds':
       return [result.texture.buffer]
+    case 'lights':
+      return [result.lights.buffer, result.glow.buffer]
     case 'patch':
       return [
         result.patch.positions.buffer,

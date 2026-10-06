@@ -22,6 +22,11 @@ import { answer } from './work'
  */
 export interface Builder {
   readonly clouds: (seed: Seed, dials: Dials, width: number) => Promise<Uint8Array>
+  /** A lived-on world's lights (generation/settlements.ts), placed on its ground. */
+  readonly lights: (
+    seed: Seed,
+    dials: Dials,
+  ) => Promise<{ readonly lights: Float32Array; readonly glow: Uint8Array }>
   /** `urgency`: lower is sooner; about how far the patch is from the eye. */
   readonly patch: (
     seed: Seed,
@@ -123,6 +128,13 @@ export function createBuilder(cores: number): Builder {
       const result = await run({ id: next, kind: 'clouds', seed, dials, width }, -1)
       if (result.kind !== 'clouds') throw new Error('builder answered clouds with something else')
       return result.texture
+    },
+    lights: async (seed, dials) => {
+      next += 1
+      // After the ground near the eye: lights are for later, not for now.
+      const result = await run({ id: next, kind: 'lights', seed, dials }, -2)
+      if (result.kind !== 'lights') throw new Error('builder answered lights with something else')
+      return { lights: result.lights, glow: result.glow }
     },
     patch: async (seed, dials, key, segments, urgency = 0) => {
       next += 1
