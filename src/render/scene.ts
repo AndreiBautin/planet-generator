@@ -1,7 +1,7 @@
 import * as THREE from 'three'
 
 import type { Clock } from '@/app/clock'
-import { surfaceAt, type Planet } from '@/generation/planet'
+import { sunDeclination, surfaceAt, type Planet } from '@/generation/planet'
 import { createRng } from '@/generation/rng'
 import { RING_BANDS, satellitesOf } from '@/generation/satellites'
 import { starField } from '@/generation/stars'
@@ -316,6 +316,9 @@ const GRADE_SHADER = {
  * change of pace never jumps the ground.
  */
 const ORBIT_TURN_MS = 120_000
+
+/** Which way across the room the sun lies, in the plane of the equator: the light's old place, (5, 2.5). */
+const SUN_ACROSS = new THREE.Vector2(5, 2.5).normalize()
 const GLIDE_TURN_MS = 480_000
 
 export function startScene(
@@ -796,6 +799,26 @@ export function startScene(
     turnedAt = now
     const turn = turned
     lastTurn = turn
+    // The sun stands as far north or south as the planet's season puts it
+    // (planet.ts), always from the same side of the room: the planet's
+    // turn under it is the time of day, its declination the time of year.
+    if (shown !== undefined) {
+      const declination = sunDeclination(shown.world)
+      sunDirection.set(
+        Math.cos(declination) * SUN_ACROSS.x,
+        Math.sin(declination),
+        Math.cos(declination) * SUN_ACROSS.y,
+      )
+      const air: unknown = shown.air.material
+      if (air instanceof THREE.ShaderMaterial) {
+        const value: unknown = air.uniforms.sun?.value
+        if (value instanceof THREE.Vector3) value.copy(sunDirection)
+      }
+    }
+    // Placed for the whole planet; the shadow box moves it over the eye
+    // when low (`place`).
+    sun.target.position.set(0, 0, 0)
+    sun.position.copy(sunDirection).multiplyScalar(5)
     DETAIL_TIME.value = now / 1000
     DETAIL_RANGE.value = quality.featureRange
     // The clouds drift ahead of the ground by a sixth of its turn, and their

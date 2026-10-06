@@ -18,9 +18,20 @@ export interface Dials {
   readonly temperature: number
   /** Gentle to jagged, 0 to 1. */
   readonly roughness: number
+  /**
+   * Where in its year the planet is, 0 to 1: 0 the north's midsummer, 0.5
+   * its midwinter, 0.25 and 0.75 the equinoxes. Moves the sun north and
+   * south by the planet's tilt, and the cold with it.
+   */
+  readonly season: number
 }
 
-export const DEFAULT_DIALS: Dials = { water: 0.55, temperature: 0, roughness: 0.5 }
+/**
+ * The equinox by default: the sun over the equator, neither hemisphere
+ * warmed, so a planet looks as it did before it had a year — and every
+ * link made before then opens on the same ground.
+ */
+export const DEFAULT_DIALS: Dials = { water: 0.55, temperature: 0, roughness: 0.5, season: 0.25 }
 
 export interface Planet {
   readonly seed: Seed
@@ -33,6 +44,8 @@ export interface Planet {
   readonly relief: number
   /** Overall warmth, -1 to 1: the kind's climate moved by the dial. */
   readonly climate: number
+  /** How far its spin axis leans from upright, radians: how big its seasons are. */
+  readonly tilt: number
   readonly molten: boolean
   readonly palette: Palette
   readonly continents: Noise3
@@ -74,16 +87,20 @@ export function createPlanet(seed: Seed, dials: Dials = DEFAULT_DIALS): Planet {
   const water = clamp(dials.water, 0, 1)
   const temperature = clamp(dials.temperature, -1, 1)
   const roughness = clamp(dials.roughness, 0, 1)
+  const season = clamp(dials.season, 0, 1)
   return {
     seed,
     name: planetName(rng.fork('name')),
     kind,
-    dials: { water, temperature, roughness },
+    dials: { water, temperature, roughness, season },
     // Raising the sea floods the land; the continents' noise sits around 0,
     // so a sea level from -0.25 to 0.25 spans mostly dry to mostly wet.
     seaLevel: (clamp(water + traits.waterShift, 0, 1) - 0.5) * 0.5,
     relief: 0.035 + roughness * 0.045,
     climate: clamp(traits.climate + temperature * 0.8, -1.2, 1.2),
+    // From a few degrees to about thirty-five: from barely any seasons to
+    // a midnight sun well down from the poles.
+    tilt: rng.fork('tilt').range(0.05, 0.6),
     molten: traits.molten,
     palette: traits.palette,
     continents: createNoise3(rng.fork('continents')),
@@ -116,6 +133,14 @@ export function elevationAt(planet: Planet, x: number, y: number, z: number): nu
   return continent + inland * ranges * (0.25 + roughness * 0.45) + detail
 }
 
+/**
+ * How far north of the equator the sun stands, radians: the tilt, turned
+ * through the year. Positive is the north's summer.
+ */
+export function sunDeclination(planet: Pick<Planet, 'tilt' | 'dials'>): number {
+  return planet.tilt * Math.cos(planet.dials.season * Math.PI * 2)
+}
+
 /** Height, biome and colour at a point; the direction need not be unit length. */
 export function surfaceAt(planet: Planet, x: number, y: number, z: number): Surface {
   const length = Math.hypot(x, y, z) || 1
@@ -128,8 +153,14 @@ export function surfaceAt(planet: Planet, x: number, y: number, z: number): Surf
   // Colder towards the poles and with altitude; the y axis is the spin axis.
   // The moisture field also roughens the line: latitude alone cut the ice
   // edge as a ruler-straight band.
+  // And the season: the hemisphere the sun stands over is warmer, more so
+  // towards its pole, which has the sun all day; the other, colder.
   const warmth =
-    planet.climate - Math.abs(uy) * 1.15 - Math.max(0, height) * 0.9 + (wet - 0.5) * 0.45
+    planet.climate -
+    Math.abs(uy) * 1.15 -
+    Math.max(0, height) * 0.9 +
+    (wet - 0.5) * 0.45 +
+    uy * Math.sin(sunDeclination(planet)) * 1.1
   const biome = biomeFor(planet, height, warmth)
   return {
     height,

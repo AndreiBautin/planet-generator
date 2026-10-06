@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import { createNoise3 } from './noise'
 import { PLANET_KINDS, type PlanetKind } from './kinds'
-import { createPlanet, surfaceAt } from './planet'
+import { createPlanet, DEFAULT_DIALS, sunDeclination, surfaceAt } from './planet'
 import { createRng } from './rng'
 import { newSeed, parseSeed, type Seed } from './seed'
 
@@ -47,7 +47,12 @@ const share = (
 }
 
 const landShare = (water: number): number => {
-  const planet = createPlanet(seedOfKind('temperate'), { water, temperature: 0, roughness: 0.5 })
+  const planet = createPlanet(seedOfKind('temperate'), {
+    water,
+    temperature: 0,
+    roughness: 0.5,
+    season: 0.25,
+  })
   const points = spherePoints(2000)
   return points.filter(([x, y, z]) => surfaceAt(planet, x, y, z).height > 0).length / points.length
 }
@@ -111,8 +116,9 @@ describe('a planet', () => {
       water: 7,
       temperature: Number.NaN,
       roughness: -3,
+      season: 9,
     })
-    expect(planet.dials).toEqual({ water: 1, temperature: -1, roughness: 0 })
+    expect(planet.dials).toEqual({ water: 1, temperature: -1, roughness: 0, season: 1 })
   })
 })
 
@@ -132,7 +138,7 @@ describe('kinds, climates and names', () => {
     const base = seedOfKind('temperate')
     const ice = (temperature: number) =>
       share(
-        createPlanet(base, { water: 0.55, temperature, roughness: 0.5 }),
+        createPlanet(base, { water: 0.55, temperature, roughness: 0.5, season: 0.25 }),
         (biome) => biome === 'snow' || biome === 'sea-ice',
       )
     expect(ice(-1)).toBeGreaterThan(ice(0))
@@ -151,7 +157,26 @@ describe('kinds, climates and names', () => {
       water: 0.55,
       temperature: -1,
       roughness: 0.5,
+      season: 0.25,
     })
     expect(share(planet, (biome) => biome === 'sea-ice')).toBe(0)
+  })
+})
+
+describe('seasons', () => {
+  it('moves the sun north in the north summer and south in its winter, by the tilt', () => {
+    const summer = createPlanet(seed('k3m9xqa'), { ...DEFAULT_DIALS, season: 0 })
+    const winter = createPlanet(seed('k3m9xqa'), { ...DEFAULT_DIALS, season: 0.5 })
+    const equinox = createPlanet(seed('k3m9xqa'))
+    expect(sunDeclination(summer)).toBeCloseTo(summer.tilt, 9)
+    expect(sunDeclination(winter)).toBeCloseTo(-winter.tilt, 9)
+    expect(Math.abs(sunDeclination(equinox))).toBeLessThan(1e-9)
+  })
+
+  it('warms the summer hemisphere and leaves the equinox as it was', () => {
+    const at = (season: number): number =>
+      surfaceAt(createPlanet(seed('k3m9xqa'), { ...DEFAULT_DIALS, season }), 0.2, 0.9, 0.3).warmth
+    expect(at(0)).toBeGreaterThan(at(0.25))
+    expect(at(0.5)).toBeLessThan(at(0.25))
   })
 })

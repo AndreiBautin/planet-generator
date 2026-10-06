@@ -58,8 +58,8 @@ describe('fine relief', () => {
   })
 
   it('is rougher on a rougher planet', () => {
-    const smooth = createPlanet(seed, { water: 0.55, temperature: 0, roughness: 0 })
-    const rough = createPlanet(seed, { water: 0.55, temperature: 0, roughness: 1 })
+    const smooth = createPlanet(seed, { water: 0.55, temperature: 0, roughness: 0, season: 0.25 })
+    const rough = createPlanet(seed, { water: 0.55, temperature: 0, roughness: 1, season: 0.25 })
     expect(fineReliefAt(rough, 0.3, 0.4, 0.86)).toBeGreaterThan(
       fineReliefAt(smooth, 0.3, 0.4, 0.86),
     )

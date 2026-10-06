@@ -11,7 +11,7 @@ const seed: Seed = parsed
 
 describe('link', () => {
   it('round-trips a seed and its dials', () => {
-    const dials = { water: 0.7, temperature: -0.2, roughness: 0.35 }
+    const dials = { water: 0.7, temperature: -0.2, roughness: 0.35, season: 0.25 }
     const link = parseLink(linkFor(seed, dials))
     expect(link.seed).toBe(seed)
     expect(link.dials).toEqual(dials)

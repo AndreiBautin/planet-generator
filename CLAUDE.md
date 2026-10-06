@@ -656,3 +656,25 @@ from 5 to 8.
 - **Seen in passing, not fixed:** on the night side of `h999999` a low
   slope near the lava draws pale cream, as though lit — it was there before
   any of this, and its cause is not yet found.
+
+## Tilt and seasons
+
+Each planet leans by a seeded `tilt` (3° to 34°, `rng.fork('tilt')`, so no
+other draw moved), and **Season** is a fourth dial (`s=` in the link, 0 the
+north's midsummer, 0.5 its midwinter).
+
+- **The sun moves, the planet does not.** The spin axis stays y, as every
+  other part assumes (clouds, rings, hydrology, latitude bands); the sun's
+  declination is `sunDeclination` = tilt · cos(2π·season), set on the light,
+  the sky's own sun uniform and everything that reads `sunDirection`, every
+  frame. Its side of the room never changes, so the turn is still the time
+  of day and the postcard hours still read true. Midnight sun and polar
+  night follow from the geometry alone.
+- **The cold moves with it**: `surfaceAt` adds uy · sin(declination) · 1.1
+  to warmth, so the summer pole sheds its snow and the winter one spreads
+  it — at 34° tilt to the mid-latitudes. It is a dial, so it rebuilds the
+  ground like the others.
+- **The default is the equinox (0.25)**, where both terms are nought: every
+  link made before seasons opens on exactly the same ground. The light's old
+  fixed place stood 15° north; that is the one thing an old link shows
+  differently, and only in where the shadows fall.

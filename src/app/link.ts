@@ -82,11 +82,12 @@ function shotParam(shot: Shot): string {
     : `o,${at},${shot.height.toFixed(2)},${hour}`
 }
 
-const KEYS = { water: 'w', temperature: 't', roughness: 'r' } as const
+const KEYS = { water: 'w', temperature: 't', roughness: 'r', season: 's' } as const
 const RANGES = {
   water: [0, 1],
   temperature: [-1, 1],
   roughness: [0, 1],
+  season: [0, 1],
 } as const satisfies Record<keyof Dials, readonly [number, number]>
 
 function readDial(params: URLSearchParams, dial: keyof Dials): number {
@@ -105,6 +106,7 @@ export function parseLink(search: string): Link {
       water: readDial(params, 'water'),
       temperature: readDial(params, 'temperature'),
       roughness: readDial(params, 'roughness'),
+      season: readDial(params, 'season'),
     },
     shot: parseShot(params.get('shot')),
   }
@@ -112,7 +114,7 @@ export function parseLink(search: string): Link {
 
 export function linkFor(seed: Seed, dials: Dials, shot?: Shot): string {
   const params = new URLSearchParams({ seed })
-  for (const dial of ['water', 'temperature', 'roughness'] as const) {
+  for (const dial of ['water', 'temperature', 'roughness', 'season'] as const) {
     const percent = Math.round(dials[dial] * 100)
     if (percent !== Math.round(DEFAULT_DIALS[dial] * 100)) params.set(KEYS[dial], String(percent))
   }

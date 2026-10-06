@@ -53,6 +53,7 @@ export function attachHud(handlers: HudHandlers): Hud {
     water: element('dial-water', HTMLInputElement),
     temperature: element('dial-temperature', HTMLInputElement),
     roughness: element('dial-roughness', HTMLInputElement),
+    season: element('dial-season', HTMLInputElement),
   }
 
   element('new', HTMLButtonElement).addEventListener('click', handlers.onNew)
@@ -80,6 +81,7 @@ export function attachHud(handlers: HudHandlers): Hud {
         water: Number(dials.water.value) / 100,
         temperature: Number(dials.temperature.value) / 100,
         roughness: Number(dials.roughness.value) / 100,
+        season: Number(dials.season.value) / 100,
       })
     }, DIAL_SETTLE_MS)
   }
@@ -98,6 +100,7 @@ export function attachHud(handlers: HudHandlers): Hud {
       dials.water.value = String(Math.round(planet.dials.water * 100))
       dials.temperature.value = String(Math.round(planet.dials.temperature * 100))
       dials.roughness.value = String(Math.round(planet.dials.roughness * 100))
+      dials.season.value = String(Math.round(planet.dials.season * 100))
     },
     flying: (flying) => {
       fly.textContent = flying ? 'Land' : 'Fly'
