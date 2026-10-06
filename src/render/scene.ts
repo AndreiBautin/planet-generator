@@ -23,11 +23,13 @@ import { fromPalette } from './colour'
 import { buildHeavens, type Heavens } from './heavens'
 import { coverAt, Rain } from './rain'
 import { Soundscape } from './sound'
+import { auroraFor, auroraStrength } from './aurora'
 import { VALLEY_FOG } from './valley-fog'
 import { Embers, plumes, PLUME_SUN } from './volcanic'
 import { volcanoesOf } from '@/generation/volcanoes'
 import { Lightning, rainShafts, SHAFT_LIGHT } from './weather'
 import {
+  DETAIL_AURORA,
   DETAIL_CLOUD_LAYER_SUN,
   DETAIL_CLOUD_SPIN,
   DETAIL_CLOUD_SUN,
@@ -492,6 +494,11 @@ export function startScene(
     } else {
       heavens = buildHeavens(satellitesOf(next.world))
       ringsOnGround(heavens)
+      // The aurora goes with the heavens: built and let go with them, and
+      // like them in the room's frame, not turning with the ground.
+      const aurora = auroraFor(next.world)
+      if (aurora !== undefined) heavens.group.add(aurora)
+      DETAIL_AURORA.value = auroraStrength(next.world) * 0.07
       clouds = next.clouds ?? cloudsFromTexture(next.world, new Uint8Array(8), 2)
       // Rain hanging from the storms, turning with the clouds they fall from.
       const held = cloudDataOf(clouds)

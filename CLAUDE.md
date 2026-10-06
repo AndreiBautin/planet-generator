@@ -678,3 +678,21 @@ north's midsummer, 0.5 its midwinter).
   link made before seasons opens on exactly the same ground. The light's old
   fixed place stood 15° north; that is the one thing an old link shows
   differently, and only in where the shadows fall.
+
+## Aurora
+
+`render/aurora.ts`: a curtain round each pole, on an oval about 21° from
+it that wanders a few degrees, standing from 1.016 to 1.06 radii, drawn
+additively — green at its foot, red and violet up its height, rays
+drifting along it. Put out on the day side and through twilight by the
+sun, so it is seen through polar night and on any night side near the
+poles. None on molten or arid worlds; its brightness is the seed's own
+(`auroraStrength`).
+
+- **It lives in the heavens' group**, built and released with the moons and
+  rings, in the room's frame and scaled with the planet's birth.
+- **It lights the snow under it** (`DETAIL_AURORA`, in the ground's light
+  block): a faint green on the night side under the band. At three times
+  the shipped strength the snow read as green daylight.
+- Seen: from orbit as a folding oval over a 34°-tilted world in polar night
+  (`9jkv67g&s=50`), and from the ground beneath it.

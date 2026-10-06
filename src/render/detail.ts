@@ -67,6 +67,8 @@ export const DETAIL_ZENITH = { value: new THREE.Color(0, 0, 0) }
  * already near the number of textures a phone allows.
  */
 export const DETAIL_RINGS = { value: new THREE.Vector2(0, 0) }
+/** How strongly the aurora (aurora.ts) lights the ground under it on the night side; nought with none. */
+export const DETAIL_AURORA = { value: 0 }
 export const DETAIL_RING_BANDS = {
   value: Array.from({ length: 16 }, () => new THREE.Vector4()),
 }
@@ -153,7 +155,7 @@ function passThrough(
     )
   const varying = extra === undefined ? '' : `varying ${extra.type} v_${extra.attribute};\n`
   shader.fragmentShader =
-    `uniform float detailTime;\nuniform float detailRange;\nuniform sampler2D detailClouds;\nuniform float detailCloudSpin;\nuniform vec3 detailCloudSun;\nuniform mat3 detailNormalMatrix;\nuniform vec2 detailRings;\nuniform vec4 detailRingBands[16];\nvarying vec3 vDetailPosition;\nvarying vec3 vDetailNormal;\n${varying}` +
+    `uniform float detailTime;\nuniform float detailRange;\nuniform sampler2D detailClouds;\nuniform float detailCloudSpin;\nuniform vec3 detailCloudSun;\nuniform mat3 detailNormalMatrix;\nuniform vec2 detailRings;\nuniform vec4 detailRingBands[16];\nuniform float detailAurora;\nvarying vec3 vDetailPosition;\nvarying vec3 vDetailNormal;\n${varying}` +
     NOISE +
     CLOUD_SHADOW +
     RING_SHADOW +
@@ -166,6 +168,7 @@ function passThrough(
   shader.uniforms.detailNormalMatrix = DETAIL_NORMAL_MATRIX
   shader.uniforms.detailRings = DETAIL_RINGS
   shader.uniforms.detailRingBands = DETAIL_RING_BANDS
+  shader.uniforms.detailAurora = DETAIL_AURORA
   shader.uniforms.hazeSun = HAZE_SUN
 }
 
@@ -625,6 +628,14 @@ export function withGroundDetail(
           groundDay *= 1.0 - ringShadowFrom(vDetailPosition, detailCloudSun);
           reflectedLight.directDiffuse *= groundDay;
           reflectedLight.directSpecular *= groundDay;
+          // Under the aurora's band, on the night side, the ground takes a
+          // little of its green: snow most, being brightest.
+          if (detailAurora > 0.0) {
+            vec3 up = normalize(vDetailPosition);
+            float band = exp(-pow((acos(abs(up.y)) - 0.37) / 0.13, 2.0));
+            float dark = 1.0 - smoothstep(-0.25, 0.02, dot(up, detailCloudSun));
+            totalEmissiveRadiance += diffuseColor.rgb * vec3(0.12, 0.85, 0.42) * band * dark * detailAurora;
+          }
         }
         #endif`,
       )
