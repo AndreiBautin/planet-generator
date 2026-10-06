@@ -814,3 +814,26 @@ not all one coast), up to 150 towns kept apart, the best sites largest.
   season, so moving the Season dial within a session handed back the old
   planet and the ground kept the old snow line — a bug from the seasons
   round, caught while adding the job.
+
+## Waterfalls and rapids
+
+- **Rapids are the river's own slope** (`rapids` in `patch-data.ts`, a water
+  attribute): the gradient of the water level across each river vertex, in
+  radii per radian, white from 0.15 to all white at 0.45. Taken **one-sided
+  where only one neighbour is water** — a river is often a single vertex
+  wide, and asking for water on both sides found white water on almost
+  nothing. Only between water and water, so a bank never reads as a fall.
+  About 8% of inland water vertices carry some, 1% are all white.
+- **The shader** (`withWaterDetail`) pales the aerated water and lays
+  streaked foam over it, solid from afar so a fall shows as a white thread
+  from a glide. Damped by ice.
+- **Spray at the big drops** (`generation/waterfalls.ts`, tested; spray in
+  `render/waterfalls.ts`): river segments of the drainage map that fall at
+  least 0.05 to the next cell, the 20 steepest kept apart, each **snapped
+  onto the channel as drawn** — `waterAt` wanders a river off the line
+  between cell centres, and spray placed on that line hung over a dry
+  hillside. None on snow, and none where the water ices over (warmth under
+  `FREEZES + 0.3`): the first fall looked at was a frozen river in fog.
+  Puffs like the volcanic plumes, low and pale, gone from orbit.
+- **Found in the build worker** (`falls` job): it needs the drainage map,
+  ~0.4 s when the page had to make its own.

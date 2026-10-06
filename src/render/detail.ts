@@ -687,12 +687,12 @@ export function withWaterDetail(material: THREE.Material): THREE.Material {
     shader.uniforms.terrainMorphLod = TERRAIN_MORPH
     shader.vertexShader = (
       MORPH_DECLARE +
-      'attribute float coarseDepth;\nattribute vec2 ice;\nattribute float inland;\nvarying float v_ice;\nvarying float v_inland;\nvarying vec3 v_up;\n' +
+      'attribute float coarseDepth;\nattribute vec2 ice;\nattribute float inland;\nattribute float rapids;\nvarying float v_ice;\nvarying float v_inland;\nvarying float v_rapids;\nvarying vec3 v_up;\n' +
       shader.vertexShader
     )
       .replace(
         'void main() {',
-        'void main() {\n  float seaMorph = terrainMorphAt(position);\n  float seaDepth = mix(depth, coarseDepth, seaMorph);\n  v_ice = mix(ice.x, ice.y, seaMorph);\n  v_inland = inland;\n  v_up = normalize(normalMatrix * normalize(position));',
+        'void main() {\n  float seaMorph = terrainMorphAt(position);\n  float seaDepth = mix(depth, coarseDepth, seaMorph);\n  v_ice = mix(ice.x, ice.y, seaMorph);\n  v_inland = inland;\n  v_rapids = rapids;\n  v_up = normalize(normalMatrix * normalize(position));',
       )
       .replace('v_depth = depth;', 'v_depth = seaDepth;')
       .replace('smoothstep(0.0, 0.0004, depth)', 'smoothstep(0.0, 0.0004, seaDepth)')
@@ -772,7 +772,7 @@ export function withWaterDetail(material: THREE.Material): THREE.Material {
       value: seaIce instanceof THREE.Color ? seaIce : new THREE.Color(0.9, 0.94, 0.97),
     }
     shader.fragmentShader =
-      'uniform vec3 seaSky;\nuniform vec3 seaZenith;\nuniform vec3 seaIce;\nvarying vec3 v_up;\nvarying float v_ice;\nvarying float v_inland;\nvarying float v_jac;\nvarying float v_heave;\n' +
+      'uniform vec3 seaSky;\nuniform vec3 seaZenith;\nuniform vec3 seaIce;\nvarying vec3 v_up;\nvarying float v_ice;\nvarying float v_inland;\nvarying float v_rapids;\nvarying float v_jac;\nvarying float v_heave;\n' +
       shader.fragmentShader
     shader.fragmentShader = shader.fragmentShader
       .replace(
@@ -824,6 +824,17 @@ export function withWaterDetail(material: THREE.Material): THREE.Material {
         float breaking = smoothstep(0.62, 0.42, v_jac);
         float streak = smoothstep(0.35, 0.75, detailNoise(vDetailPosition * 1800.0 + drift * 1200.0));
         float caps = (1.0 - v_inland) * max(breaking * (0.4 + streak * 0.6), smoothstep(0.9, 0.98, detailNoise(vDetailPosition * 1100.0 - drift * 1100.0)) * 0.4) * seaNear;
+        // White water where a river falls steeply (patch-data.ts, rapids):
+        // churned foam tearing past, broken near to, and solid white where
+        // the drop is a waterfall. Kept from afar, as a thread of white down
+        // a cliff, because that is what tells a fall from a glide.
+        float tumble = detailNoise(vDetailPosition * 2600.0 + drift * 9000.0);
+        float tear = detailNoise(vDetailPosition * 900.0 - drift * 5000.0);
+        float rapid = v_rapids * (1.0 - smoothstep(0.4, 0.9, v_ice));
+        // Aerated water between the streaks, paler and greener than a pool.
+        diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.55, 0.72, 0.72), rapid * 0.35);
+        float whitewater = rapid * 0.9 * smoothstep(0.78 - rapid * 0.3, 0.98 - rapid * 0.2, tumble * 0.6 + tear * 0.6);
+        foam = max(foam, mix(whitewater, rapid * 0.6, 1.0 - seaNear));
         float white = clamp(foam + caps, 0.0, 1.0);
         diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.92, 0.95, 0.97), white);
         diffuseColor.a = mix(diffuseColor.a, 0.95, white);

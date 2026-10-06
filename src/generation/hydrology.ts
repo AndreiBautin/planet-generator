@@ -285,7 +285,7 @@ export function hydrologyOf(planet: Planet): Hydrology {
 }
 
 /** A cell's width, as an angle: a quarter turn over the cells along a face. */
-const CELL_ANGLE = Math.PI / 2 / SIDE
+export const CELL_ANGLE = Math.PI / 2 / SIDE
 
 export interface WaterHere {
   /** How far the ground is cut down for a river bed, in surface-height units. */

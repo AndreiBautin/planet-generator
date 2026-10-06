@@ -77,6 +77,12 @@ export interface PatchData {
    */
   readonly mist: Float32Array
   /**
+   * How much of a river is white water at each vertex, 0 to 1: where its own
+   * surface falls steeply — rapids, and over a cliff a waterfall. Nought on
+   * still water and the sea.
+   */
+  readonly rapids: Float32Array
+  /**
    * Each biome's own ground, four weights a vertex — forest needles,
    * savanna, tundra, and salt flat (ash on a molten world) — then the same
    * four as the parent patch has them: eight a vertex. See `groundOf`.
@@ -162,6 +168,7 @@ export function samplePatch(planet: Planet, key: PatchKey, segments: number): Pa
   const pattern = new Float32Array(vertexCount(segments) * 4)
   const ice = new Float32Array(vertexCount(segments) * 2)
   const mist = new Float32Array(vertexCount(segments))
+  const rapids = new Float32Array(vertexCount(segments))
   const ground = new Float32Array(vertexCount(segments) * 8)
   const water = new Float32Array(vertexCount(segments))
   const wetted = new Float32Array(side * side)
@@ -269,6 +276,34 @@ export function samplePatch(planet: Planet, key: PatchKey, segments: number): Pa
         colours[out + 1] = linear.g * shade
         colours[out + 2] = linear.b * shade
       }
+    }
+  }
+
+  // White water where a river's own surface falls steeply: the slope of
+  // the water level across a vertex, from the ring of levels round it, in
+  // radii per radian. Only on rivers (lakes are level, and the sea), and
+  // only between water and water, so a bank does not read as a fall: on
+  // whichever side has water, one-sided where only one does, because a
+  // river is often a single vertex wide and has a bank on both sides.
+  const step = patchAngle(key.level) / segments
+  const across = (here: number, ahead: number, behind: number): number => {
+    if (ahead > 0 && behind > 0) return (ahead - behind) / (2 * step)
+    if (ahead > 0) return (ahead - here) / step
+    if (behind > 0) return (here - behind) / step
+    return 0
+  }
+  for (let j = 0; j <= segments; j += 1) {
+    for (let i = 0; i <= segments; i += 1) {
+      const v = j * side + i
+      const river = wetted[v] ?? 0
+      const at = (j + 2) * ring + (i + 2)
+      const here = wet[at] ?? 0
+      if (river < 0.2 || here <= 0) continue
+      const slope = Math.hypot(
+        across(here, wet[at + 1] ?? 0, wet[at - 1] ?? 0),
+        across(here, wet[at + ring] ?? 0, wet[at - ring] ?? 0),
+      )
+      rapids[v] = Math.min(1, river) * smoothRange(RAPIDS_FROM, RAPIDS_FULL, slope)
     }
   }
 
@@ -525,6 +560,7 @@ export function samplePatch(planet: Planet, key: PatchKey, segments: number): Pa
         coarsePattern[skirt * 4 + k] = coarsePattern[vertex * 4 + k] ?? 0
       water[skirt] = water[vertex] ?? 0
       mist[skirt] = mist[vertex] ?? 0
+      rapids[skirt] = rapids[vertex] ?? 0
       ice[skirt * 2] = ice[vertex * 2] ?? 0
       ice[skirt * 2 + 1] = ice[vertex * 2 + 1] ?? 0
       for (let k = 0; k < 8; k += 1) ground[skirt * 8 + k] = ground[vertex * 8 + k] ?? 0
@@ -544,6 +580,7 @@ export function samplePatch(planet: Planet, key: PatchKey, segments: number): Pa
     coarsePattern,
     ice,
     mist,
+    rapids,
     ground,
     water,
   }
@@ -559,6 +596,15 @@ const MIST_COAST = 0.0012
 const MIST_ON_WATER = 0.0009
 
 const mix = (from: number, to: number, t: number): number => from + (to - from) * t
+
+/** A river's slope, in radii per radian, where white water begins and where it is all white. */
+const RAPIDS_FROM = 0.15
+const RAPIDS_FULL = 0.45
+
+const smoothRange = (from: number, to: number, value: number): number => {
+  const t = Math.min(1, Math.max(0, (value - from) / (to - from)))
+  return t * t * (3 - 2 * t)
+}
 
 /** The grid vertices along each edge, in order: bottom, top, left, right. */
 function edgeOrder(segments: number): readonly (readonly number[])[] {

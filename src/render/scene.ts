@@ -26,6 +26,7 @@ import { Soundscape } from './sound'
 import { auroraFor, auroraStrength } from './aurora'
 import { VALLEY_FOG } from './valley-fog'
 import { Embers, plumes, PLUME_SUN } from './volcanic'
+import { spray } from './waterfalls'
 import { volcanoesOf } from '@/generation/volcanoes'
 import { cityLights } from './city-lights'
 import { CITY_GLOW_WIDTH } from './work'
@@ -535,6 +536,18 @@ export function startScene(
     if (smoke !== undefined) {
       smoke.userData.withGround = true
       next.terrain.group.add(smoke)
+    }
+    // Spray off the waterfalls: found in a worker, since they need the
+    // drainage map, and added if this ground is still the one on screen.
+    if (!next.world.molten) {
+      const ground = next.terrain
+      void options.builder.falls(next.world.seed, next.world.dials).then((placed) => {
+        if (shown?.terrain !== ground) return
+        const mist = spray(placed)
+        if (mist === undefined) return
+        mist.userData.withGround = true
+        ground.group.add(mist)
+      })
     }
     // The towns' lights, on a world that has towns: made in a worker, and
     // added if this ground is still the one on screen when they come.

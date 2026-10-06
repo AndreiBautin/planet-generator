@@ -2,6 +2,7 @@ import { createPlanet, type Planet } from '@/generation/planet'
 
 import type { WorkRequest, WorkResult } from './build-protocol'
 import { settlementsOf, townGlow } from '@/generation/settlements'
+import { waterfallsOf } from '@/generation/waterfalls'
 
 import { groundRadiusAt, samplePatch } from './patches/patch-data'
 import { bakeClouds } from './surface-data'
@@ -51,7 +52,19 @@ export function answer(request: WorkRequest): WorkResult {
         lights: placedLights(planet),
         glow: townGlow(settlementsOf(planet).towns, CITY_GLOW_WIDTH),
       }
+    case 'falls':
+      return { id: request.id, kind: 'falls', falls: placedFalls(planet) }
   }
+}
+
+/** The waterfalls with their feet's ground radius: they need the drainage map, made here, off the page. */
+function placedFalls(planet: Planet): Float32Array {
+  const falls = waterfallsOf(planet)
+  const out = new Float32Array(falls.length * 5)
+  falls.forEach(({ at, drop }, k) => {
+    out.set([at[0], at[1], at[2], groundRadiusAt(planet, at), drop], k * 5)
+  })
+  return out
 }
 
 /** How wide the towns' glow map is: a texel is about a hundredth of a radius at the equator. */
@@ -80,6 +93,8 @@ export function transferables(result: WorkResult): Transferable[] {
       return [result.texture.buffer]
     case 'lights':
       return [result.lights.buffer, result.glow.buffer]
+    case 'falls':
+      return [result.falls.buffer]
     case 'patch':
       return [
         result.patch.positions.buffer,
@@ -92,6 +107,7 @@ export function transferables(result: WorkResult): Transferable[] {
         result.patch.coarsePattern.buffer,
         result.patch.ice.buffer,
         result.patch.mist.buffer,
+        result.patch.rapids.buffer,
         result.patch.ground.buffer,
         result.patch.water.buffer,
       ]

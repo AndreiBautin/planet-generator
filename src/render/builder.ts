@@ -22,6 +22,8 @@ import { answer } from './work'
  */
 export interface Builder {
   readonly clouds: (seed: Seed, dials: Dials, width: number) => Promise<Uint8Array>
+  /** A world's waterfalls (generation/waterfalls.ts), five numbers each (build-protocol.ts). */
+  readonly falls: (seed: Seed, dials: Dials) => Promise<Float32Array>
   /** A lived-on world's lights (generation/settlements.ts), placed on its ground. */
   readonly lights: (
     seed: Seed,
@@ -135,6 +137,12 @@ export function createBuilder(cores: number): Builder {
       const result = await run({ id: next, kind: 'lights', seed, dials }, -2)
       if (result.kind !== 'lights') throw new Error('builder answered lights with something else')
       return { lights: result.lights, glow: result.glow }
+    },
+    falls: async (seed, dials) => {
+      next += 1
+      const result = await run({ id: next, kind: 'falls', seed, dials }, -2)
+      if (result.kind !== 'falls') throw new Error('builder answered falls with something else')
+      return result.falls
     },
     patch: async (seed, dials, key, segments, urgency = 0) => {
       next += 1

@@ -582,6 +582,7 @@ export class Terrain {
       water.setAttribute('inland', new THREE.BufferAttribute(inland, 1))
       water.setAttribute('ice', new THREE.BufferAttribute(patch.ice, 2))
       water.setAttribute('mistTop', new THREE.BufferAttribute(patch.mist, 1))
+      water.setAttribute('rapids', new THREE.BufferAttribute(patch.rapids, 1))
       water.setAttribute('coarsePosition', new THREE.BufferAttribute(patch.coarsePositions, 4))
       water.setIndex(new THREE.BufferAttribute(this.index, 1))
       water.computeBoundingSphere()

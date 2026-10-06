@@ -20,10 +20,13 @@ export type WorkRequest =
   | (Planned & { readonly kind: 'clouds'; readonly width: number })
   | (Planned & { readonly kind: 'patch'; readonly key: PatchKey; readonly segments: number })
   | (Planned & { readonly kind: 'lights' })
+  | (Planned & { readonly kind: 'falls' })
 
 export type WorkResult =
   | { readonly id: number; readonly kind: 'clouds'; readonly texture: Uint8Array }
   | { readonly id: number; readonly kind: 'patch'; readonly patch: PatchData }
+  /** Waterfalls, five numbers each: the foot's direction, its ground radius, and how far it drops. */
+  | { readonly id: number; readonly kind: 'falls'; readonly falls: Float32Array }
   /** Towns' lights, five numbers each: a position on the ground, brightness and warmth. */
   | {
       readonly id: number
