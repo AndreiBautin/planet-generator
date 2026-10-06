@@ -768,3 +768,25 @@ planet's star and its worlds; choosing one flies there.
   to Quique, which arrived as a frozen world with `sys=83tzj46` in its link.
   The journey's middle was not caught on screen — a canvas grab in the
   hidden pane took only a corner of the device-pixel buffer.
+
+## Loose ends, round four
+
+- **The pale slope on a volcanic night was a lava pool glowing as one
+  sheet.** Found by elimination: the scene's three lights and the haze
+  changed nothing, and switching off the volcanic ground material blacked
+  it out. A pool now crusts over like the sea, dark plates and the glow in
+  the cracks between them (`crack` in the lava ground block).
+- **The patchwork on land from orbit was the canopy threshold on a
+  per-vertex weight.** Far off, each vertex's wood weight spreads over its
+  fan of triangles as a hexagon, so any threshold drew hexagons. Widening
+  the threshold did not help; past `pixelSpan` 0.0006–0.004 the weight now
+  darkens the land directly, with no threshold, and the woods are soft
+  shading from orbit. Checked by switching the canopy off entirely (the
+  patchwork went, and so did the forests) before choosing the fix.
+- **The atlas keeps a world's system** (`AtlasEntry.home`, read as the seed
+  itself for an entry written before), so a sibling reopened from it is
+  back in its own system.
+- **The journey between worlds was seen on screen at last**: grabbing the
+  whole canvas buffer scaled down (the earlier grab drew only a corner of
+  the device-pixel buffer) shows the home world shrinking away, the next
+  born small in its place and growing as the camera comes in.

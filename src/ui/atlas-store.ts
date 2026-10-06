@@ -36,6 +36,7 @@ export function saveAtlas(atlas: readonly AtlasEntry[]): void {
           dials: entry.dials,
           visitedAt: entry.visitedAt,
           kept: entry.kept,
+          home: entry.home,
         }
         return lighter
       })

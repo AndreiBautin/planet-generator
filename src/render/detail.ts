@@ -423,7 +423,11 @@ export function withGroundDetail(
             vec3 p = vDetailPosition * 160.0;
             float n = detailNoise(p) + detailNoise(p * 2.7) * 0.35 - 0.675;
             float channel = 1.0 - smoothstep(0.0, 0.035 + 0.03 * (1.0 - lavaFar), abs(n));
-            float pool = smoothstep(0.58, 0.75, detailNoise(vDetailPosition * 45.0)) * lava;
+            // A pool crusts over, as the sea does: dark plates and the
+            // glow showing in the cracks between them. One flat glowing
+            // sheet across a low slope read as a pale lit hillside at night.
+            float crack = 1.0 - smoothstep(0.0, 0.05 + 0.08 * (1.0 - lavaFar), abs(detailNoise(vDetailPosition * 420.0) - 0.5));
+            float pool = smoothstep(0.58, 0.75, detailNoise(vDetailPosition * 45.0)) * lava * (0.18 + 0.82 * crack);
             // Lava running down the channel: a fine noise carried along it.
             float run = detailNoise(vDetailPosition * 700.0 - vec3(detailTime * 2.5, detailTime * 1.7, -detailTime * 2.1) * 0.0012 * 700.0);
             float glow = max(channel * lava * (0.7 + run * 0.6), pool) * (0.8 + 0.2 * sin(detailTime * 0.9 + n * 20.0));
@@ -574,7 +578,14 @@ export function withGroundDetail(
         // The edge of a wood is ragged at clump scale, not the smooth line
         // of the grove field it grows from.
         float edge = v_pattern.x + (clumpA - 0.5) * 0.2 + (broad - 0.5) * 0.1;
-        float canopy = smoothstep(0.08, 0.26, edge) * (1.0 - stand);
+        // From high up a patch's vertices are far apart, and each one's wood
+        // weight spreads over the fan of triangles round it as a hexagon: a
+        // threshold on that drew every wood as a tile, and the land from
+        // orbit as a patchwork of them. Far off the weight darkens the land
+        // by itself, no threshold, so a wood is a soft shading that follows
+        // the ground rather than a mosaic laid over it.
+        float far = smoothstep(0.0006, 0.004, pixelSpan);
+        float canopy = mix(smoothstep(0.08, 0.26, edge), clamp(v_pattern.x * 1.6, 0.0, 0.85), far) * (1.0 - stand);
         if (canopy > 0.02) {
           float tone = (0.34 + broad * 0.2) * (0.7 + crown * 0.55);
           detailShade *= mix(1.0, tone, canopy);

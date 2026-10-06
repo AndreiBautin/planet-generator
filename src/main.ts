@@ -315,7 +315,13 @@ let pictureWait: ReturnType<typeof setTimeout> | undefined
 function remember(world: Planet): void {
   atlas = visit(
     atlas,
-    { seed: world.seed, name: world.name, kind: KINDS[world.kind].label, dials: world.dials },
+    {
+      seed: world.seed,
+      name: world.name,
+      kind: KINDS[world.kind].label,
+      dials: world.dials,
+      home,
+    },
     clock.now(),
   )
   saveAtlas(atlas)
@@ -344,7 +350,7 @@ const atlasPanel = attachAtlas({
     const changed = entry.seed !== seed
     seed = entry.seed
     dials = entry.dials
-    home = seed
+    home = entry.home
     window.history.pushState(null, '', linkFor(seed, dials, undefined, home))
     void show(changed)
   },

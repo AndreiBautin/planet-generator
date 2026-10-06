@@ -11,8 +11,9 @@ const seedOf = (raw: string): Seed => {
   return seed
 }
 
-const world = (raw: string): Pick<AtlasEntry, 'seed' | 'name' | 'kind' | 'dials'> => ({
+const world = (raw: string): Pick<AtlasEntry, 'seed' | 'name' | 'kind' | 'dials' | 'home'> => ({
   seed: seedOf(raw),
+  home: seedOf(raw),
   name: `World ${raw}`,
   kind: 'temperate',
   dials: DEFAULT_DIALS,
@@ -68,6 +69,14 @@ describe('the atlas', () => {
     expect(back[0]?.dials).toEqual({ ...DEFAULT_DIALS })
     expect(back[0]?.kept).toBe(true)
     expect(back[1]?.picture).toBeUndefined()
+    // Written before systems were kept: its own system's home.
+    expect(back[0]?.home).toBe(seeds[0])
+  })
+
+  it('keeps the system a world was reached in', () => {
+    const sibling = { ...world(seeds[3] ?? ''), home: seedOf(seeds[4] ?? '') }
+    const atlas = visit([], sibling, 1)
+    expect(parseAtlas(JSON.parse(JSON.stringify(atlas)))[0]?.home).toBe(seeds[4])
   })
 
   it('round-trips through JSON', () => {

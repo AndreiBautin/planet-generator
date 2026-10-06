@@ -23,6 +23,8 @@ export interface AtlasEntry {
   readonly kept: boolean
   /** A small picture of it from orbit, as a data URL; absent until one is taken. */
   readonly picture?: string
+  /** The home of its star system (generation/system.ts): itself unless reached from a sibling. */
+  readonly home: Seed
 }
 
 /** How many worlds visited but not kept the atlas holds; the oldest go first. */
@@ -31,7 +33,7 @@ export const RECENT_LIMIT = 24
 /** A visit: put the world first, keeping what is known of it, and let the oldest unkept go. */
 export function visit(
   atlas: readonly AtlasEntry[],
-  world: Pick<AtlasEntry, 'seed' | 'name' | 'kind' | 'dials'>,
+  world: Pick<AtlasEntry, 'seed' | 'name' | 'kind' | 'dials' | 'home'>,
   at: number,
 ): readonly AtlasEntry[] {
   const known = atlas.find((entry) => entry.seed === world.seed)
@@ -41,6 +43,7 @@ export function visit(
     name: world.name,
     kind: world.kind,
     dials: world.dials,
+    home: world.home,
     visitedAt: at,
   }
   const others = atlas.filter((other) => other.seed !== world.seed)
@@ -115,6 +118,8 @@ function parseEntry(raw: unknown): AtlasEntry | undefined {
     dials: parseDials(r['dials']),
     visitedAt: number(r['visitedAt'], 0, Number.MAX_SAFE_INTEGER, 0),
     kept: r['kept'] === true,
+    // An entry written before systems were kept is its own system's home.
+    home: parseSeed(typeof r['home'] === 'string' ? r['home'] : null) ?? seed,
     ...(picture === undefined ? {} : { picture }),
   }
 }
