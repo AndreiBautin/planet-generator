@@ -91,6 +91,19 @@ export interface Scene {
   }
   /** Sound on or off (sound.ts), from inside a press; says which it is now. */
   readonly toggleSound: () => boolean
+  /**
+   * Stop the planet turning, for a picture: the hour stays where it is
+   * until let go, and then the day carries on from there.
+   */
+  readonly hold: (on: boolean) => void
+  /** How far the planet has turned, radians: what decides the hour everywhere on it. */
+  readonly turn: () => number
+  /** Turn the planet to `turn` now: a postcard's time of day. */
+  readonly setTurn: (turn: number) => void
+  /** The sun's direction in the room, which never moves: the planet turns under it. */
+  readonly sunInRoom: () => Vec3
+  /** The point under the eye, a unit direction in the planet's own frame. */
+  readonly underEye: () => Vec3
   /** Where the sun is, as a direction in the planet's own frame, as it is turned now. */
   readonly sunInPlanet: () => Vec3
   readonly dispose: () => void
@@ -540,6 +553,7 @@ export function startScene(
   let lastTurn = 0
   let turned = 0
   let turnedAt = clock.now()
+  let holding = false
 
   const orbitEye = new THREE.Vector3()
   const surfaceEye = new THREE.Vector3()
@@ -755,7 +769,7 @@ export function startScene(
     // slow the planet down.
     const seen = view()
     const turnMs = ORBIT_TURN_MS + (GLIDE_TURN_MS - ORBIT_TURN_MS) * seen.blend
-    turned += ((now - turnedAt) / turnMs) * Math.PI * 2
+    if (!holding) turned += ((now - turnedAt) / turnMs) * Math.PI * 2
     turnedAt = now
     const turn = turned
     lastTurn = turn
@@ -870,6 +884,19 @@ export function startScene(
       pixelRatio: renderer.getPixelRatio(),
     }),
     sunInPlanet: () => inPlanetFrame(sunDirection, lastTurn, 1),
+    hold: (on) => {
+      holding = on
+    },
+    turn: () => turned,
+    setTurn: (turn) => {
+      turned = turn
+      lastTurn = turn
+    },
+    sunInRoom: () => [sunDirection.x, sunDirection.y, sunDirection.z],
+    underEye: () => {
+      if (camera.position.lengthSq() < 1e-9) place(view(), lastTurn)
+      return unit(inPlanetFrame(camera.position, lastTurn, 1))
+    },
     capture: () =>
       new Promise((resolve) => {
         tick()

@@ -174,6 +174,136 @@
           animation: none;
         }
       }
+      /* Postcard mode: the view held, a frame over it, everything else away. */
+      .postcard[hidden] {
+        display: none;
+      }
+      .postcarding .title,
+      .postcarding .dock,
+      .postcarding .photo,
+      .postcarding .sound,
+      .postcarding .hint,
+      .postcarding .caption {
+        display: none;
+      }
+      .postcard-frame {
+        position: fixed;
+        overflow: hidden;
+        pointer-events: none;
+        outline: 1px solid rgba(255, 255, 255, 0.55);
+        /* Everything outside the frame dims: what is left bright is the card. */
+        box-shadow: 0 0 0 200vmax rgba(5, 6, 10, 0.55);
+      }
+      .postcard-grain {
+        position: absolute;
+        inset: 0;
+        mix-blend-mode: overlay;
+        background-repeat: repeat;
+      }
+      .postcard-thirds {
+        position: absolute;
+        inset: 0;
+        --rule: rgba(255, 255, 255, 0.2);
+        background:
+          linear-gradient(
+            to right,
+            transparent calc(33.333% - 0.5px),
+            var(--rule) 0 calc(33.333% + 0.5px),
+            transparent 0 calc(66.667% - 0.5px),
+            var(--rule) 0 calc(66.667% + 0.5px),
+            transparent 0
+          ),
+          linear-gradient(
+            to bottom,
+            transparent calc(33.333% - 0.5px),
+            var(--rule) 0 calc(33.333% + 0.5px),
+            transparent 0 calc(66.667% - 0.5px),
+            var(--rule) 0 calc(66.667% + 0.5px),
+            transparent 0
+          );
+      }
+      .postcard-words {
+        position: absolute;
+        left: var(--margin);
+        right: var(--margin);
+        bottom: var(--margin);
+        margin: 0;
+        display: grid;
+        gap: calc(var(--line) * 0.45);
+        text-shadow: 0 1px 12px rgba(0, 0, 0, 0.75);
+      }
+      .postcard-words strong {
+        font-size: var(--caption);
+        font-weight: 650;
+        line-height: 1;
+        white-space: nowrap;
+        overflow: hidden;
+      }
+      .postcard-words span {
+        font-size: var(--line);
+        line-height: 1;
+        font-weight: 500;
+        color: rgba(232, 234, 240, 0.85);
+      }
+      .postcard-panel {
+        position: fixed;
+        left: var(--gutter);
+        right: var(--gutter);
+        bottom: max(12px, env(safe-area-inset-bottom));
+        max-width: 420px;
+        margin: 0 auto;
+        box-sizing: border-box;
+        padding: 12px 14px;
+        display: grid;
+        gap: 6px;
+        border-radius: 16px;
+        border: 1px solid var(--edge);
+        background: var(--glass);
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+      }
+      .postcard-panel .dial {
+        grid-template-columns: 96px 1fr;
+        margin: 0;
+      }
+      .postcard-panel .dial input {
+        height: 32px;
+      }
+      .postcard-panel output {
+        color: var(--ink);
+        font-variant-numeric: tabular-nums;
+      }
+      .framings {
+        display: flex;
+        gap: 6px;
+      }
+      .framings button {
+        flex: 1;
+        min-height: 40px;
+        padding: 0;
+      }
+      .framings button[aria-checked='true'] {
+        border-color: var(--accent);
+      }
+      /* Sixteen pixels, or a phone zooms the page when the field is touched. */
+      #postcard-text {
+        font: inherit;
+        font-size: 16px;
+        min-height: 44px;
+        box-sizing: border-box;
+        padding: 0 12px;
+        border-radius: 12px;
+        border: 1px solid var(--edge);
+        background: rgba(255, 255, 255, 0.06);
+        color: var(--ink);
+      }
+      .postcard-actions {
+        display: flex;
+        gap: 8px;
+      }
+      .postcard-actions button {
+        flex: 1;
+      }
       /* Touring, the chrome steps back so the view is the show. */
       .touring .title,
       .touring .sound,
@@ -292,6 +422,7 @@
         background: var(--glass);
         border: 1px solid var(--edge);
         font-size: 14px;
+        white-space: nowrap;
         opacity: 0;
         transition: opacity 200ms ease;
         pointer-events: none;
@@ -388,7 +519,7 @@
       </nav>
     </div>
 
-    <button type="button" class="photo" id="photo" aria-label="Take a picture">
+    <button type="button" class="photo" id="photo" aria-label="Make a postcard">
       <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
         <path
           d="M4 8h3l2-2.5h6L17 8h3v11H4z"
@@ -427,6 +558,49 @@
         />
       </svg>
     </button>
+    <div class="postcard" id="postcard" hidden>
+      <div class="postcard-frame" id="postcard-frame" aria-hidden="true">
+        <div class="postcard-grain" id="postcard-grain"></div>
+        <div class="postcard-thirds"></div>
+        <p class="postcard-words">
+          <strong id="postcard-caption-shown"></strong><span id="postcard-line"></span>
+        </p>
+      </div>
+      <section class="postcard-panel" id="postcard-panel" aria-label="Postcard">
+        <div class="framings" role="radiogroup" aria-label="Framing">
+          <button type="button" role="radio" data-framing="screen" aria-checked="true">
+            Screen
+          </button>
+          <button type="button" role="radio" data-framing="wide" aria-checked="false">3:2</button>
+          <button type="button" role="radio" data-framing="tall" aria-checked="false">4:5</button>
+          <button type="button" role="radio" data-framing="square" aria-checked="false">1:1</button>
+        </div>
+        <label class="dial">
+          <span>Time <output id="postcard-time"></output></span>
+          <input id="postcard-hour" type="range" min="0" max="1439" step="5" />
+        </label>
+        <label class="dial">
+          <span>Height</span>
+          <input id="postcard-height" type="range" min="0" max="1000" step="1" />
+        </label>
+        <label class="dial">
+          <span>Grain</span>
+          <input id="postcard-grain-dial" type="range" min="0" max="100" step="1" value="25" />
+        </label>
+        <input
+          id="postcard-text"
+          type="text"
+          maxlength="48"
+          aria-label="Caption"
+          placeholder="Write a caption"
+          autocomplete="off"
+        />
+        <div class="postcard-actions">
+          <button type="button" id="postcard-cancel">Cancel</button>
+          <button type="button" id="postcard-send" class="primary">Send postcard</button>
+        </div>
+      </section>
+    </div>
     <div class="flash" id="flash" aria-hidden="true"></div>
     <p class="hint" id="hint">Drag to steer and climb · pinch to change height</p>
     <p class="toast" id="toast" role="status" aria-live="polite"></p>

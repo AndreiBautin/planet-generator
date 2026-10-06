@@ -6,10 +6,14 @@ import type { GestureHandlers } from './controls'
 import { blendOf, dive, ORBITING, rise, settleFlight, steersGlide, type Flight } from './flight'
 import {
   advance,
+  faceGlide,
+  MAX_ALTITUDE,
+  MIN_ALTITUDE,
   pinchGlide,
   poseOf,
   startGlide,
   steer,
+  stillGlide,
   type Glide,
   type Ground,
   type Vec3,
@@ -18,7 +22,9 @@ import {
   drag,
   grab,
   INITIAL_ORBIT,
+  MAX_DISTANCE,
   MAX_PITCH,
+  MIN_DISTANCE,
   pinch,
   release,
   settle,
@@ -69,7 +75,49 @@ export interface Rig {
   readonly touring: () => boolean
   /** Told whenever the tour stops or starts, so a button can say so. */
   readonly onTour: (listener: (touring: boolean) => void) => void
+  /**
+   * Stop the camera where it is, for a picture: `frame` while a postcard
+   * is being composed (a drag turns the view, a pinch changes height, and
+   * nothing else moves), `still` for a postcard opened from a link (the
+   * first touch lets it go and flies on), nothing to let go.
+   */
+  readonly hold: (mode: Hold | undefined) => void
+  /** Told when a touch lets a still view go. */
+  readonly onRelease: (listener: () => void) => void
+  /** What the camera is on and how high: a glide's altitude, an orbit's distance. */
+  readonly height: () => CameraHeight
+  readonly setHeight: (height: number) => void
+  /** Where a postcard taken now would say it was: the point under the eye, and the way it faces. */
+  readonly viewpoint: () =>
+    { readonly position: Vec3; readonly heading: Vec3; readonly tilt: number } | undefined
+  /** Put the camera straight at a spot, no dive: for a link that opens on one. */
+  readonly place: (spot: Spot) => void
 }
+
+export type Hold = 'frame' | 'still'
+
+export interface CameraHeight {
+  readonly kind: 'glide' | 'orbit'
+  readonly value: number
+  readonly low: number
+  readonly high: number
+}
+
+export type Spot =
+  | {
+      readonly kind: 'glide'
+      readonly position: Vec3
+      readonly heading: Vec3
+      readonly altitude: number
+      /** Where the eye looks, radians up from level. */
+      readonly tilt: number
+    }
+  | {
+      readonly kind: 'orbit'
+      readonly yaw: number
+      readonly pitch: number
+      readonly distance: number
+    }
 
 export function createRig(clock: Clock, ground: () => Ground): Rig {
   let orbit: Orbit = INITIAL_ORBIT
@@ -81,6 +129,8 @@ export function createRig(clock: Clock, ground: () => Ground): Rig {
   let told: (touring: boolean) => void = () => undefined
   let guide: Guide | undefined
   let arrive: (stop: GuideStop) => void = () => undefined
+  let held: Hold | undefined
+  let released: () => void = () => undefined
   const setTouring = (on: boolean): void => {
     if (touring === on) return
     touring = on
@@ -90,11 +140,16 @@ export function createRig(clock: Clock, ground: () => Ground): Rig {
   // A hand on the controls is the pilot taking over.
   const takeOver = (): void => {
     setTouring(false)
+    if (held === 'still') {
+      held = undefined
+      released()
+    }
   }
 
   const view = (): CameraView => {
     const now = clock.now()
-    const seconds = (now - last) / 1000
+    // Held, nothing moves on: no coast, no flight, no tour.
+    const seconds = held === undefined ? (now - last) / 1000 : 0
     last = now
     flight = settleFlight(flight, now)
     if (flight.mode === 'orbit') {
@@ -138,6 +193,13 @@ export function createRig(clock: Clock, ground: () => Ground): Rig {
       if (!steersGlide(flight)) orbit = grab(orbit)
     },
     drag: (dx, dy, seconds, height) => {
+      if (held === 'frame' && glide !== undefined) {
+        // Composing, a drag turns the view where it stands and tilts it up or down.
+        const h = Math.max(1, height)
+        const turned = faceGlide(glide, (dx / h) * 1.4)
+        glide = stillGlide(turned, ground(), turned.altitude, turned.pitch - (dy / h) * 1.2)
+        return
+      }
       if (steersGlide(flight) && glide !== undefined) glide = steer(glide, dx, dy, height)
       else orbit = drag(orbit, dx, dy, seconds, height)
     },
@@ -146,10 +208,19 @@ export function createRig(clock: Clock, ground: () => Ground): Rig {
     },
     // Height is not the tour's to choose, so a pinch changes it without taking over.
     pinch: (factor) => {
+      if (held === 'frame' && glide !== undefined) {
+        glide = stillGlide(pinchGlide(glide, factor), ground(), undefined, glide.pitch)
+        return
+      }
       if (steersGlide(flight) && glide !== undefined) glide = pinchGlide(glide, factor)
       else orbit = pinch(orbit, factor)
     },
     wheel: (deltaY) => {
+      if (held === 'frame' && glide !== undefined) {
+        const nearer = pinchGlide(glide, Math.exp(-deltaY * 0.0015))
+        glide = stillGlide(nearer, ground(), undefined, glide.pitch)
+        return
+      }
       if (steersGlide(flight) && glide !== undefined)
         glide = pinchGlide(glide, Math.exp(-deltaY * 0.0015))
       else orbit = wheel(orbit, deltaY)
@@ -194,6 +265,56 @@ export function createRig(clock: Clock, ground: () => Ground): Rig {
     touring: () => touring,
     onTour: (listener) => {
       told = listener
+    },
+    hold: (mode) => {
+      held = mode
+      if (mode === undefined) return
+      setTouring(false)
+      // A dive or a rise is finished at once: a picture is of a place, not
+      // of the way between two.
+      const now = clock.now()
+      if (flight.mode === 'diving') flight = { mode: 'gliding', since: now, from: 1 }
+      if (flight.mode === 'rising') {
+        flight = ORBITING
+        glide = undefined
+      }
+      if (glide !== undefined) glide = stillGlide(glide, ground())
+      orbit = { ...orbit, yawVelocity: 0, pitchVelocity: 0, dragging: false }
+    },
+    onRelease: (listener) => {
+      released = listener
+    },
+    height: () =>
+      glide !== undefined && steersGlide(flight)
+        ? { kind: 'glide', value: glide.altitude, low: MIN_ALTITUDE, high: MAX_ALTITUDE }
+        : { kind: 'orbit', value: orbit.distance, low: MIN_DISTANCE, high: MAX_DISTANCE },
+    setHeight: (height) => {
+      if (glide !== undefined && steersGlide(flight)) {
+        glide = stillGlide(glide, ground(), height, glide.pitch)
+      } else {
+        orbit = { ...orbit, distance: Math.min(MAX_DISTANCE, Math.max(MIN_DISTANCE, height)) }
+      }
+    },
+    viewpoint: () =>
+      glide !== undefined && steersGlide(flight)
+        ? { position: glide.position, heading: glide.heading, tilt: glide.pitch }
+        : undefined,
+    place: (spot) => {
+      setTouring(false)
+      if (spot.kind === 'glide') {
+        const start = startGlide(spot.position, spot.heading, ground())
+        glide = stillGlide(start, ground(), spot.altitude, spot.tilt)
+        flight = { mode: 'gliding', since: clock.now(), from: 1 }
+      } else {
+        glide = undefined
+        flight = ORBITING
+        orbit = {
+          ...INITIAL_ORBIT,
+          yaw: spot.yaw,
+          pitch: Math.max(-MAX_PITCH, Math.min(MAX_PITCH, spot.pitch)),
+          distance: Math.min(MAX_DISTANCE, Math.max(MIN_DISTANCE, spot.distance)),
+        }
+      }
     },
   }
 }

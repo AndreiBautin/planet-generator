@@ -51,3 +51,41 @@ export async function shareLink(title: string, url: string): Promise<string | un
     return 'Copy the link from the address bar'
   }
 }
+
+/**
+ * Send a postcard: the picture and a link back to the place it shows,
+ * through the share sheet where it can carry a file. Elsewhere the
+ * picture is downloaded and the link copied, so it can go with it.
+ * Returns what to say, or nothing when the sheet said it.
+ */
+export async function sendPostcard(
+  blob: Blob,
+  name: string,
+  title: string,
+  url: string,
+): Promise<string | undefined> {
+  const file = new File([blob], `${name}.png`, { type: 'image/png' })
+  if (typeof navigator.canShare === 'function' && navigator.canShare({ files: [file] })) {
+    try {
+      // The link in the text too: a sheet that carries a file often drops the url.
+      await navigator.share({ files: [file], title, text: `${title} ${url}`, url })
+      return undefined
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') return undefined
+    }
+  }
+  const saved = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = saved
+  link.download = file.name
+  link.click()
+  setTimeout(() => {
+    URL.revokeObjectURL(saved)
+  }, 10_000)
+  try {
+    await navigator.clipboard.writeText(url)
+    return 'Postcard saved · link copied'
+  } catch {
+    return 'Postcard saved'
+  }
+}

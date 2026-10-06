@@ -1,7 +1,8 @@
 import type { Vec3 } from '@/generation/cube'
 import { fixedClock, systemClock } from '@/app/clock'
 import { readConfig } from '@/app/config'
-import { linkFor, parseLink } from '@/app/link'
+import { linkFor, parseLink, type Shot } from '@/app/link'
+import { KINDS } from '@/generation/kinds'
 import { createPlanet, DEFAULT_DIALS, type Dials, type Planet } from '@/generation/planet'
 import { newSeed, type Seed } from '@/generation/seed'
 import { createBuilder } from '@/render/builder'
@@ -14,7 +15,18 @@ import { attachHud } from '@/ui/hud'
 import { TERRAIN_STATS } from '@/render/patches/terrain'
 import { landmarksOf, tourOrder } from '@/generation/landmarks'
 import { createRig } from '@/ui/rig'
-import { savePicture, shareLink } from '@/ui/share'
+import { savePicture, sendPostcard, shareLink } from '@/ui/share'
+import {
+  directionOf,
+  headingOf,
+  heightFrom,
+  hourAt,
+  shotOf,
+  sliderFrom,
+  turnForHour,
+} from '@/ui/postcard'
+import { composePostcard } from '@/ui/postcard-card'
+import { attachPostcard } from '@/ui/postcard-panel'
 
 /**
  * The composition root: read config, settle the seed, start the scene and
@@ -102,6 +114,7 @@ const show = async (born: boolean): Promise<void> => {
 
 const hud = attachHud({
   onNew: () => {
+    letGo()
     // A new world is born in orbit: rising over the old one first would be
     // two seconds of a planet that is about to be replaced.
     rig.cut()
@@ -117,11 +130,13 @@ const hud = attachHud({
     })
   },
   onFly: () => {
+    letGo()
     if (rig.flying()) rig.land(scene.orbitOver)
     else rig.fly(scene.diveFrom())
     hud.flying(rig.flying())
   },
   onTour: () => {
+    letGo()
     if (rig.touring()) {
       rig.tour(false)
       return
@@ -140,7 +155,7 @@ const hud = attachHud({
     rig.tour(true, stops)
   },
   onPhoto: () => {
-    takePicture()
+    openPostcard()
   },
   onSound: () => {
     hud.sounding(scene.toggleSound())
@@ -161,12 +176,135 @@ rig.onArrive((stop) => {
   hud.caption(stop.name, stop.title)
 })
 
+/**
+ * Postcard mode: the camera and the planet held where they are, a frame
+ * over the view, and a panel to choose the framing, the hour, the height,
+ * the grain and the words. What is sent is the picture and a link back to
+ * the place it shows, at the hour it shows it.
+ */
+const pointHere = (): Vec3 => rig.viewpoint()?.position ?? scene.underEye()
+const hourHere = (): number => hourAt(pointHere(), scene.sunInRoom(), scene.turn())
+let watchHour: ReturnType<typeof setInterval> | undefined
+
+const postcard = attachPostcard({
+  onHour: (hour) => {
+    const point = pointHere()
+    scene.setTurn(turnForHour(point, scene.sunInRoom(), hour, scene.turn()))
+    // An orbit stays over the same ground as the planet turns under it.
+    if (!rig.flying()) {
+      rig.place({ kind: 'orbit', ...scene.orbitOver(point), distance: rig.height().value })
+    }
+  },
+  onHeight: (t) => {
+    const height = rig.height()
+    rig.setHeight(heightFrom(t, height.low, height.high))
+  },
+  onSend: () => {
+    sendCard()
+  },
+  onClose: () => {
+    closePostcard()
+  },
+})
+
+function openPostcard(): void {
+  if (postcard.isOpen()) return
+  rig.hold('frame')
+  scene.hold(true)
+  const height = rig.height()
+  postcard.open({
+    hour: hourHere(),
+    height: sliderFrom(height.value, height.low, height.high),
+    caption: `Greetings from ${planet.name}`,
+    kind: KINDS[planet.kind].label,
+  })
+  // A drag round an orbit brings other ground, at another hour, under the middle.
+  watchHour = setInterval(() => {
+    postcard.showHour(hourHere())
+  }, 250)
+}
+
+function closePostcard(): void {
+  if (!postcard.isOpen()) return
+  postcard.close()
+  clearInterval(watchHour)
+  rig.hold(undefined)
+  scene.hold(false)
+}
+
+/** Let go of anything holding the view: a postcard being made, or one opened from a link. */
+function letGo(): void {
+  closePostcard()
+  rig.hold(undefined)
+  scene.hold(false)
+}
+
+function sendCard(): void {
+  const card = postcard.card()
+  const facing = rig.viewpoint()
+  const point = pointHere()
+  const shot: Shot = shotOf(
+    facing === undefined ? 'orbit' : 'glide',
+    point,
+    facing?.heading,
+    rig.height().value,
+    hourHere(),
+    facing?.tilt,
+  )
+  const url = new URL(linkFor(seed, dials, shot), window.location.href).href
+  const name = `${planet.name} postcard`.replace(/[^\w -]+/g, '').trim()
+  const title = card.caption.trim() === '' ? planet.name : card.caption.trim()
+  blink()
+  void scene
+    .capture()
+    .then(async (picture) => {
+      if (picture === null) return 'Could not take a picture'
+      const composed = await composePostcard(picture, {
+        ...card,
+        viewportWidth: window.innerWidth,
+      })
+      return composed === null
+        ? 'Could not make the postcard'
+        : sendPostcard(composed, name, title, url)
+    })
+    .then((message) => {
+      if (message !== undefined) hud.toast(message)
+    })
+}
+
+/** Open on the place and hour a postcard link names, held still until a touch lets it go. */
+function openShot(shot: Shot): void {
+  const point = directionOf(shot.latitude, shot.longitude)
+  scene.setTurn(turnForHour(point, scene.sunInRoom(), shot.hour, 0))
+  scene.hold(true)
+  if (shot.kind === 'glide') {
+    rig.place({
+      kind: 'glide',
+      position: point,
+      heading: headingOf(point, shot.bearing),
+      altitude: shot.height,
+      tilt: shot.tilt / (180 / Math.PI),
+    })
+    hud.flying(true)
+  } else {
+    rig.place({ kind: 'orbit', ...scene.orbitOver(point), distance: shot.height })
+  }
+  rig.hold('still')
+  hud.caption(planet.name, 'A postcard · touch to fly on')
+}
+rig.onRelease(() => {
+  scene.hold(false)
+})
+
 const flash = document.getElementById('flash')
-function takePicture(): void {
+function blink(): void {
   // The shutter's blink restarts on every press.
   flash?.classList.remove('shot')
   flash?.getBoundingClientRect()
   flash?.classList.add('shot')
+}
+function takePicture(): void {
+  blink()
   const name = `${planet.name} ${planet.seed}`.replace(/[^\w -]+/g, '').trim()
   void scene
     .capture()
@@ -177,8 +315,18 @@ function takePicture(): void {
 }
 
 // Arrow keys steer a glide on a keyboard, and Escape lands. P takes a
-// picture whether flying or not.
+// picture whether flying or not; making a postcard, P sends it and Escape
+// puts it away.
 window.addEventListener('keydown', (event) => {
+  if (postcard.isOpen()) {
+    if (event.key === 'Escape') closePostcard()
+    else if (
+      (event.key === 'p' || event.key === 'P') &&
+      !(event.target instanceof HTMLInputElement)
+    )
+      sendCard()
+    return
+  }
   if (event.target instanceof HTMLInputElement) return
   if (event.key === 'p' || event.key === 'P') {
     takePicture()
@@ -206,6 +354,7 @@ window.addEventListener('keydown', (event) => {
 })
 
 window.addEventListener('popstate', () => {
+  letGo()
   rig.cut()
   hud.flying(false)
   const link = parseLink(window.location.search)
@@ -216,7 +365,9 @@ window.addEventListener('popstate', () => {
 })
 
 window.history.replaceState(null, '', linkFor(seed, dials))
-void show(true)
+// A postcard link opens on its place, already there: no birth to watch.
+if (opened.shot !== undefined) openShot(opened.shot)
+void show(opened.shot === undefined)
 
 // Installed and offline: the worker caches the app on first visit. Resolved
 // against the page, so it registers under whatever path the app is served

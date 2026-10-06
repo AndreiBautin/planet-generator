@@ -354,10 +354,41 @@ through the glide's own decay, so the tour flies the same aircraft a
 finger does. **`heading × up` points right**, which the first draft had
 backwards; the test flies it beside a coast to hold that.
 
-**Photo** (the camera top right, or P) draws a frame and reads it back in
-the same task (`scene.capture`), since the drawing buffer is not kept; the
+**P** takes a plain picture: it draws a frame and reads it back in the
+same task (`scene.capture`), since the drawing buffer is not kept; the
 page's controls are HTML over the canvas, so the picture is the view
 alone. Share sheet where it takes files, a download otherwise.
+
+**The camera button is postcard mode** (`ui/postcard*.ts`, the arithmetic
+pure and tested). Pressing it **holds** the view: `rig.hold('frame')`
+stops the flight (the seconds a frame read as nought, so no coast, no
+tour, no climb) and `scene.hold(true)` stops the planet turning.
+
+- **Time of day is the planet's turn.** The sun never moves; the hour at a
+  point is how far round from the sun's longitude the turn has carried it
+  (`hourAt`, `turnForHour` — longitude grows by the turn, as `intoRoom`
+  does it). A glide is in the planet's frame, so turning the planet turns
+  the sun over it; an orbit is in the room's, so after a turn the orbit is
+  put back over the same ground (`rig.place` with `scene.orbitOver`).
+- **A held glide is `stillGlide`**: level, at rest, its eye at exactly
+  `ground(position) + altitude` — what `startGlide` makes. That equality is
+  what lets a link reproduce the picture; the eye a moving glide carries
+  eases towards the ground ahead and would not match. While framing, a
+  drag turns (`faceGlide`) and tilts (finger up, nose up, as in flight),
+  and the tilt goes in the link.
+- **The card is composed on a 2D canvas, not in the grade pass**, so it is
+  the same card on a phone that has no post pass. The preview over the live
+  view uses the same grain tile (a hashed 128 px tile, overlay-blended, one
+  tile pixel per CSS pixel) and the same `wordsFor` sizes, so what is framed
+  is what is sent.
+- **The link is `shot=`** (`app/link.ts`): `g,lat,lon,bearing,altitude‰,hour,tilt`
+  or `o,lat,lon,distance,hour`, parsed totally — garbled or out of range
+  opens the plain planet. Opened, it lands **held still** with no birth
+  animation (`rig.hold('still')`), and the first touch lets it go and flies
+  on from there; any button lets go too (`letGo`), because a held rig
+  never finishes a Land.
+- **Unchecked:** the share sheet itself (the preview cannot share files —
+  the download was intercepted instead) and the card on a real phone.
 
 **Five buttons fit a 375-pixel phone only with the narrow-screen gap and
 padding** in `index.html`; a sixth needs a different layout, not less

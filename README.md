@@ -23,6 +23,10 @@ device, so there is nothing to download per world.
 - **Tune** opens the dials — water, temperature, roughness. They are in the
   link too, so a shared planet arrives as you tuned it.
 - **Share** opens the share sheet, or copies the link where there is none.
+- **The camera** (top right) makes a postcard: the view holds still, and you
+  pick a framing, the time of day, the height, the grain and a caption —
+  drag to turn and tilt the view. It goes out with a link back to the same
+  place at the same hour; **P** takes a plain picture instead.
 
 Five kinds of world turn up — temperate, ocean, desert, frozen and volcanic —
 the rarer ones less often, and each has its own name.

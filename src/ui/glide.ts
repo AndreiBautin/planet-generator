@@ -158,6 +158,40 @@ export function steer(glide: Glide, dx: number, dy: number, height: number): Gli
   return { ...glide, yawRate, pitchGoal }
 }
 
+/**
+ * Held still for a picture: level, unturning, at rest, and at exactly its
+ * altitude over the ground under it — the glide a link to this spot would
+ * start (`startGlide`), so a postcard and the place it links to agree.
+ */
+export function stillGlide(
+  glide: Glide,
+  ground: Ground,
+  altitude = glide.altitude,
+  tilt = 0,
+): Glide {
+  const held = clamp(altitude, MIN_ALTITUDE, MAX_ALTITUDE)
+  const pitch = clamp(tilt, -MAX_PITCH_DOWN, MAX_PITCH_UP)
+  return {
+    ...glide,
+    altitude: held,
+    eye: ground(glide.position) + held,
+    // Held, the pitch is only where the eye looks: nothing flies on to climb by it.
+    pitch,
+    pitchGoal: pitch,
+    yawRate: 0,
+    roll: 0,
+    rush: 0,
+  }
+}
+
+/** Face a held glide round by `angle` radians, positive to the right. */
+export function faceGlide(glide: Glide, angle: number): Glide {
+  return {
+    ...glide,
+    heading: flatten(rotate(glide.heading, glide.position, -angle), glide.position),
+  }
+}
+
 /** Two fingers spread by `factor`: spreading comes down closer. */
 export function pinchGlide(glide: Glide, factor: number): Glide {
   if (!Number.isFinite(factor) || factor <= 0) return glide
