@@ -254,6 +254,51 @@ export function samplePatch(planet: Planet, key: PatchKey, segments: number): Pa
     }
   }
 
+  // How much sky each point sees: in eight directions, how far the ground
+  // two steps out rises above it. A valley floor sees less sky and a ridge
+  // more, so the land is shaded by its own shape at every distance — baked
+  // here with the colour, so it slides between levels as the colour does
+  // and can never pop. Two steps is as far as the ring of samples reaches,
+  // which is also what keeps a shared edge the same from both patches.
+  const directions = [
+    [1, 0],
+    [1, 1],
+    [0, 1],
+    [-1, 1],
+    [-1, 0],
+    [-1, -1],
+    [0, -1],
+    [1, -1],
+  ] as const
+  for (let j = 0; j <= segments; j += 1) {
+    for (let i = 0; i <= segments; i += 1) {
+      const cx = sample(i, j, 0)
+      const cy = sample(i, j, 1)
+      const cz = sample(i, j, 2)
+      const radial = Math.hypot(cx, cy, cz) || 1
+      let rise = 0
+      for (const [di, dj] of directions) {
+        let horizon = -1
+        for (let step = 1; step <= 2; step += 1) {
+          const dx = sample(i + di * step, j + dj * step, 0) - cx
+          const dy = sample(i + di * step, j + dj * step, 1) - cy
+          const dz = sample(i + di * step, j + dj * step, 2) - cz
+          const reach = Math.hypot(dx, dy, dz) || 1
+          horizon = Math.max(horizon, (dx * cx + dy * cy + dz * cz) / radial / reach)
+        }
+        rise += horizon
+      }
+      // Rise is the mean sine of the horizon: above nought the ground is
+      // cupped and sees less sky, below it the ground falls away.
+      const cupped = rise / directions.length
+      const sky = Math.min(1.08, Math.max(0.5, 1 - cupped * 2.2))
+      const out = (j * side + i) * 3
+      colours[out] = (colours[out] ?? 0) * sky
+      colours[out + 1] = (colours[out + 1] ?? 0) * sky
+      colours[out + 2] = (colours[out + 2] ?? 0) * sky
+    }
+  }
+
   // The parent's view of each vertex. Every other vertex is one the parent
   // has too; the rest lie on the parent's grid lines or across its
   // triangles' shared diagonal (b to c in `patchIndex`), where the parent
