@@ -21,7 +21,8 @@ import type { Builder } from './builder'
 import { cloudDataOf, cloudsFromTexture, cloudsSeenFrom } from './clouds'
 import { fromPalette } from './colour'
 import { buildHeavens, type Heavens } from './heavens'
-import { coverAt, Rain } from './rain'
+import { Rain } from './rain'
+import { flowingCoverAt, updateFlow } from './winds'
 import { Soundscape } from './sound'
 import { auroraFor, auroraStrength } from './aurora'
 import { VALLEY_FOG } from './valley-fog'
@@ -874,6 +875,8 @@ export function startScene(
     sun.target.position.set(0, 0, 0)
     sun.position.copy(sunDirection).multiplyScalar(5)
     DETAIL_TIME.value = now / 1000
+    // The winds carry the clouds (winds.ts); everything that reads them reads this.
+    updateFlow(now / 1000)
     DETAIL_RANGE.value = quality.featureRange
     // The clouds drift ahead of the ground by a sixth of its turn, and their
     // shadows fall from the sun's side.
@@ -999,11 +1002,12 @@ export function startScene(
     // little ahead of the ground.
     const direction = inPlanetFrame(camera.position, turn * 1.15, 1)
     const length = Math.hypot(...direction) || 1
-    const cover = coverAt(held.data, held.width, [
-      direction[0] / length,
-      direction[1] / length,
-      direction[2] / length,
-    ])
+    const cover = flowingCoverAt(
+      held.data,
+      held.width,
+      [direction[0] / length, direction[1] / length, direction[2] / length],
+      DETAIL_TIME.value,
+    )
     return smooth(0.5, 0.8, cover) * (1 - smooth(0.06, 0.12, above))
   }
 

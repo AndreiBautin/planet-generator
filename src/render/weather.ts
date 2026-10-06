@@ -2,7 +2,7 @@ import * as THREE from 'three'
 
 import { CLOUD_RADIUS } from './clouds'
 import { DETAIL_TIME, LIGHTNING } from './detail'
-import { coverAt } from './rain'
+import { CLOUD_FLOW, CLOUD_FLOW_LIFE, flowingCoverAt, FLOW_GLSL } from './winds'
 
 /**
  * Weather you can see coming: storm cells under the heaviest cloud, with
@@ -58,7 +58,10 @@ export function rainShafts(data: Uint8Array, width: number): THREE.Mesh {
     const col = (candidates[k] ?? 0) + next() * 2 - 0.5
     const row = (candidates[k + 1] ?? 0) + next() * 2 - 0.5
     const heavy = ((candidates[k + 2] ?? STORM) - STORM) / (1 - STORM)
-    sites.push(...texelDirection(col, row, width), 0.004 + heavy * 0.006, next())
+    const cover = candidates[k + 2] ?? STORM
+    // Once for each copy of the cloud field the winds carry (winds.ts).
+    for (let copy = 0; copy < 2; copy += 1)
+      sites.push(...texelDirection(col, row, width), 0.004 + heavy * 0.006, next(), cover, copy)
   }
   const quad = new THREE.InstancedBufferGeometry()
   quad.setAttribute(
@@ -66,11 +69,13 @@ export function rainShafts(data: Uint8Array, width: number): THREE.Mesh {
     new THREE.BufferAttribute(new Float32Array([-1, 0, 0, 1, 0, 0, 1, 1, 0, -1, 1, 0]), 3),
   )
   quad.setIndex([0, 1, 2, 0, 2, 3])
-  const buffer = new THREE.InstancedInterleavedBuffer(Float32Array.from(sites), 5, 1)
+  const buffer = new THREE.InstancedInterleavedBuffer(Float32Array.from(sites), 7, 1)
   quad.setAttribute('shaftAt', new THREE.InterleavedBufferAttribute(buffer, 3, 0))
   quad.setAttribute('shaftWidth', new THREE.InterleavedBufferAttribute(buffer, 1, 3))
   quad.setAttribute('shaftSeed', new THREE.InterleavedBufferAttribute(buffer, 1, 4))
-  quad.instanceCount = sites.length / 5
+  quad.setAttribute('shaftCover', new THREE.InterleavedBufferAttribute(buffer, 1, 5))
+  quad.setAttribute('shaftCopy', new THREE.InterleavedBufferAttribute(buffer, 1, 6))
+  quad.instanceCount = sites.length / 7
   const material = new THREE.ShaderMaterial({
     transparent: true,
     depthWrite: false,
@@ -78,17 +83,37 @@ export function rainShafts(data: Uint8Array, width: number): THREE.Mesh {
       shaftTime: DETAIL_TIME,
       shaftLight: SHAFT_LIGHT,
       lightning: LIGHTNING,
+      cloudFlow: CLOUD_FLOW,
+      cloudFlowLife: CLOUD_FLOW_LIFE,
     },
     vertexShader: /* glsl */ `
+      uniform vec4 cloudFlow;
+      uniform vec2 cloudFlowLife;
+      ${FLOW_GLSL}
       attribute vec3 shaftAt;
       attribute float shaftWidth;
       attribute float shaftSeed;
+      attribute float shaftCover;
+      attribute float shaftCopy;
+      varying float vStorm;
       varying vec2 vShaft;
       varying float vSeed;
       varying float vFar;
       varying vec3 vDir;
       void main() {
-        vec3 up = normalize(shaftAt);
+        // Carried with its copy of the cloud field (winds.ts): turned round
+        // the axis as far as the wind has taken that latitude, and fading
+        // with the storm as the copy wears away.
+        int copy = shaftCopy < 0.5 ? 0 : 1;
+        float v = 1.0 - acos(clamp(normalize(shaftAt).y, -1.0, 1.0)) / 3.1415927;
+        vec2 phase = copy == 0 ? cloudFlow.xy : cloudFlow.zw;
+        float turn = (flowWind(v) * phase.x + phase.y) * 6.2831853;
+        float a = atan(shaftAt.z, -shaftAt.x) + turn;
+        float r = length(shaftAt.xz);
+        vec3 carried = vec3(-cos(a) * r, shaftAt.y, sin(a) * r);
+        float worn = flowErosion(copy == 0 ? cloudFlowLife.x : cloudFlowLife.y);
+        vStorm = smoothstep(${(STORM - 0.08).toFixed(3)}, ${STORM.toFixed(3)}, shaftCover - worn);
+        vec3 up = normalize(carried);
         // From a little under the ground (hills stand above radius one)
         // to just under the cloud base.
         vec3 along = up * mix(0.998, ${(CLOUD_RADIUS - 0.002).toFixed(4)}, position.y);
@@ -99,7 +124,7 @@ export function rainShafts(data: Uint8Array, width: number): THREE.Mesh {
         float scale = length((modelMatrix * vec4(1.0, 0.0, 0.0, 0.0)).xyz);
         world += side * position.x * shaftWidth * scale;
         float away = length(toEye) / scale;
-        vFar = smoothstep(0.015, 0.05, away) * (1.0 - smoothstep(0.35, 0.7, away));
+        vFar = smoothstep(0.015, 0.05, away) * (1.0 - smoothstep(0.35, 0.7, away)) * vStorm;
         vShaft = vec2(position.x, position.y);
         vSeed = shaftSeed;
         vDir = up;
@@ -176,7 +201,7 @@ export class Lightning {
           const a = fract(Math.sin((seconds + k) * 78.233) * 43758.5453) * Math.PI * 2
           const d = 0.02 + fract(Math.sin((seconds - k) * 39.425) * 43758.5453) * 0.12
           const p = offsetFrom(eye, a, d)
-          if (coverAt(data, width, p) > STORM + 0.04) {
+          if (flowingCoverAt(data, width, p, seconds) > STORM + 0.04) {
             this.where.set(...p)
             this.startedAt = seconds
             this.strikes += 1

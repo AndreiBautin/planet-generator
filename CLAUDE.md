@@ -883,3 +883,25 @@ not all one coast), up to 150 towns kept apart, the best sites largest.
     every streak to burn and seeing the one that happened to be in view.
   - **Double-sided quads**: which face a streak turns to the eye depends
     on which way it runs, and half of them were culled.
+
+## Weather that travels
+
+`render/winds.ts`, tested. The cloud map is carried by winds by latitude —
+easterly in the tropics, westerly at the middle latitudes, easterly again
+near the poles — so a storm comes up over the horizon, passes and goes on.
+
+- **Two copies, half a period apart.** Carried as it stands the field
+  shears without end (two latitudes drift apart for ever), so each copy is
+  reborn every 300 s somewhere new round the world. A copy is worn away
+  towards rebirth, edges first and cores last, **all the way to nothing at
+  the moment it is reborn** — at 0.6 its storm cores still showed faintly
+  and popped. The two are joined by keeping the heavier reading, not by
+  averaging, which washed every storm to half. One copy is always whole.
+- **One reader.** The layer, its shadow on the ground and water, the rain
+  shafts (drawn once per copy, turned by their latitude's wind and faded
+  as their copy wears), the shower over the eye and the lightning all read
+  the cloud through `winds.ts`, so a storm is where it is drawn.
+  `coverAt` moved there; `rain.ts` re-exports it.
+- **Checked by frame difference**: crossing a rebirth changes the picture
+  no more than any other second. The motion itself is held by a test, not
+  watched on screen.

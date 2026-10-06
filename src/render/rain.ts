@@ -124,22 +124,5 @@ export class Rain {
   }
 }
 
-/**
- * How heavy the cloud is over a point, 0 to 1, read off the baked cloud
- * map: the same map the layer is drawn from and the ground is shaded by.
- * `direction` is in the cloud layer's own frame.
- */
-export function coverAt(
-  data: Uint8Array,
-  width: number,
-  direction: readonly [number, number, number],
-): number {
-  const height = width / 2
-  if (height < 1 || data.length < width * height * 4) return 0
-  const [x, y, z] = direction
-  const u = Math.atan2(z, -x) / (Math.PI * 2) + 0.5
-  const v = 1 - Math.acos(Math.max(-1, Math.min(1, y))) / Math.PI
-  const col = ((Math.floor(u * width) % width) + width) % width
-  const row = Math.min(height - 1, Math.max(0, Math.floor(v * height)))
-  return (data[(row * width + col) * 4] ?? 0) / 255
-}
+/** How heavy the cloud is over a point, as the map was baked: kept with the winds that carry it. */
+export { coverAt } from './winds'

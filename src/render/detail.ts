@@ -5,6 +5,7 @@ import type { GroundKind } from './ground-atlas'
 import type { GroundTextures } from './textures'
 import { DETAIL_MOONS, MOON_SHADOW } from './eclipse'
 import { withValleyFog } from './valley-fog'
+import { CLOUD_FLOW, CLOUD_FLOW_LIFE, FLOW_GLSL } from './winds'
 
 /**
  * Detail finer than any patch carries, drawn per pixel, so that up close
@@ -159,8 +160,9 @@ function passThrough(
     )
   const varying = extra === undefined ? '' : `varying ${extra.type} v_${extra.attribute};\n`
   shader.fragmentShader =
-    `uniform float detailTime;\nuniform float detailRange;\nuniform sampler2D detailClouds;\nuniform float detailCloudSpin;\nuniform vec3 detailCloudSun;\nuniform mat3 detailNormalMatrix;\nuniform vec2 detailRings;\nuniform vec4 detailRingBands[16];\nuniform float detailAurora;\nuniform sampler2D detailCities;\nuniform float detailCityLight;\nuniform vec4 detailMoons[2];\nvarying vec3 vDetailPosition;\nvarying vec3 vDetailNormal;\n${varying}` +
+    `uniform float detailTime;\nuniform float detailRange;\nuniform sampler2D detailClouds;\nuniform float detailCloudSpin;\nuniform vec3 detailCloudSun;\nuniform mat3 detailNormalMatrix;\nuniform vec2 detailRings;\nuniform vec4 detailRingBands[16];\nuniform float detailAurora;\nuniform sampler2D detailCities;\nuniform float detailCityLight;\nuniform vec4 detailMoons[2];\nuniform vec4 cloudFlow;\nuniform vec2 cloudFlowLife;\nvarying vec3 vDetailPosition;\nvarying vec3 vDetailNormal;\n${varying}` +
     NOISE +
+    FLOW_GLSL +
     CLOUD_SHADOW +
     RING_SHADOW +
     MOON_SHADOW +
@@ -177,6 +179,8 @@ function passThrough(
   shader.uniforms.detailCities = DETAIL_CITIES
   shader.uniforms.detailCityLight = DETAIL_CITY_LIGHT
   shader.uniforms.detailMoons = DETAIL_MOONS
+  shader.uniforms.cloudFlow = CLOUD_FLOW
+  shader.uniforms.cloudFlowLife = CLOUD_FLOW_LIFE
   shader.uniforms.hazeSun = HAZE_SUN
 }
 
@@ -219,6 +223,14 @@ const CLOUD_SHADOW = /* glsl */ `
   // How much cloud lies between this point and the sun: the cloud map read
   // where the sun's ray from here meets the layer, in the layer's own frame
   // (it turns a little faster than the ground). Soft, because the map is.
+  float cloudTaps(vec2 uv) {
+    vec2 o = vec2(0.0018, 0.0018);
+    return texture2D(detailClouds, uv).r * 0.4
+      + texture2D(detailClouds, uv + vec2(o.x, 0.0)).r * 0.15
+      + texture2D(detailClouds, uv - vec2(o.x, 0.0)).r * 0.15
+      + texture2D(detailClouds, uv + vec2(0.0, o.y)).r * 0.15
+      + texture2D(detailClouds, uv - vec2(0.0, o.y)).r * 0.15;
+  }
   float cloudShadow(vec3 p) {
     float up = max(0.15, dot(detailCloudSun, normalize(p)));
     vec3 d = normalize(p + detailCloudSun * (0.035 / up));
@@ -229,12 +241,8 @@ const CLOUD_SHADOW = /* glsl */ `
     // Five taps and a soft threshold: the cloud map is a few hundred texels
     // round the whole planet, and read once its bilinear cells showed on
     // the sea as rows of dark blocks.
-    vec2 o = vec2(0.0018, 0.0018);
-    float c0 = texture2D(detailClouds, uv).r * 0.4
-      + texture2D(detailClouds, uv + vec2(o.x, 0.0)).r * 0.15
-      + texture2D(detailClouds, uv - vec2(o.x, 0.0)).r * 0.15
-      + texture2D(detailClouds, uv + vec2(0.0, o.y)).r * 0.15
-      + texture2D(detailClouds, uv - vec2(0.0, o.y)).r * 0.15;
+    // Read twice, as the winds carry the layer (winds.ts).
+    float c0 = flowBlend(cloudTaps(flowUv(uv, 0)), cloudTaps(flowUv(uv, 1)));
     return smoothstep(0.15, 0.85, c0);
   }
 `

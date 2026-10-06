@@ -5,6 +5,7 @@ import type { Planet } from '@/generation/planet'
 
 import { fromPalette } from './colour'
 import { DETAIL_CLOUD_MOONS, MOON_SHADOW } from './eclipse'
+import { CLOUD_FLOW, CLOUD_FLOW_LIFE, FLOW_GLSL } from './winds'
 import {
   DETAIL_CLOUD_LAYER_SUN,
   DETAIL_RING_BANDS,
@@ -18,13 +19,16 @@ import {
 /**
  * The cloud layer: a sphere just above the highest ground, its opacity a
  * texture baked once (`bakeClouds`). Baked rather than shaded per frame
- * because the clouds' shape does not change — only their turn — and a phone
- * should spend its frame on drawing, not on noise.
+ * because the map itself does not change — only how the winds carry it —
+ * and a phone should spend its frame on drawing, not on noise.
  *
  * Lit like the ground, so clouds on the night side fall dark with it. Seen
  * from below only when the camera is below them (`cloudsSeenFrom`): drawn
  * from both sides always, the far side's undersides lit up along the night
  * limb as a dotted white arc.
+ *
+ * Carried by the winds (winds.ts): where the map is read moves with the
+ * latitude, so the weather travels.
  *
  * Alive, in the shader: the baked map says where the cloud is, and a slow
  * noise bends where it is read and breaks its edges into billows that
@@ -104,6 +108,9 @@ function layerMaterial(planet: Planet, texture: THREE.Texture, layer: Layer): TH
     shader.uniforms.cloudRingSun = DETAIL_CLOUD_LAYER_SUN
     // The moons in the cloud layer's own frame, which turns a little faster.
     shader.uniforms.detailMoons = DETAIL_CLOUD_MOONS
+    // Carried by the winds (winds.ts).
+    shader.uniforms.cloudFlow = CLOUD_FLOW
+    shader.uniforms.cloudFlowLife = CLOUD_FLOW_LIFE
     shader.vertexShader =
       'varying vec3 vCloudDir;\nvarying vec3 vCloudUp;\n' +
       shader.vertexShader.replace(
@@ -111,8 +118,9 @@ function layerMaterial(planet: Planet, texture: THREE.Texture, layer: Layer): TH
         '#include <begin_vertex>\n  vCloudDir = normalize(position);\n  vCloudUp = normalize(normalMatrix * normalize(position));',
       )
     shader.fragmentShader =
-      'uniform float cloudTime;\nuniform vec4 cloudLightning;\nuniform vec2 detailRings;\nuniform vec4 detailRingBands[16];\nuniform vec3 cloudRingSun;\nuniform vec4 detailMoons[2];\nvarying vec3 vCloudDir;\nvarying vec3 vCloudUp;\nfloat cloudFlash = 0.0;\n' +
+      'uniform float cloudTime;\nuniform vec4 cloudLightning;\nuniform vec2 detailRings;\nuniform vec4 detailRingBands[16];\nuniform vec3 cloudRingSun;\nuniform vec4 detailMoons[2];\nuniform vec4 cloudFlow;\nuniform vec2 cloudFlowLife;\nvarying vec3 vCloudDir;\nvarying vec3 vCloudUp;\nfloat cloudFlash = 0.0;\n' +
       NOISE +
+      FLOW_GLSL +
       RING_SHADOW +
       MOON_SHADOW +
       shader.fragmentShader
@@ -147,7 +155,10 @@ function layerMaterial(planet: Planet, texture: THREE.Texture, layer: Layer): TH
           vec2 warp = vec2(
             detailNoise(vCloudDir * 5.0 + t) - 0.5,
             detailNoise(vCloudDir * 5.0 + 11.0 - t) - 0.5) * 0.012;
-          float cover = texture2D(alphaMap, vAlphaMapUv + warp).g;
+          // Carried by the winds, as two copies of the map (winds.ts).
+          float cover = flowBlend(
+            texture2D(alphaMap, flowUv(vAlphaMapUv, 0) + warp).g,
+            texture2D(alphaMap, flowUv(vAlphaMapUv, 1) + warp).g);
           // Billows: finer noise rolling through, breaking the edges up.
           float billow =
             detailNoise(vCloudDir * 48.0 + vec3(t * 1.6, -t, t * 0.7)) * 0.6 +
