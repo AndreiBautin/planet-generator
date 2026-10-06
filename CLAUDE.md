@@ -855,3 +855,31 @@ not all one coast), up to 150 towns kept apart, the best sites largest.
   re-gathered only when the eye changes cell, each kept in its slot; a bird
   fades out by 0.02 radii, well inside the rings' reach, so a flock joining
   or leaving the set is never seen to. Nothing at all above 0.06.
+
+## Eclipses and meteors
+
+- **Solar eclipses** (`render/eclipse.ts`, tested): a moon between the sun
+  and the ground throws its shadow — a dark core (6% of the sun left) and a
+  soft edge that widens with distance behind the moon. The moons' positions
+  go to the shaders each frame as `vec4(centre, radius)`, in the ground's
+  frame (`DETAIL_MOONS`) and the cloud layer's (`DETAIL_CLOUD_MOONS`, which
+  turns faster). Ground, water, clouds and **trees** all read it; trees
+  needed a planet-frame varying (`vTreePlanet`) to. With moons 4–9 radii
+  out and orbits tilted a little, a shadow crosses the world on many turns
+  of a moon, for some seconds. Under it the whole day dims — the exposure,
+  sky and all, not only the ground — when the eye is low.
+- **Lunar eclipses**: a moon in the planet's shadow (`moonLight`) dims to a
+  dark red and glows faintly, the red of every sunset on the rim at once.
+  Tested; **not seen on screen**.
+- **Meteors** (`render/meteors.ts`): 32 streaks, each waiting 14–40 s and
+  burning for under a second somewhere new, all a function of time in the
+  shader; a third of worlds are in a shower, three times as often, all
+  fleeing one radiant. Only on the night side from low down.
+  - **Drawn 0.3 radii out, past a glide's horizon**, so a ridge or a cloud
+    in front hides one by depth, as it would.
+  - **Mostly low in the sky**: a glide looks slightly down, and sees the
+    sky only to about ten degrees over the horizon. The first version put
+    them from 17° up and **none was ever on screen** — found by forcing
+    every streak to burn and seeing the one that happened to be in view.
+  - **Double-sided quads**: which face a streak turns to the eye depends
+    on which way it runs, and half of them were culled.

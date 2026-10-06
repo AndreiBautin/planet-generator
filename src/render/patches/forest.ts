@@ -1,6 +1,7 @@
 import * as THREE from 'three'
 
-import { DETAIL_NORMAL_MATRIX, TERRAIN_MORPH } from '../detail'
+import { DETAIL_CLOUD_SUN, DETAIL_NORMAL_MATRIX, TERRAIN_MORPH } from '../detail'
+import { DETAIL_MOONS, MOON_SHADOW } from '../eclipse'
 import { withValleyFog } from '../valley-fog'
 import type { PatchData } from './patch-data'
 
@@ -228,6 +229,7 @@ attribute vec2 treeLook;
 varying vec3 vTreeTint;
 varying float vTreeHeight;
 varying vec3 vTreeUp;
+varying vec3 vTreePlanet;
 float treeMorph() {
   float level = treeFate.x;
   float parentSpan = 1.5707963 / exp2(level - 1.0);
@@ -272,6 +274,8 @@ export function treeMaterial(): THREE.MeshStandardMaterial {
   material.onBeforeCompile = (shader) => {
     shader.uniforms.terrainMorphLod = TERRAIN_MORPH
     shader.uniforms.treeNormalMatrix = DETAIL_NORMAL_MATRIX
+    shader.uniforms.detailMoons = DETAIL_MOONS
+    shader.uniforms.treeSun = DETAIL_CLOUD_SUN
     shader.vertexShader = (TREE_VERTEX + shader.vertexShader)
       .replace(
         '#include <beginnormal_vertex>',
@@ -288,10 +292,12 @@ export function treeMaterial(): THREE.MeshStandardMaterial {
         float packed = treeLook.y;
         vTreeTint = vec3(floor(packed / 65536.0), mod(floor(packed / 256.0), 256.0), mod(packed, 256.0)) / 255.0;
         vTreeHeight = position.y;
-        vTreeUp = normalize(normalMatrix * up);`,
+        vTreeUp = normalize(normalMatrix * up);
+        vTreePlanet = transformed;`,
       )
     shader.fragmentShader =
-      'varying vec3 vTreeTint;\nvarying float vTreeHeight;\nvarying vec3 vTreeUp;\n' +
+      'varying vec3 vTreeTint;\nvarying float vTreeHeight;\nvarying vec3 vTreeUp;\nvarying vec3 vTreePlanet;\nuniform vec4 detailMoons[2];\nuniform vec3 treeSun;\n' +
+      MOON_SHADOW +
       shader.fragmentShader
         .replace(
           '#include <color_fragment>',
@@ -308,6 +314,8 @@ export function treeMaterial(): THREE.MeshStandardMaterial {
         #if NUM_DIR_LIGHTS > 0
         {
           float treeDay = smoothstep(-0.05, 0.08, dot(normalize(vTreeUp), directionalLights[0].direction));
+          // In an eclipse's shadow with the ground under them (eclipse.ts).
+          treeDay *= 1.0 - moonShadowFrom(vTreePlanet, treeSun);
           reflectedLight.directDiffuse *= treeDay;
           reflectedLight.directSpecular *= treeDay;
         }

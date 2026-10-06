@@ -3,6 +3,7 @@ import * as THREE from 'three'
 import { HAZE_SUN } from './haze'
 import type { GroundKind } from './ground-atlas'
 import type { GroundTextures } from './textures'
+import { DETAIL_MOONS, MOON_SHADOW } from './eclipse'
 import { withValleyFog } from './valley-fog'
 
 /**
@@ -158,10 +159,11 @@ function passThrough(
     )
   const varying = extra === undefined ? '' : `varying ${extra.type} v_${extra.attribute};\n`
   shader.fragmentShader =
-    `uniform float detailTime;\nuniform float detailRange;\nuniform sampler2D detailClouds;\nuniform float detailCloudSpin;\nuniform vec3 detailCloudSun;\nuniform mat3 detailNormalMatrix;\nuniform vec2 detailRings;\nuniform vec4 detailRingBands[16];\nuniform float detailAurora;\nuniform sampler2D detailCities;\nuniform float detailCityLight;\nvarying vec3 vDetailPosition;\nvarying vec3 vDetailNormal;\n${varying}` +
+    `uniform float detailTime;\nuniform float detailRange;\nuniform sampler2D detailClouds;\nuniform float detailCloudSpin;\nuniform vec3 detailCloudSun;\nuniform mat3 detailNormalMatrix;\nuniform vec2 detailRings;\nuniform vec4 detailRingBands[16];\nuniform float detailAurora;\nuniform sampler2D detailCities;\nuniform float detailCityLight;\nuniform vec4 detailMoons[2];\nvarying vec3 vDetailPosition;\nvarying vec3 vDetailNormal;\n${varying}` +
     NOISE +
     CLOUD_SHADOW +
     RING_SHADOW +
+    MOON_SHADOW +
     shader.fragmentShader
   shader.uniforms.detailTime = DETAIL_TIME
   shader.uniforms.detailRange = DETAIL_RANGE
@@ -174,6 +176,7 @@ function passThrough(
   shader.uniforms.detailAurora = DETAIL_AURORA
   shader.uniforms.detailCities = DETAIL_CITIES
   shader.uniforms.detailCityLight = DETAIL_CITY_LIGHT
+  shader.uniforms.detailMoons = DETAIL_MOONS
   shader.uniforms.hazeSun = HAZE_SUN
 }
 
@@ -642,6 +645,8 @@ export function withGroundDetail(
           float groundDay = smoothstep(-0.05, 0.08, dot(groundUp, directionalLights[0].direction));
           // And the rings, if any, cast their bands across it.
           groundDay *= 1.0 - ringShadowFrom(vDetailPosition, detailCloudSun);
+          // And a moon, passing before the sun, its shadow (eclipse.ts).
+          groundDay *= 1.0 - moonShadowFrom(vDetailPosition, detailCloudSun);
           reflectedLight.directDiffuse *= groundDay;
           reflectedLight.directSpecular *= groundDay;
           // Under the aurora's band, on the night side, the ground takes a
@@ -897,7 +902,7 @@ export function withWaterDetail(material: THREE.Material): THREE.Material {
         // The rings' shadow falls on the water as on the ground: on the
         // sun's light only, so the sky it mirrors is untouched.
         {
-          float ringDim = 1.0 - ringShadowFrom(vDetailPosition, detailCloudSun);
+          float ringDim = (1.0 - ringShadowFrom(vDetailPosition, detailCloudSun)) * (1.0 - moonShadowFrom(vDetailPosition, detailCloudSun));
           reflectedLight.directDiffuse *= ringDim;
           reflectedLight.directSpecular *= ringDim;
         }`,

@@ -4,6 +4,7 @@ import { KINDS } from '@/generation/kinds'
 import type { Planet } from '@/generation/planet'
 
 import { fromPalette } from './colour'
+import { DETAIL_CLOUD_MOONS, MOON_SHADOW } from './eclipse'
 import {
   DETAIL_CLOUD_LAYER_SUN,
   DETAIL_RING_BANDS,
@@ -101,6 +102,8 @@ function layerMaterial(planet: Planet, texture: THREE.Texture, layer: Layer): TH
     shader.uniforms.detailRings = DETAIL_RINGS
     shader.uniforms.detailRingBands = DETAIL_RING_BANDS
     shader.uniforms.cloudRingSun = DETAIL_CLOUD_LAYER_SUN
+    // The moons in the cloud layer's own frame, which turns a little faster.
+    shader.uniforms.detailMoons = DETAIL_CLOUD_MOONS
     shader.vertexShader =
       'varying vec3 vCloudDir;\nvarying vec3 vCloudUp;\n' +
       shader.vertexShader.replace(
@@ -108,9 +111,10 @@ function layerMaterial(planet: Planet, texture: THREE.Texture, layer: Layer): TH
         '#include <begin_vertex>\n  vCloudDir = normalize(position);\n  vCloudUp = normalize(normalMatrix * normalize(position));',
       )
     shader.fragmentShader =
-      'uniform float cloudTime;\nuniform vec4 cloudLightning;\nuniform vec2 detailRings;\nuniform vec4 detailRingBands[16];\nuniform vec3 cloudRingSun;\nvarying vec3 vCloudDir;\nvarying vec3 vCloudUp;\nfloat cloudFlash = 0.0;\n' +
+      'uniform float cloudTime;\nuniform vec4 cloudLightning;\nuniform vec2 detailRings;\nuniform vec4 detailRingBands[16];\nuniform vec3 cloudRingSun;\nuniform vec4 detailMoons[2];\nvarying vec3 vCloudDir;\nvarying vec3 vCloudUp;\nfloat cloudFlash = 0.0;\n' +
       NOISE +
       RING_SHADOW +
+      MOON_SHADOW +
       shader.fragmentShader
         .replace(
           '#include <emissivemap_fragment>',
@@ -126,6 +130,8 @@ function layerMaterial(planet: Planet, texture: THREE.Texture, layer: Layer): TH
           float cloudDay = smoothstep(-0.08, 0.06, dot(normalize(vCloudUp), directionalLights[0].direction));
           // And the rings' bands lie across the clouds as across the land.
           cloudDay *= 1.0 - ringShadowFrom(vCloudDir, cloudRingSun);
+          // And an eclipse's shadow over them (eclipse.ts).
+          cloudDay *= 1.0 - moonShadowFrom(vCloudDir, cloudRingSun);
           reflectedLight.directDiffuse *= cloudDay;
           reflectedLight.directSpecular *= cloudDay;
         }

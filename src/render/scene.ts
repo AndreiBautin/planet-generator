@@ -28,6 +28,8 @@ import { VALLEY_FOG } from './valley-fog'
 import { Embers, plumes, PLUME_SUN } from './volcanic'
 import { spray } from './waterfalls'
 import { Birds } from './birds'
+import { Meteors } from './meteors'
+import { DETAIL_CLOUD_MOONS, DETAIL_MOONS, moonShadow, type MoonDisc } from './eclipse'
 import { volcanoesOf } from '@/generation/volcanoes'
 import { cityLights } from './city-lights'
 import { CITY_GLOW_WIDTH } from './work'
@@ -343,7 +345,7 @@ export function startScene(
   let pixelRatio = options.quality.pixelRatio
   renderer.setPixelRatio(pixelRatio)
   renderer.toneMapping = THREE.ACESFilmicToneMapping
-  renderer.toneMappingExposure = 1.15
+  renderer.toneMappingExposure = EXPOSURE
   renderer.setSize(window.innerWidth, window.innerHeight)
 
   const scene = new THREE.Scene()
@@ -422,6 +424,9 @@ export function startScene(
   scene.add(embers.object)
   const birds = new Birds()
   scene.add(birds.object)
+  const meteors = new Meteors()
+  scene.add(meteors.object)
+  const meteorUp = new THREE.Vector3()
   const rainEye = new THREE.Vector3()
 
   const { quality, builder } = options
@@ -535,6 +540,7 @@ export function startScene(
     }
     scene.add(next.terrain.group)
     birds.setWorld(next.world)
+    meteors.setWorld(next.world.seed)
     // Smoke from a molten world's peaks, turning with its ground.
     const smoke = plumes(next.world, volcanoesOf(next.world))
     if (smoke !== undefined) {
@@ -889,6 +895,32 @@ export function startScene(
       shown.clouds.rotation.y = turn * 1.15
       pose(shown, stage)
       shown.heavens.update(now / 1000, sunDirection, stage.scale)
+      // Where the moons are, in the ground's frame and the clouds', for the
+      // shadows they throw when one passes before the sun (eclipse.ts).
+      const discs: MoonDisc[] = []
+      for (let k = 0; k < 2; k += 1) {
+        const moon = shown.heavens.moons[k]
+        const ground = DETAIL_MOONS.value[k]
+        const cloud = DETAIL_CLOUD_MOONS.value[k]
+        if (moon === undefined) {
+          ground?.setW(0)
+          cloud?.setW(0)
+          continue
+        }
+        const at = inPlanetFrame(moon.mesh.position, turn, 1)
+        ground?.set(at[0], at[1], at[2], moon.radius)
+        cloud?.set(...inPlanetFrame(moon.mesh.position, turn * 1.15, 1), moon.radius)
+        discs.push([at[0], at[1], at[2], moon.radius])
+      }
+      // Under the shadow the whole day dims, sky and all, not the ground alone.
+      {
+        const eye = inPlanetFrame(camera.position, turn, stage.scale)
+        const reach = Math.hypot(...eye) || 1
+        const under: Vec3 = [eye[0] / reach, eye[1] / reach, eye[2] / reach]
+        const near = 1 - smooth(0.05, 0.4, reach - 1)
+        const taken = moonShadow(under, inPlanetFrame(sunDirection, turn, 1), discs)
+        renderer.toneMappingExposure = EXPOSURE * (1 - 0.7 * taken * near)
+      }
       VALLEY_FOG.shape.value.z = stage.scale
       VALLEY_FOG.shape.value.w = shown.world.molten ? 0 : 1
       VALLEY_FOG.sun.value.copy(sunDirection)
@@ -903,6 +935,15 @@ export function startScene(
       const shower = rainOver(shown.clouds, turn)
       rain.update(rainEye.copy(camera.position), shower)
       PLUME_SUN.value.copy(sunDirection)
+      // Shooting stars on the night side, seen from low enough for the sky
+      // to be a sky rather than space.
+      meteorUp.copy(camera.position).normalize()
+      meteors.update(
+        meteorUp,
+        (1 - smooth(-0.15, -0.03, meteorUp.dot(sunDirection))) *
+          (1 - smooth(0.04, 0.12, camera.position.length() / stage.scale - 1)),
+        stage.scale,
+      )
       birds.update(
         inPlanetFrame(camera.position, turn, stage.scale),
         shown.terrain.group.matrixWorld,
@@ -1074,6 +1115,9 @@ function inPlanetFrame(
   const s = scale > 0 ? 1 / scale : 1
   return [x * s, position.y * s, z * s]
 }
+
+/** The renderer's exposure in ordinary daylight; an eclipse dims it. */
+const EXPOSURE = 1.15
 
 /** Apply a stage of the birth animation to a shown planet. */
 function pose(planet: Shown, stage: Birth): void {

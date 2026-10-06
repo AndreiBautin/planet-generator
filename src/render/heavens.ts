@@ -2,6 +2,8 @@ import * as THREE from 'three'
 
 import { MOON_MAP_WIDTH, RING_BANDS, type Satellites } from '@/generation/satellites'
 
+import { moonLight } from './eclipse'
+
 /**
  * A planet's moons and rings, drawn (generation/satellites.ts decides them).
  *
@@ -22,6 +24,8 @@ export interface Heavens {
   readonly bands: THREE.DataTexture | undefined
   readonly inner: number
   readonly outer: number
+  /** Each moon's body and its radius in planet radii: for the shadows they cast (eclipse.ts). */
+  readonly moons: readonly { readonly mesh: THREE.Mesh; readonly radius: number }[]
   /** Move the moons to where they are at `seconds`, and tell the rings where the sun is. */
   readonly update: (seconds: number, sun: THREE.Vector3, scale: number) => void
 }
@@ -56,7 +60,7 @@ export function buildHeavens(sky: Satellites): Heavens {
       new THREE.MeshStandardMaterial({ map, roughness: 1, metalness: 0, fog: false }),
     )
     group.add(mesh)
-    return { moon, mesh }
+    return { moon, mesh, material: mesh.material }
   })
 
   let bands: THREE.DataTexture | undefined
@@ -146,8 +150,9 @@ export function buildHeavens(sky: Satellites): Heavens {
     bands,
     inner: rings?.inner ?? 0,
     outer: rings?.outer ?? 0,
+    moons: moons.map(({ moon, mesh }) => ({ mesh, radius: moon.radius })),
     update: (seconds, sun, scale) => {
-      for (const { moon, mesh } of moons) {
+      for (const { moon, mesh, material } of moons) {
         const angle = moon.phase + (seconds / moon.period) * Math.PI * 2
         where.set(Math.cos(angle) * moon.distance, 0, Math.sin(angle) * moon.distance)
         // Its orbit tilted about the line where it crosses the equator.
@@ -156,6 +161,11 @@ export function buildHeavens(sky: Satellites): Heavens {
         mesh.position.copy(where)
         // Tidally locked: the same face always turned to the planet.
         mesh.rotation.y = -angle
+        // In the planet's shadow it dims to the red of every sunset on the
+        // world's rim at once (eclipse.ts).
+        const light = moonLight([where.x, where.y, where.z], [sun.x, sun.y, sun.z])
+        material.color.setRGB(0.3 + 0.7 * light, 0.1 + 0.9 * light, 0.07 + 0.93 * light)
+        material.emissive.setRGB(0.06 * (1 - light), 0.015 * (1 - light), 0.006 * (1 - light))
       }
       if (ringMaterial !== undefined) {
         const { sun: towards, planet } = ringMaterial.uniforms
