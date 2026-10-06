@@ -81,6 +81,21 @@ export default tseslint.config(
       '@typescript-eslint/switch-exhaustiveness-check': 'error',
       'no-console': ['error'],
       'no-restricted-syntax': ['error', ...ambient],
+      'no-restricted-globals': [
+        'error',
+        {
+          name: 'localStorage',
+          message: 'Browser storage lives in one place: ui/atlas-store.ts.',
+        },
+      ],
+      'no-restricted-properties': [
+        'error',
+        {
+          object: 'window',
+          property: 'localStorage',
+          message: 'Browser storage lives in one place: ui/atlas-store.ts.',
+        },
+      ],
     },
   },
   {
@@ -95,6 +110,10 @@ export default tseslint.config(
   {
     files: ['src/shared/logger.ts'],
     rules: { 'no-console': 'off' },
+  },
+  {
+    files: ['src/ui/atlas-store.ts'],
+    rules: { 'no-restricted-properties': 'off' },
   },
   {
     files: ['src/app/clock.ts', 'src/app/config.ts'],

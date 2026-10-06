@@ -716,3 +716,26 @@ All three are off over ice and on lakes and rivers (`v_inland`). Seen from
 a low glide along a bay on `83tzj46`; a faint diagonal shading in the
 deeper water there looked like a level-of-detail seam at first and moved
 with the view as the shelf's edge, so it was left.
+
+## Atlas
+
+The globe button under the camera opens every world this browser has been
+to, kept ones first, each with a picture from orbit; a press opens it, the
+star keeps it. Stored in this browser only — no account, nothing sent.
+
+- **`app/atlas.ts` is the model, pure and tested**: one entry a seed (a dial
+  moved on a world updates its entry rather than filing a world per notch),
+  the newest first, at most 24 unkept, kept ones never pushed out, and
+  `parseAtlas` reading storage as `unknown` and dropping whatever it cannot
+  trust — a picture must be a `data:image/` URL.
+- **`ui/atlas-store.ts` is the only file that may touch `localStorage`**,
+  and a lint rule (`no-restricted-globals` and `no-restricted-properties`)
+  says so; proved by a probe file that both forms were refused in.
+  A full store drops the older pictures and tries once more.
+- **The picture is taken 3.5 seconds after a world is shown**, only if it
+  is still that world and the view is still the orbit (not a glide, not a
+  postcard): `scene.capture`, cropped to the middle square, 160 px JPEG,
+  about 9 KB.
+- **In the agent's hidden pane nothing is filed** unless frames are stepped
+  with `?record`: a world only counts as shown once its ground has arrived,
+  which needs frames.

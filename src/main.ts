@@ -27,6 +27,9 @@ import {
 } from '@/ui/postcard'
 import { composePostcard } from '@/ui/postcard-card'
 import { attachPostcard } from '@/ui/postcard-panel'
+import { keep, picture, visit } from '@/app/atlas'
+import { attachAtlas, pictureOf } from '@/ui/atlas-panel'
+import { loadAtlas, saveAtlas } from '@/ui/atlas-store'
 
 /**
  * The composition root: read config, settle the seed, start the scene and
@@ -110,6 +113,7 @@ const show = async (born: boolean): Promise<void> => {
   if (!(await scene.show(next, { born }))) return
   document.body.classList.remove('forming')
   logger.info('planet.shown', { seed, kind: next.kind })
+  remember(next)
 }
 
 const hud = attachHud({
@@ -296,6 +300,57 @@ rig.onRelease(() => {
   scene.hold(false)
 })
 
+/**
+ * The atlas (app/atlas.ts): every world shown is filed, and a few seconds
+ * later, if the view is still the orbit over it, its picture is taken.
+ */
+let atlas = loadAtlas()
+let pictureWait: ReturnType<typeof setTimeout> | undefined
+function remember(world: Planet): void {
+  atlas = visit(
+    atlas,
+    { seed: world.seed, name: world.name, kind: KINDS[world.kind].label, dials: world.dials },
+    clock.now(),
+  )
+  saveAtlas(atlas)
+  if (pictureWait !== undefined) clearTimeout(pictureWait)
+  // Once the birth is over and the world has settled: a picture from orbit,
+  // never of a glide, a postcard being made or another world.
+  pictureWait = setTimeout(() => {
+    if (planet !== world || rig.flying() || postcard.isOpen()) return
+    void scene
+      .capture()
+      .then(async (view) => (view === null ? undefined : pictureOf(view)))
+      .then((url) => {
+        if (url === undefined || planet !== world) return
+        atlas = picture(atlas, world.seed, url)
+        saveAtlas(atlas)
+      })
+  }, 3500)
+}
+
+const atlasPanel = attachAtlas({
+  onOpen: (entry) => {
+    atlasPanel.hide()
+    letGo()
+    rig.cut()
+    hud.flying(false)
+    const changed = entry.seed !== seed
+    seed = entry.seed
+    dials = entry.dials
+    window.history.pushState(null, '', linkFor(seed, dials))
+    void show(changed)
+  },
+  onKeep: (which, kept) => {
+    atlas = keep(atlas, which, kept)
+    saveAtlas(atlas)
+    atlasPanel.show(atlas, seed)
+  },
+})
+document.getElementById('atlas-button')?.addEventListener('click', () => {
+  atlasPanel.show(atlas, seed)
+})
+
 const flash = document.getElementById('flash')
 function blink(): void {
   // The shutter's blink restarts on every press.
@@ -318,6 +373,10 @@ function takePicture(): void {
 // picture whether flying or not; making a postcard, P sends it and Escape
 // puts it away.
 window.addEventListener('keydown', (event) => {
+  if (atlasPanel.isOpen()) {
+    if (event.key === 'Escape') atlasPanel.hide()
+    return
+  }
   if (postcard.isOpen()) {
     if (event.key === 'Escape') closePostcard()
     else if (
