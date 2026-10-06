@@ -696,3 +696,23 @@ poles. None on molten or arid worlds; its brightness is the seed's own
   the shipped strength the snow read as green daylight.
 - Seen: from orbit as a folding oval over a 34°-tilted world in polar night
   (`9jkv67g&s=50`), and from the ground beneath it.
+
+## Surf and coasts
+
+The coast's foam was there and too narrow to see from a glide. In the
+water shader now:
+
+- **The wash**: a band of foam at the water's edge whose reach runs up and
+  back (`reach`, a few ten-thousandths of depth, on a slow sine broken by
+  the churn), seen out to about a radius-unit of view distance.
+- **Breaking lines**: `fract(depth · 1250 + time · 0.22)` — a sharp front
+  with foam trailing on its seaward side, between depths 0.0002 and 0.0034,
+  broken by the churn. Lines of equal depth follow the coast's shape and
+  run in towards it.
+- **A turquoise band** along the beach where the sand shows through, laid
+  over the shallows' existing lightening.
+
+All three are off over ice and on lakes and rivers (`v_inland`). Seen from
+a low glide along a bay on `83tzj46`; a faint diagonal shading in the
+deeper water there looked like a level-of-detail seam at first and moved
+with the view as the shelf's edge, so it was left.

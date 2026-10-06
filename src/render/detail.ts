@@ -768,19 +768,31 @@ export function withWaterDetail(material: THREE.Material): THREE.Material {
         // over the shelf, darkening to ink over the deep: read by the true
         // depth, so a reef or a sandbank shows as a paler patch out at sea.
         diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(1.15, 2.0, 1.75), shallows * 0.5);
+        // And a band of clear turquoise along the beach itself, where the
+        // sand shows through a few hand-spans of water.
+        float lagoon = (1.0 - smoothstep(0.0, 0.0016, v_depth)) * (1.0 - v_inland) * (1.0 - smoothstep(0.4, 0.9, v_ice));
+        diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.16, 0.62, 0.58), lagoon * 0.55);
         float abyss = smoothstep(0.004, 0.025, v_depth) * (1.0 - v_inland);
         diffuseColor.rgb *= mix(vec3(1.0), vec3(0.5, 0.62, 0.85), abyss);
         diffuseColor.rgb *= 1.0 + v_heave * 0.18;
-        // Foam where the sea meets the land, broken and moving.
-        float shore = (1.0 - smoothstep(0.0, 0.0009, v_depth)) * (1.0 - v_inland);
+        // The wash at the water's edge: a band of foam that runs up the
+        // beach and draws back, its edge broken by the churn.
+        float calm = (1.0 - v_inland) * (1.0 - smoothstep(0.4, 0.9, v_ice));
         float churn = detailNoise(vDetailPosition * 1500.0 + drift * 1500.0);
-        float foam = shore * smoothstep(0.45, 0.8, churn + shore * 0.35) * (1.0 - smoothstep(0.05, 0.5, seaDistance));
+        float reach = 0.00035 + 0.00022 * sin(detailTime * 0.7 + churn * 1.5);
+        float wash = 1.0 - smoothstep(reach * 0.5, reach, v_depth);
+        float foam = wash * smoothstep(0.3, 0.65, churn + wash * 0.3) * calm * (1.0 - smoothstep(0.3, 1.2, seaDistance));
         // Lines of surf a little way out, parallel to the shore and running
         // in to it: the same depth everywhere along a line, so they follow
-        // the coast's shape, broken by the churn so no line is unbroken.
-        float surfZone = (1.0 - smoothstep(0.0006, 0.0028, v_depth)) * (1.0 - v_inland) * (1.0 - smoothstep(0.4, 0.9, v_ice));
-        float surfLine = smoothstep(0.82, 0.97, sin(v_depth * 7800.0 + detailTime * 1.6));
-        foam = max(foam, surfZone * surfLine * smoothstep(0.3, 0.7, churn) * 0.8 * (1.0 - smoothstep(0.08, 0.6, seaDistance)));
+        // the coast's shape. Each a sharp breaking front with foam trailing
+        // behind it on the seaward side, broken by the churn so no line is
+        // unbroken, and seen from a glide rather than only from the beach.
+        float surfZone = smoothstep(0.0002, 0.0006, v_depth) * (1.0 - smoothstep(0.0012, 0.0034, v_depth)) * calm;
+        float set = fract(v_depth * 1250.0 + detailTime * 0.22);
+        float front = smoothstep(0.86, 0.97, set) * (1.0 - smoothstep(0.97, 1.0, set));
+        float trail = smoothstep(0.55, 0.97, set) * 0.45;
+        float broken = smoothstep(0.25, 0.6, churn);
+        foam = max(foam, surfZone * max(front, trail * broken) * broken * (1.0 - smoothstep(0.35, 1.4, seaDistance)));
         // Breaking crests: where the wave has squeezed the surface most,
         // streaked by a noise so the foam is ragged, and the odd cap at sea.
         float breaking = smoothstep(0.62, 0.42, v_jac);
