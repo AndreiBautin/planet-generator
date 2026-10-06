@@ -185,9 +185,29 @@ export function hydrologyOf(planet: Planet): Hydrology {
   }
 
   const lake = new Float32Array(CELLS).fill(NONE)
+  const grow: number[] = []
   for (let cell = 0; cell < CELLS; cell += 1) {
     const floor = height[cell] ?? 0
-    if (floor >= 0 && (filled[cell] ?? 0) > floor + LAKE_DEPTH) lake[cell] = filled[cell] ?? NONE
+    if (floor >= 0 && (filled[cell] ?? 0) > floor + LAKE_DEPTH) {
+      lake[cell] = filled[cell] ?? NONE
+      grow.push(cell)
+    }
+  }
+  // A lake is deep enough to count somewhere, but it fills its whole
+  // hollow: out over the shallow cells round it, at its own level, to where
+  // the ground rises out of it. Stopped at the deep cells, the water ended
+  // where the grid did and every shore was a staircase of cell edges.
+  while (grow.length > 0) {
+    const cell = grow.pop() ?? 0
+    const level = lake[cell] ?? NONE
+    for (const next of neighboursOf(cell)) {
+      const floor = height[next] ?? 0
+      if (floor < 0 || Number.isFinite(lake[next] ?? NONE)) continue
+      if ((filled[next] ?? 0) > floor && Math.abs((filled[next] ?? 0) - level) < 1e-3) {
+        lake[next] = level
+        grow.push(next)
+      }
+    }
   }
 
   // Rain gathered downstream: upstream cells come last in the flood, so

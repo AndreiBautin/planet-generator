@@ -211,10 +211,12 @@ export function samplePatch(planet: Planet, key: PatchKey, segments: number): Pa
       // How much of the sea here is ice, by the rule the floes are placed
       // by (features.ts): solid pack below freezing, thinning to open water
       // just above it.
-      ice[(j * side + i) * 2] =
-        surface.height < 0 && !planet.molten
-          ? Math.min(1, Math.max(0, (FREEZES + 0.2 - surface.warmth) / 0.2))
-          : 0
+      // Under the land too, where the sheet is hidden: an icy shore read as
+      // no ice on its dry vertices, and a strip of open water followed the
+      // grid's triangles round every frozen coast, a staircase from orbit.
+      ice[(j * side + i) * 2] = planet.molten
+        ? 0
+        : Math.min(1, Math.max(0, (FREEZES + 0.2 - surface.warmth) / 0.2))
       surfaces[j * side + i] = surface
       // Light and shade from the same fine noise, and a mottle at field
       // scale — patches of lusher and drier, lighter and darker ground —
@@ -313,7 +315,10 @@ export function samplePatch(planet: Planet, key: PatchKey, segments: number): Pa
         // what stands on it agree about where a wood or an outcrop is.
         const grouping = groupingsAt(planet, px / radial, py / radial, pz / radial)
         const stony = Math.min(1, floorAt(planet, here, steep).rock * 2) * grouping.outcrop
-        pattern[at] = look.canopy * Math.min(1, grouping.grove * 1.4)
+        // No wood under water: a lake fills its hollow over whatever grew
+        // there, and the trees stood up through it.
+        const drowned = (water[j * side + i] ?? 0) > radial
+        pattern[at] = drowned ? 0 : look.canopy * Math.min(1, grouping.grove * 1.4)
         pattern[at + 1] = look.sand * (1 - stony * 0.7)
         pattern[at + 2] = look.snow
         pattern[at + 3] = Math.min(1, look.stone + stony * 0.8)

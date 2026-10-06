@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { hydrologyOf, LAKE_DEPTH, RIVER_FLOW } from './hydrology'
+import { hydrologyOf, LAKE_DEPTH, neighboursOf, RIVER_FLOW } from './hydrology'
 import { createPlanet } from './planet'
 import { parseSeed } from './seed'
 
@@ -10,6 +10,24 @@ const planet = createPlanet(seed)
 const water = hydrologyOf(planet)
 
 describe('hydrology', () => {
+  it('fills the whole hollow of a lake: no ground beside one lies under its level', () => {
+    // Stopped at its deepest cells, a lake's water ended where the grid
+    // did, and its shore was a staircase of cell edges.
+    const { height, lake } = water
+    let checked = 0
+    for (let cell = 0; cell < height.length; cell += 1) {
+      const level = lake[cell] ?? Number.NEGATIVE_INFINITY
+      if (!Number.isFinite(level)) continue
+      for (const next of neighboursOf(cell)) {
+        if (Number.isFinite(lake[next] ?? Number.NEGATIVE_INFINITY) || (height[next] ?? 0) < 0)
+          continue
+        checked += 1
+        expect(height[next] ?? 0).toBeGreaterThanOrEqual(level - 1e-3)
+      }
+    }
+    expect(checked).toBeGreaterThan(100)
+  })
+
   it('drains every land cell to the sea, never climbing on the way', () => {
     const { height, lake, receiver } = water
     const level = (cell: number): number => Math.max(height[cell] ?? 0, lake[cell] ?? 0)

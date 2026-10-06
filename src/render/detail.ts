@@ -40,6 +40,8 @@ export const DETAIL_CLOUDS: { value: THREE.Texture | null } = { value: null }
 export const DETAIL_CLOUD_SPIN = { value: 0 }
 /** The sun's direction in the planet's frame, for where a cloud's shadow falls. */
 export const DETAIL_CLOUD_SUN = { value: new THREE.Vector3(1, 0, 0) }
+/** The sun in the cloud layer's own frame, which turns a little ahead of the ground's: for the rings' shadow on the clouds. */
+export const DETAIL_CLOUD_LAYER_SUN = { value: new THREE.Vector3(1, 0, 0) }
 /**
  * Planet frame to view space for normals, set by the scene each frame: the
  * normal maps perturb a normal in the planet's frame, where the triplanar
@@ -166,16 +168,19 @@ function passThrough(
   shader.uniforms.hazeSun = HAZE_SUN
 }
 
-const RING_SHADOW = /* glsl */ `
-  // How much of the sun the rings take from this point: where the sun's
-  // ray from here crosses the equatorial plane, how solid the rings are
-  // at that radius. The rings lie in the planet's equator, so in the
-  // planet's frame they are the plane y = 0 however the planet turns.
-  float ringShadow(vec3 p) {
-    if (detailRings.y <= 0.0 || abs(detailCloudSun.y) < 1e-4) return 0.0;
-    float t = -p.y / detailCloudSun.y;
+/**
+ * How much of the sun the rings take from a point: where the sun's ray
+ * from it crosses the equatorial plane, how solid the rings are at that
+ * radius. The rings lie in the planet's equator, so in any frame turned
+ * about the axis they are the plane y = 0. Needs `detailRings` and
+ * `detailRingBands` declared; the sun is passed in the point's own frame.
+ */
+export const RING_SHADOW = /* glsl */ `
+  float ringShadowFrom(vec3 p, vec3 sun) {
+    if (detailRings.y <= 0.0 || abs(sun.y) < 1e-4) return 0.0;
+    float t = -p.y / sun.y;
     if (t <= 0.0) return 0.0;
-    float r = length(p + detailCloudSun * t);
+    float r = length(p + sun * t);
     float across = (r - detailRings.x) / (detailRings.y - detailRings.x);
     if (across <= 0.0 || across >= 1.0) return 0.0;
     float at = across * 63.0;
@@ -610,7 +615,7 @@ export function withGroundDetail(
           vec3 groundUp = normalize(detailNormalMatrix * normalize(vDetailPosition));
           float groundDay = smoothstep(-0.05, 0.08, dot(groundUp, directionalLights[0].direction));
           // And the rings, if any, cast their bands across it.
-          groundDay *= 1.0 - ringShadow(vDetailPosition);
+          groundDay *= 1.0 - ringShadowFrom(vDetailPosition, detailCloudSun);
           reflectedLight.directDiffuse *= groundDay;
           reflectedLight.directSpecular *= groundDay;
         }
@@ -703,6 +708,16 @@ export function withWaterDetail(material: THREE.Material): THREE.Material {
         .replace(
           '#include <begin_vertex>',
           /* glsl */ `#include <begin_vertex>
+        // Past the shores the sheet is held just under the dry ground
+        // (patch-data.ts). There it slides to the parent patch with the
+        // ground, keeping the same depth under it: left where it was, the
+        // ground sinking towards its parent's shape uncovered it, and from
+        // orbit every rough slope was speckled with water and ice.
+        if (depth <= 0.0) {
+          float coarseLength = max(length(coarsePosition.xyz), 1e-6);
+          vec3 coarseSheet = coarsePosition.xyz * ((coarseLength + depth) / coarseLength);
+          transformed = mix(transformed, coarseSheet, seaMorph);
+        }
         transformed += waveOffset;`,
         )
     shader.uniforms.seaSky = DETAIL_SKY
@@ -806,6 +821,17 @@ export function withWaterDetail(material: THREE.Material): THREE.Material {
             normal,
             vec2(dFdx(ripple), dFdy(ripple)) * 0.5,
             faceDirection);
+        }`,
+      )
+      .replace(
+        '#include <lights_fragment_end>',
+        /* glsl */ `#include <lights_fragment_end>
+        // The rings' shadow falls on the water as on the ground: on the
+        // sun's light only, so the sky it mirrors is untouched.
+        {
+          float ringDim = 1.0 - ringShadowFrom(vDetailPosition, detailCloudSun);
+          reflectedLight.directDiffuse *= ringDim;
+          reflectedLight.directSpecular *= ringDim;
         }`,
       )
   }

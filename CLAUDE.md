@@ -554,3 +554,46 @@ What cost most and showed least:
 starves the build workers, so patches arrive late, stand-ins stay up and
 the numbers describe a frame nobody flies. `?cores=N` pretends the
 hardware count for `pickQuality`, development builds only.
+
+## Seen at last: snow, the rings' shadow, the sound
+
+Three features shipped on reasoning were checked on screen (seed `9tcwfzj`
+is frozen and ringed; `83tzj46` temperate), and looking found four faults
+no test could:
+
+- **The water sheet did not geomorph, and speckled every world from
+  orbit.** Past the shores it sits `DRY` under the ground; the ground
+  slides towards its parent's shape and the sheet stayed put, so on any
+  rough slope it showed through as dots of water — and of ice, on a frozen
+  world. In the water shader a vertex with `depth <= 0` now slides to the
+  coarse ground at the same depth under it. Found by switching the water
+  material's `colorWrite` off and watching the speckle go; **hiding a mesh
+  does not work for this, terrain resets `visible` every frame.**
+- **A lake stopped at its deep cells.** `lake` was set only where the fill
+  stood `LAKE_DEPTH` over the floor, and `waterAt` dilates by one cell, so
+  the water ended where the grid did and shores were staircases. A lake
+  now spreads over every flooded cell of its hollow at its own level
+  (`hydrology.test.ts` holds that no dry neighbour lies under a lake). It
+  made lakes about half as big again — **and stood trees up in them**, so
+  `pattern`'s canopy is cleared wherever water covers the ground.
+- **Pack ice was nought on every land vertex**, so a strip of open water
+  followed the grid's triangles round each frozen coast. `ice` is now set
+  from warmth everywhere; under the land the sheet is hidden anyway, and
+  frozen lakes and rivers ice over as a bonus.
+- **The rings shaded only the ground.** `ringShadowFrom(p, sun)` is shared
+  now: the water dims its sun light under the bands, and the clouds take
+  them too, with the sun in the cloud layer's frame
+  (`DETAIL_CLOUD_LAYER_SUN`, turned `1.15×` as the clouds are).
+
+**The sound was measured, not heard**: the gains read off the live graph
+over a glide — wind ~0.45 in the air and none in orbit, surf ~0.44 along a
+coast, rain 0.5 under a storm, three claps of thunder in twenty seconds
+held under one. The levels are right; whether it sounds good is unchecked.
+
+**`?shot=` is the way to put the camera anywhere for a check**: build one
+with `shotOf` and `linkFor` in the page and open it with `&record`. A
+module imported by hand after an edit is a fresh copy (`?t=` differs), so
+read live state through the recorder, not through a second import.
+
+**Not fixed, seen in passing:** land from orbit is a patchwork of
+hard-edged dark polygons — the canopy pattern at coarse levels.

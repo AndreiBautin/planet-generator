@@ -25,6 +25,7 @@ import { coverAt, Rain } from './rain'
 import { Soundscape } from './sound'
 import { Lightning, rainShafts, SHAFT_LIGHT } from './weather'
 import {
+  DETAIL_CLOUD_LAYER_SUN,
   DETAIL_CLOUD_SPIN,
   DETAIL_CLOUD_SUN,
   DETAIL_CLOUDS,
@@ -779,6 +780,7 @@ export function startScene(
     // shadows fall from the sun's side.
     DETAIL_CLOUD_SPIN.value = -0.15 * turn
     DETAIL_CLOUD_SUN.value.set(...inPlanetFrame(sunDirection, turn, 1))
+    DETAIL_CLOUD_LAYER_SUN.value.set(...inPlanetFrame(sunDirection, turn * 1.15, 1))
     place(seen, turn)
     if (coming !== undefined) {
       coming.terrain.update(inPlanetFrame(camera.position, turn, 1), viewCone(turn))
