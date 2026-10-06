@@ -12,7 +12,7 @@ import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js'
 import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js'
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js'
 
-import { AIR_RADIUS, buildAtmosphere } from './atmosphere'
+import { AIR_RADIUS, buildAtmosphere, sunlightThrough } from './atmosphere'
 import { HAZE_SUN, installHaze } from './haze'
 import { installSteadyShadows } from './shadows'
 import { BORN, birthAt, type Birth } from './birth'
@@ -609,9 +609,15 @@ export function startScene(
   const fog = new THREE.FogExp2(0x000000, 0)
   scene.fog = fog
   const airColour = new THREE.Color()
+  const sunTint = new THREE.Color()
+  const hazeTint = new THREE.Color()
+  const WHITE = new THREE.Color(1, 1, 1)
+  const SUN_COLOUR = new THREE.Color(0xfff2e0)
+  const SKY_LIGHT = new THREE.Color(0x9fc3ff)
   const airAround = (above: number): void => {
     const low = 1 - smooth(0.08, 0.35, above)
-    const day = smooth(-0.15, 0.3, camera.position.clone().normalize().dot(sunDirection))
+    const elevation = camera.position.clone().normalize().dot(sunDirection)
+    const day = smooth(-0.15, 0.3, elevation)
     // Seeing as far as the horizon, about √(2h) away, should leave a far hill
     // about half visible.
     fog.density = low * (0.65 / Math.sqrt(2 * Math.max(above, 0.002)))
@@ -623,8 +629,24 @@ export function startScene(
         // sRGB here so the fog meets it at the horizon rather than a shade off.
         const k = 1.25 * day
         airColour.setRGB(value.r * k, value.g * k, value.b * k, THREE.SRGBColorSpace)
+        // Low down, sunlight comes through a long slant of air and loses
+        // the colour the air scatters (atmosphere.ts): the sun on the
+        // ground, and the haze it lights, warm towards evening. From orbit
+        // the sun is the sun.
+        sunlightThrough(value, elevation, sunTint)
+        sunTint.lerp(WHITE, 1 - low)
+        sun.color.copy(SUN_COLOUR).multiply(sunTint)
+        airColour.multiply(hazeTint.copy(sunTint).lerp(WHITE, 0.45))
         fog.color.copy(airColour)
         DETAIL_SKY.value.copy(airColour)
+        // The sky lights the ground from above in its own colour, the
+        // ground bounces its own back, both fading with the day; the
+        // ambient left is the night's.
+        skylight.color
+          .copy(airColour)
+          .multiplyScalar(1.6)
+          .lerp(SKY_LIGHT, 1 - low)
+        skylight.intensity = 0.25 + 0.4 * day
       }
     }
     // The sun in view space for the haze, weighted by how much daylight

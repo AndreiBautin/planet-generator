@@ -23,8 +23,10 @@ import { fromPalette } from './colour'
  * the real hills stand above that sphere, so every ray towards one counted
  * the air under it and the land washed out white.
  *
- * Still a stand-in for real scattering — one sample, no integral — because
- * a phone has a frame to draw.
+ * The glow is single scattering, integrated along the line in eight steps
+ * with three towards the sun from each: enough for a phone, and enough for
+ * a low sun to redden through the air it crosses. `sunlightThrough` is the
+ * same model on the CPU, for the sun's colour on the ground and the haze.
  */
 export const AIR_RADIUS = 1.1
 const GROUND_RADIUS = 1
@@ -66,6 +68,35 @@ export function buildAtmosphere(planet: Planet, sun: THREE.Vector3): THREE.Mesh 
         return vec2(-b - h, -b + h);
       }
 
+      // Single scattering through a thin shell of air: Rayleigh scattering
+      // by the air itself, coloured by this world's air (the colour it
+      // scatters is the colour it is), and Mie scattering by haze, which
+      // glows white round the sun. Light reaching a point has crossed air
+      // on its way from the sun and lost the colour the air scatters, so a
+      // low sun reddens on an earthly world, and on another world turns
+      // whatever its air does not scatter.
+      const int VIEW_STEPS = 8;
+      const int SUN_STEPS = 3;
+
+      vec3 rayleighBeta() {
+        return glow / max(max(glow.r, glow.g), max(glow.b, 1e-3)) * 14.0;
+      }
+
+      // Optical depth from p towards the sun, out to the top of the air:
+      // Rayleigh and Mie, each a density integral.
+      vec2 towardSun(vec3 p, float rayleighHeight, float mieHeight) {
+        vec2 out_ = crossing(p, sun, outer);
+        float length_ = max(out_.y, 0.0);
+        float step_ = length_ / float(SUN_STEPS);
+        vec2 depth = vec2(0.0);
+        for (int k = 0; k < SUN_STEPS; k++) {
+          vec3 q = p + sun * (float(k) + 0.5) * step_;
+          float height = length(q) - inner;
+          depth += vec2(exp(-height / rayleighHeight), exp(-height / mieHeight)) * step_;
+        }
+        return depth;
+      }
+
       void main() {
         vec3 o = cameraPosition;
         vec3 d = normalize(vWorld - o);
@@ -78,27 +109,41 @@ export function buildAtmosphere(planet: Planet, sun: THREE.Vector3): THREE.Mesh 
         float path = to - from;
         if (path <= 0.0) discard;
 
-        // How much air, as a share of the thickest line the shell holds —
-        // raised to a power so long lines count for more than their length:
-        // straight down through the shell is a faint haze, while the limb
-        // and the horizon glow. A plain share washed the planet's face blue.
-        float thickest = 2.0 * sqrt(outer * outer - inner * inner);
-        float amount = 1.0 - exp(-4.0 * pow(path / thickest, 1.5));
+        float thickness = outer - inner;
+        float rayleighHeight = thickness * 0.25;
+        float mieHeight = thickness * 0.08;
+        vec3 betaR = rayleighBeta();
+        vec3 betaM = vec3(3.0);
 
-        // Lit where the middle of the line is in sunlight, with a soft edge
-        // so dusk is a band rather than a cut.
-        vec3 middle = o + d * (from + to) * 0.5;
-        float day = smoothstep(-0.25, 0.35, dot(normalize(middle), sun));
-
-        // Looking towards the sun brightens and whitens the air around it.
-        float toward = pow(max(dot(d, sun), 0.0), 10.0);
-        vec3 colour = glow * (1.0 + toward * 0.8) + vec3(toward * 0.35);
-
-        float a = amount * day * strength;
+        float step_ = path / float(VIEW_STEPS);
+        vec2 viewDepth = vec2(0.0);
+        vec3 sumR = vec3(0.0);
+        vec3 sumM = vec3(0.0);
+        for (int k = 0; k < VIEW_STEPS; k++) {
+          vec3 p = o + d * (from + (float(k) + 0.5) * step_);
+          float height = max(length(p) - inner, 0.0);
+          vec2 density = vec2(exp(-height / rayleighHeight), exp(-height / mieHeight)) * step_;
+          viewDepth += density;
+          // The planet's shadow, soft-edged: how close the line to the sun
+          // passes the planet's centre, on the night side of the point. A
+          // hard test drew the shadow's edge across the dusk sky as a line.
+          float along = dot(p, sun);
+          float miss = length(p - sun * along);
+          float lit = along > 0.0 ? 1.0 : smoothstep(inner * 0.97, inner * 1.02, miss);
+          if (lit <= 0.0) continue;
+          vec2 sunDepth = towardSun(p, rayleighHeight, mieHeight);
+          vec3 lost = exp(-(betaR * (viewDepth.x + sunDepth.x) + betaM * 1.1 * (viewDepth.y + sunDepth.y)));
+          sumR += density.x * lost * lit;
+          sumM += density.y * lost * lit;
+        }
+        float mu = dot(d, sun);
+        float phaseR = 0.0597 * (1.0 + mu * mu);
+        float g = 0.76;
+        float phaseM = 0.1194 * ((1.0 - g * g) * (1.0 + mu * mu)) / ((2.0 + g * g) * pow(1.0 + g * g - 2.0 * g * mu, 1.5));
+        vec3 sky = (sumR * betaR * phaseR + sumM * betaM * phaseM) * 9.0 * strength;
         // Linear light out: the frame is tone-mapped and encoded once, at
         // the end, by the post pass, like every other material's.
-        vec3 sky = colour * a * 1.3;
-        gl_FragColor = vec4(pow(sky, vec3(2.2)), 1.0);
+        gl_FragColor = vec4(sky, 1.0);
         // Tone mapped and encoded like every built-in material: a no-op when
         // the post pass renders into its own target and encodes at the end,
         // and the whole conversion when the frame goes straight to the
@@ -117,4 +162,33 @@ export function buildAtmosphere(planet: Planet, sun: THREE.Vector3): THREE.Mesh 
   // After the ground and the clouds, so it fills only the sky they leave.
   mesh.renderOrder = 10
   return mesh
+}
+
+/**
+ * What is left of sunlight after crossing the air to a point where the sun
+ * stands `elevation` (its sine) above the horizon, by the same Rayleigh
+ * model the sky shader integrates: the colour this air scatters is the
+ * colour taken out, so a low sun reddens on an earthly world. Normalised so
+ * the sun overhead is white, and written into `out`.
+ */
+export function sunlightThrough(
+  glow: { readonly r: number; readonly g: number; readonly b: number },
+  elevation: number,
+  out: THREE.Color,
+): THREE.Color {
+  const strongest = Math.max(glow.r, glow.g, glow.b, 1e-3)
+  const thickness = AIR_RADIUS - GROUND_RADIUS
+  const height = thickness * 0.25
+  // The length of air crossed grows as the sun sinks: about one scale
+  // height overhead, a dozen at the horizon.
+  const depth = (k: number): number => height / Math.max(0.02, k + 0.08)
+  const lost = (channel: number, k: number): number =>
+    Math.exp(-(channel / strongest) * 14 * depth(k))
+  const e = Math.max(-0.1, elevation)
+  out.setRGB(
+    lost(glow.r, e) / lost(glow.r, 1),
+    lost(glow.g, e) / lost(glow.g, 1),
+    lost(glow.b, e) / lost(glow.b, 1),
+  )
+  return out
 }
