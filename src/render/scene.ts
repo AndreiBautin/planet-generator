@@ -34,6 +34,7 @@ import { Fish } from './fish'
 import { Herds } from './herds'
 import { Kelp } from './kelp'
 import { SeaLight } from './sea-light'
+import { Rainbow, rainbowStrength } from './rainbow'
 import { Ships } from './ships'
 import { Towns, townSites } from './towns'
 import { SisterWorlds } from './sisters'
@@ -451,6 +452,10 @@ export function startScene(
   scene.add(birds.object)
   const herds = new Herds()
   scene.add(herds.object)
+  const rainbow = new Rainbow()
+  scene.add(rainbow.object)
+  const awayFromSun = new THREE.Vector3()
+  const bowUp = new THREE.Vector3()
   const marineSnow = new MarineSnow()
   scene.add(marineSnow.object)
   const fish = new Fish()
@@ -1040,7 +1045,14 @@ export function startScene(
       cloudsSeenFrom(shown.clouds, camera.position.length(), stage.scale, stage.clouds)
       shown.terrain.update(inPlanetFrame(camera.position, turn, stage.scale), viewCone(turn))
       const shower = rainOver(shown.clouds, turn)
-      rain.update(rainEye.copy(camera.position), shower)
+      rain.update(rainEye.copy(camera.position), shower, camera.near)
+      rainbow.update(
+        camera.position,
+        awayFromSun.copy(sunDirection).negate(),
+        bowFor(shown.clouds, turn, stage.scale),
+        stage.scale,
+        DETAIL_TIME.value,
+      )
       PLUME_SUN.value.copy(sunDirection)
       // Shooting stars on the night side, seen from low enough for the sky
       // to be a sky rather than space.
@@ -1153,6 +1165,7 @@ export function startScene(
       sisters.object.visible = false
       birds.object.visible = false
       herds.object.visible = false
+      rainbow.object.visible = false
       meteors.object.visible = false
       rain.object.visible = false
     }
@@ -1204,6 +1217,38 @@ export function startScene(
       sunbeamStrength(elevation, 1 - smooth(0.05, 0.3, above), off) *
       (1 - DETAIL_UNDER.value)
     ;(tint.value as THREE.Color).copy(sun.color)
+  }
+
+  /**
+   * How bright a rainbow is now: the sun's height over the eye, and the
+   * cloud over the eye and out on the far side from the sun, where the
+   * rain that makes the bow would be (rainbow.ts).
+   */
+  const bowFor = (clouds: THREE.Mesh, turn: number, scale: number): number => {
+    const height = camera.position.length() / scale - 1
+    if (height > 0.08) return 0
+    const held = cloudDataOf(clouds)
+    if (held === undefined) return 0
+    const eye = unit(inPlanetFrame(camera.position, turn * 1.15, 1))
+    const away = inPlanetFrame(awayFromSun.copy(sunDirection).negate(), turn * 1.15, 1)
+    const along = away[0] * eye[0] + away[1] * eye[1] + away[2] * eye[2]
+    const out = unit([away[0] - eye[0] * along, away[1] - eye[1] * along, away[2] - eye[2] * along])
+    const cover = (d: Vec3): number => flowingCoverAt(held.data, held.width, d, DETAIL_TIME.value)
+    let rainAway = 0
+    for (const reach of [0.015, 0.03, 0.045, 0.06]) {
+      const c = Math.cos(reach)
+      const s = Math.sin(reach)
+      rainAway = Math.max(
+        rainAway,
+        cover(unit([eye[0] * c + out[0] * s, eye[1] * c + out[1] * s, eye[2] * c + out[2] * s])),
+      )
+    }
+    return rainbowStrength({
+      sunUp: bowUp.copy(camera.position).normalize().dot(sunDirection),
+      height,
+      rainAway,
+      cloudOver: cover(eye),
+    })
   }
 
   /** How heavy a shower falls on the eye: the cloud over it, only low down. */

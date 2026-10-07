@@ -661,7 +661,12 @@ export function withGroundDetail(
             mix(vec3(0.9, 0.32, 0.3), vec3(0.95, 0.6, 0.22), smoothstep(0.3, 0.6, hue)),
             vec3(0.55, 0.3, 0.8),
             smoothstep(0.62, 0.85, hue));
-          float body = smoothstep(0.5, 0.66, clump) * v_reef;
+          // From above, only the shallows' coral: reefs run deeper now so a
+          // dive can find them, and seen down through that much water they
+          // blotched the warm seas pink. From below, all of it.
+          float reefDepth = ${SEA_RADIUS.toFixed(5)} - length(vDetailPosition);
+          float reefSeen = v_reef * mix(1.0 - smoothstep(0.0018, 0.006, reefDepth), 1.0, detailUnder);
+          float body = smoothstep(0.5, 0.66, clump) * reefSeen;
           // Each noise faded to its average once a pixel spans its grain, as
           // the canopy's are: read raw from orbit the clumps and lumps were
           // finer than a pixel, and every warm coast sparkled as it turned.
@@ -669,7 +674,7 @@ export function withGroundDetail(
           float lumpSeen = 1.0 - smoothstep(0.15, 0.5, pixelSpan * 2880.0);
           float hueSeen = 1.0 - smoothstep(0.15, 0.5, pixelSpan * 216.0);
           coral = mix(vec3(0.8, 0.42, 0.38), coral, hueSeen);
-          body = mix(v_reef * 0.3, body, clumpSeen);
+          body = mix(reefSeen * 0.3, body, clumpSeen);
           lumps = mix(0.5, lumps, lumpSeen);
           diffuseColor.rgb = mix(diffuseColor.rgb, coral * (0.7 + 0.5 * lumps), body);
           detailHeight += (lumps - 0.5) * 2.0 * body;

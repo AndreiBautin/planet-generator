@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { createPlanet } from '@/generation/planet'
+import { createPlanet, type Surface } from '@/generation/planet'
 import { parseSeed, type Seed } from '@/generation/seed'
 
 import {
@@ -9,6 +9,7 @@ import {
   patchIndex,
   quarterIndex,
   samplePatch,
+  seaFogOver,
   vertexCount,
 } from './patch-data'
 import { SEA_RADIUS } from '../water'
@@ -158,5 +159,26 @@ describe('groundOf', () => {
 
   it('lays nothing under the sea', () => {
     expect(groundOf(planet, land(0.5, 0.05, -0.1), 0, open)).toEqual([0, 0, 0, 0])
+  })
+})
+
+describe('seaFogOver', () => {
+  const sea = (height: number, warmth: number): Surface => ({
+    height,
+    warmth,
+    biome: 'shallow',
+    colour: [0, 0, 0],
+    moisture: 0,
+  })
+
+  it('lies over cool water along a coast', () => {
+    expect(seaFogOver(sea(-0.005, -0.2))).toBeGreaterThan(0.001)
+  })
+
+  it('leaves the open ocean, the warm seas and the pack ice clear', () => {
+    // A depth under the surface draws nothing.
+    expect(seaFogOver(sea(-0.08, -0.2))).toBeLessThan(0)
+    expect(seaFogOver(sea(-0.005, 0.4))).toBeLessThan(0)
+    expect(seaFogOver(sea(-0.005, -0.6))).toBeLessThan(0)
   })
 })

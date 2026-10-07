@@ -1256,3 +1256,48 @@ screen** — its matrices were checked numerically (on the shore, along
   and 0.016 from the eye, where it is a few pixels, rather than vanishing.
 - Seen: a tawny herd of fifteen grazing on a hillside from a glide. Not
   seen: the dark kind, a herd at dusk, a phone.
+
+## Rainbows, sea fog, and snow you can see
+
+- **Snow on a frozen world was never seen, and the cause was the near
+  plane.** The shower box is 0.006 across round the eye; the near plane
+  sits about a fifth of the eye's height out (0.0059 at 0.03 up), and the
+  shower falls up to 0.12 high — so the box was clipped away almost whole
+  (7 pixels changed with the flakes on). `Rain.update` takes the near
+  plane and widens the box to four times it, the flakes sized by the same
+  factor so a flake is the same few pixels at any height. **Rain had the
+  same fault**: high over hills the streaks were clipped too.
+- **Snow is flakes, not streaks**: a `Points` of its own beside the rain's
+  lines, three times as many, swaying, fading in at the top of the box and
+  out at its foot so none appears where the fall wraps. As a line a hair
+  long a flake was a pixel. Seen: a snow shower over the ice of `9tcwfzj`.
+- **Rainbows** (`render/rainbow.ts`, `rainbowStrength` tested): with the
+  sun low at your back, sunlight on the eye and rain out on the far side
+  (cloud sampled 0.015 to 0.06 away from the sun, the same flowing cover
+  every reader uses), a soft bow round the point straight away from the
+  sun, a fainter reversed second bow outside it and a brighter sky inside.
+  Drawn on a sphere 0.03 round the eye with the depth test on, so near
+  hills stand in front of its feet and far ones behind the rain. **Drawn
+  at 26 degrees, not 42**: the view is 45 degrees tall and a glide looks
+  a little down, so a true bow ringed the whole screen and only its
+  corners showed — measured, every point of the ring fell off the frame.
+  **Its feet fade towards the horizon**, because the sphere meets the sea a
+  few hundredths out and the bow ended there in a hard line across the
+  water. Softened towards white: a pure spectrum read as a test card.
+  **Eased over 1.6 s**: read straight off the cloud under a fast glide it
+  came and went in a second. Measured over 150 s of a low-sun glide: two
+  rainbows, of about one and three seconds before easing. The look was
+  checked by forcing it on; the trigger by flying.
+- **Sea fog** (`seaFogOver` in patch-data.ts, tested): the dawn mist laid
+  over cool coastal water too — warm air over cold water — where the sea
+  was always given a depth under its surface, which draws nothing. Cool,
+  not over the pack ice, and near a coast read off how shallow the sea is.
+  The first reach (to a height of −0.035) was a strip a few thousandths
+  wide on a coast that shelves fast; to −0.07 it is a bank. Seen: a white
+  bank over the near water at dawn. **It reads a little like a sandbank**
+  where it ends, being the mist's own flat colour.
+- **Reefs from above are back to the shallows.** Running them deeper for
+  the dive (above) blotched the warm seas pink from a glide; the ground
+  shader now shows from above only the coral down to 0.006 and all of it
+  under the sea (`detailUnder`).
+- Not seen: a rainbow over land, sea fog from orbit, a phone.

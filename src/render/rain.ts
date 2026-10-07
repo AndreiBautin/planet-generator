@@ -14,12 +14,16 @@ import { DETAIL_TIME } from './detail'
  * cover, so a clear sky has none and a grey one has a downpour.
  */
 const STREAKS = 1600
+const FLAKES = 4800
 /** Half the box the streaks fall in, in planet radii. */
 const RADIUS = 0.006
 const HEIGHT = 0.012
 
 export class Rain {
-  readonly object: THREE.LineSegments
+  /** The streaks of rain and the flakes of snow, one shown at a time. */
+  readonly object = new THREE.Group()
+  private readonly streaks: THREE.LineSegments
+  private readonly flakes: THREE.Points
   private readonly strength: { value: number }
   private readonly snow = { value: 0 }
   private readonly up = new THREE.Vector3()
@@ -95,22 +99,91 @@ export class Rain {
         }
       `,
     })
-    this.object = new THREE.LineSegments(geometry, material)
-    this.object.frustumCulled = false
-    this.object.renderOrder = 3
+    this.streaks = new THREE.LineSegments(geometry, material)
+    this.streaks.frustumCulled = false
+    this.streaks.renderOrder = 3
+    // Snow as flakes, a few pixels each: as a line a hair long, a flake was
+    // a single pixel, and snow on a frozen world was never seen on screen.
+    // Three times as many as the streaks: a flake is a dot where a streak is
+    // a line, and at the rain's count snow read as a few stars.
+    const flakeSeeds = new Float32Array(FLAKES * 3)
+    for (let at = 0; at < FLAKES; at += 1) {
+      flakeSeeds[at * 3] = next() * 2 - 1
+      flakeSeeds[at * 3 + 1] = next()
+      flakeSeeds[at * 3 + 2] = next() * 2 - 1
+    }
+    const flakeGeometry = new THREE.BufferGeometry()
+    flakeGeometry.setAttribute('position', new THREE.BufferAttribute(flakeSeeds, 3))
+    this.flakes = new THREE.Points(
+      flakeGeometry,
+      new THREE.ShaderMaterial({
+        transparent: true,
+        depthWrite: false,
+        uniforms: { rainTime: DETAIL_TIME, rainStrength: this.strength },
+        vertexShader: /* glsl */ `
+          uniform float rainTime;
+          uniform float rainStrength;
+          varying float vFade;
+          void main() {
+            // Drifting down at a fifth of the rain's pace, each its own way,
+            // swaying as it falls.
+            float pace = (0.55 + fract(position.x * 7.31 + position.z * 3.17) * 0.35) * 0.16;
+            float drop = fract(position.y - rainTime * pace);
+            float y = (0.5 - drop) * ${HEIGHT.toFixed(4)};
+            float sway = sin(rainTime * 1.1 + position.z * 20.0 + position.y * 9.0) * 0.0006;
+            vec3 local = vec3(position.x * ${RADIUS.toFixed(4)} + sway, y, position.z * ${RADIUS.toFixed(4)} + sway * 0.6);
+            vec4 view = modelViewMatrix * vec4(local, 1.0);
+            float edge = 1.0 - smoothstep(0.6, 1.0, length(position.xz));
+            // Fading in at the top of the box and out at its foot, so none
+            // appears or vanishes where the fall wraps round.
+            float ends = smoothstep(0.0, 0.1, drop) * (1.0 - smoothstep(0.9, 1.0, drop));
+            vFade = edge * ends * rainStrength;
+            // As big as the box is widened, so a flake is as many pixels whatever
+            // the eye's height.
+            float widened = length(modelViewMatrix[0].xyz);
+            gl_PointSize = clamp(0.00005 * widened / max(-view.z, 1e-5) * 900.0, 1.8, 5.0);
+            gl_Position = projectionMatrix * view;
+          }
+        `,
+        fragmentShader: /* glsl */ `
+          varying float vFade;
+          void main() {
+            float flake = 1.0 - smoothstep(0.15, 0.5, length(gl_PointCoord - 0.5));
+            if (flake * vFade < 0.01) discard;
+            gl_FragColor = vec4(vec3(0.96, 0.97, 1.0), flake * vFade * 0.9);
+            #include <tonemapping_fragment>
+            #include <colorspace_fragment>
+          }
+        `,
+      }),
+    )
+    this.flakes.frustumCulled = false
+    this.flakes.renderOrder = 3
+    this.flakes.visible = false
+    this.object.add(this.streaks, this.flakes)
     this.object.visible = false
   }
 
   /** Whether what falls is snow rather than rain. */
   snows(snow: boolean): void {
     this.snow.value = snow ? 1 : 0
+    this.streaks.visible = !snow
+    this.flakes.visible = snow
   }
 
-  /** Place the shower at the eye, falling along `up`, as heavy as `strength` (0 to 1). */
-  update(eye: THREE.Vector3, strength: number): void {
+  /**
+   * Place the shower at the eye, falling along `up`, as heavy as `strength`
+   * (0 to 1). `near` is the camera's near plane: the box is widened to stand
+   * well past it. Over high ground the near plane sits about a fifth of the
+   * eye's height out — 0.006 at 0.03 up — and clipped the whole box away,
+   * which is why snow on a frozen world was never seen: the shower falls
+   * up to 0.12 high, and the box is 0.006 across.
+   */
+  update(eye: THREE.Vector3, strength: number, near = 0): void {
     this.strength.value = strength
     this.object.visible = strength > 0.01
     if (!this.object.visible) return
+    this.object.scale.setScalar(Math.max(1, (near * 4) / RADIUS))
     this.object.position.copy(eye)
     this.up.copy(eye).normalize()
     this.quaternion.setFromUnitVectors(Rain.Y, this.up)
@@ -118,9 +191,11 @@ export class Rain {
   }
 
   dispose(): void {
-    this.object.geometry.dispose()
-    const material: unknown = this.object.material
-    if (material instanceof THREE.Material) material.dispose()
+    for (const drawn of [this.streaks, this.flakes]) {
+      drawn.geometry.dispose()
+      const material: unknown = drawn.material
+      if (material instanceof THREE.Material) material.dispose()
+    }
   }
 }
 

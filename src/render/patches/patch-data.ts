@@ -265,7 +265,7 @@ export function samplePatch(planet: Planet, key: PatchKey, segments: number): Pa
         // their square edges across the land.
         const pool = Math.max(floor + MIST_DEPTH, SEA_RADIUS + MIST_COAST)
         const depth = pool - radius
-        let deep = surface.height < 0 ? -MIST_COAST : depth
+        let deep = surface.height < 0 ? seaFogOver(surface) : depth
         // Over a lake or a river the mist lies on the water, whatever the
         // land round it does: water is where it forms first.
         if (Number.isFinite(level) && surface.height >= 0)
@@ -670,6 +670,24 @@ const MIST_SPREAD = 1
 const MIST_COAST = 0.0012
 /** How deep it lies over a lake or a river. */
 const MIST_ON_WATER = 0.0009
+/** How deep sea fog lies over cool coastal water. */
+const SEA_FOG = 0.0018
+
+/**
+ * Sea fog: a bank over cool water along the coasts, at dawn with the valley
+ * mist (valley-fog.ts) and drawn by the same means — a depth over the water.
+ * Cool, because sea fog is warm air over cold water; near a coast, read off
+ * how shallow the sea is, so it lies along the shore rather than over the
+ * open ocean; never over the pack ice. Elsewhere the depth is under the
+ * surface, which draws nothing, as the sea always was.
+ */
+export function seaFogOver(surface: Surface): number {
+  const cool =
+    smoothRange(FREEZES + 0.1, FREEZES + 0.3, surface.warmth) *
+    (1 - smoothRange(-0.05, 0.2, surface.warmth))
+  const coastal = smoothRange(-0.07, -0.02, surface.height)
+  return mix(-MIST_COAST, SEA_FOG, cool * coastal)
+}
 
 const mix = (from: number, to: number, t: number): number => from + (to - from) * t
 
