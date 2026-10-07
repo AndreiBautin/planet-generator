@@ -1608,13 +1608,21 @@ the world laid flat — latitude up the side, longitude across, the planet's
   with `image-rendering: pixelated`, a chart in the PS1 manner rather
   than a smoothed photograph.
 - **The Dive button moved down a place when flying** (+290) to make room.
+- **A press flies on the way it was going**: flying, the new glide keeps
+  the bearing the eye had (`bearingOf`, measured 90° before and 91° after a
+  jump); from orbit it heads north.
+- **On a phone the map is 680 wide and scrolls sideways**, opening centred
+  on the eye: fitted to the screen it was 343 by 173, too small to read or
+  to aim a press at.
 - **The browser pane's screenshot showed the map canvas filling the whole
   view**, header and all gone — the tool captured the canvas, not the
   page. The layout was checked by measuring instead: at 375 the map is
   343 by 173 with nothing over the edge.
-- **Seasonal snow is not on the map**: it is `surfaceAt`'s colour, and the
-  season's snow is laid on in the ground's shader. A green valley on the
-  map can be white in midwinter when flown to.
+- **The season's snow is on the map.** `surfaceAt` reads the season (the
+  sun's declination warms one hemisphere), and the ground draws its snow
+  from that same biome — so the map and the ground agree. A note here said
+  otherwise for a release, written from an assumption after a flight landed
+  in snow; checked against the code, it was wrong.
 - Seen: maps of `k3m9xqa` and `83tzj46`, a press flying there and the
   arrow following north; a molten world bakes (tested). Not seen: a real phone.
 

@@ -325,6 +325,19 @@
         font-size: 28px;
         font-weight: 650;
       }
+      /* On a phone the map is wider than the screen and scrolls sideways:
+         fitted to 343 pixels it was 173 tall, too small to read or aim at. */
+      .map-scroll {
+        max-width: 1100px;
+        margin: 0 auto;
+        overflow-x: auto;
+        border-radius: 6px;
+      }
+      @media (max-width: 700px) {
+        .map-scroll .map-frame {
+          width: 680px;
+        }
+      }
       .map-frame {
         position: relative;
         max-width: 1100px;
@@ -995,23 +1008,25 @@
         <h2 id="map-title">Map</h2>
         <button type="button" id="map-close" aria-label="Close the map">Close</button>
       </header>
-      <div class="map-frame">
-        <canvas class="map-canvas" id="map-canvas" width="2" height="1"></canvas>
-        <p class="map-waiting" id="map-waiting">Drawing the map…</p>
-        <span class="map-marker" id="map-marker" hidden>
-          <svg viewBox="0 0 22 22" width="22" height="22" aria-hidden="true">
-            <path class="map-arrow" d="M11 2l6 16-6-4-6 4z" fill="currentColor" />
-            <circle
-              class="map-ring"
-              cx="11"
-              cy="11"
-              r="6"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2.5"
-            />
-          </svg>
-        </span>
+      <div class="map-scroll" id="map-scroll">
+        <div class="map-frame">
+          <canvas class="map-canvas" id="map-canvas" width="2" height="1"></canvas>
+          <p class="map-waiting" id="map-waiting">Drawing the map…</p>
+          <span class="map-marker" id="map-marker" hidden>
+            <svg viewBox="0 0 22 22" width="22" height="22" aria-hidden="true">
+              <path class="map-arrow" d="M11 2l6 16-6-4-6 4z" fill="currentColor" />
+              <circle
+                class="map-ring"
+                cx="11"
+                cy="11"
+                r="6"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2.5"
+              />
+            </svg>
+          </span>
+        </div>
       </div>
       <p class="map-hint">Press anywhere on the map to fly there. M opens and closes it.</p>
     </section>

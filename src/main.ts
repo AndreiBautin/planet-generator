@@ -34,7 +34,7 @@ import { systemOf, type SystemWorld } from '@/generation/system'
 import { attachSystem } from '@/ui/system-panel'
 import { keep, picture, visit } from '@/app/atlas'
 import { attachAtlas, pictureOf } from '@/ui/atlas-panel'
-import { attachMap } from '@/ui/map-panel'
+import { attachMap, bearingOf } from '@/ui/map-panel'
 import type { WorldMap } from '@/generation/world-map'
 import { loadAtlas, saveAtlas } from '@/ui/atlas-store'
 
@@ -429,8 +429,10 @@ const MAP_WIDTH = 512
 let drawnMap: { key: string; map: Promise<WorldMap> } | undefined
 const mapPanel = attachMap({
   onGo: (direction) => {
+    // Flying on the way it was already going, if it was flying; north from orbit.
+    const bearing = rig.flying() ? bearingOf(scene.underEye(), scene.eyeFacing()) : 0
     letGo()
-    rig.fly({ position: direction, heading: headingOf(direction, 0) })
+    rig.fly({ position: direction, heading: headingOf(direction, bearing) })
     hud.flying(true)
   },
 })

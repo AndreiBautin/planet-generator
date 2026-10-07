@@ -38,6 +38,7 @@ export function attachMap(handlers: MapHandlers): MapPanel {
   const canvas = element('map-canvas', HTMLCanvasElement)
   const marker = element('map-marker', HTMLElement)
   const waiting = element('map-waiting', HTMLElement)
+  const scroll = element('map-scroll', HTMLElement)
   let open = false
   let shown = 0
   let frame: number | undefined
@@ -91,6 +92,9 @@ export function attachMap(handlers: MapHandlers): MapPanel {
         draw(canvas, drawn)
         waiting.hidden = true
         marker.hidden = false
+        // Where the map is wider than the screen (a phone), open on the eye.
+        const [across] = mapPoint(eye().under)
+        scroll.scrollLeft = across * scroll.scrollWidth - scroll.clientWidth / 2
       })
       if (frame === undefined) frame = requestAnimationFrame(follow)
     },
@@ -138,7 +142,7 @@ function draw(canvas: HTMLCanvasElement, map: WorldMap): void {
 }
 
 /** Degrees east of north that `facing` points, along the ground at `under`. */
-function bearingOf(under: Vec3, facing: Vec3): number {
+export function bearingOf(under: Vec3, facing: Vec3): number {
   const [x, y, z] = under
   // East along the ground: square to the axis and the point; north square to both.
   let east: Vec3 = [z, 0, -x]
