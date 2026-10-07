@@ -31,6 +31,7 @@ import { spray } from './waterfalls'
 import { Birds } from './birds'
 import { Meteors } from './meteors'
 import { Fish } from './fish'
+import { CoastRocks } from './rocks'
 import { Herds } from './herds'
 import { Kelp } from './kelp'
 import { SeaLight } from './sea-light'
@@ -458,6 +459,8 @@ export function startScene(
   scene.add(birds.object)
   const herds = new Herds()
   scene.add(herds.object)
+  const rocks = new CoastRocks()
+  scene.add(rocks.group)
   const rainbow = new Rainbow()
   scene.add(rainbow.object)
   const sunFan = new SunFan()
@@ -610,6 +613,7 @@ export function startScene(
     scene.add(next.terrain.group)
     birds.setWorld(next.world)
     herds.setWorld(next.world)
+    rocks.setWorld(next.world)
     fish.setWorld(next.world)
     // The woods' colours through the year (leaves.ts).
     DETAIL_SEASON.value.set(next.world.dials.season, seasonStrength(next.world.tilt))
@@ -1129,6 +1133,10 @@ export function startScene(
         inPlanetFrame(camera.position, turn, stage.scale),
         shown.terrain.group.matrixWorld,
         stage.scale,
+      )
+      rocks.update(
+        inPlanetFrame(camera.position, turn, stage.scale),
+        shown.terrain.group.matrixWorld,
       )
       herds.update(
         inPlanetFrame(camera.position, turn, stage.scale),

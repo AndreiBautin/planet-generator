@@ -1421,3 +1421,29 @@ neighbours by its own roll, so a wood colours in patches.
   a wagon on a road by day and its lantern by night. **Seen and not
   fixed**: houses standing in that same river — town lights keep off river channels
   but not off the drawn water there; worth a look on its own.
+
+## Rocky coasts
+
+- **Where** (`generation/coasts.ts`, tested): at most a group to a drainage
+  cell, on rolls of its own, where land standing at least 0.022 high has
+  open water within 0.008 — the sea face of high ground. One to four stacks
+  in the shallows off the shore (over water, not past the shelf at −0.03),
+  and in about a third of groups an arch, both feet in the water. Found by
+  sampling the surface, so it runs on the page with `NearCells` as the
+  birds and fish do. The first threshold (0.045 high within 0.005) found two
+  groups on a whole world: these coasts are mostly low.
+- **Drawn** (`render/rocks.ts`): jagged seven-sided pillars of the world's
+  high-ground colour, narrowing and broken at the top, leaning a little;
+  an arch is two broad feet with a thick block laid across. Spray bursts
+  white round each pillar's foot as its wave comes in. Shrinks into the sea
+  at the edge of its reach.
+- **Three looks that read wrong, all from the water**: thin pillars read as
+  a pier's piles; a pillar stood from a bed thirty times deeper than its
+  height in air showed mostly as a long shaft through the clear shallows,
+  so a pillar now starts no more than 0.0009 under the surface; and **the
+  water along a shore is drawn well above the sea's own level** (checked by
+  painting the stacks red: at a thousandth above `SEA_RADIUS` only their
+  tops cleared it), so stacks stand 0.0016 to 0.0032 over it. With a little
+  light of their own colour, as the herds and ruins have.
+- Seen: three stacks and an arch off a wooded shore at midday. Not seen: a
+  frozen world's coast, spray at dusk, a phone.
