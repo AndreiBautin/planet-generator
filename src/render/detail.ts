@@ -809,7 +809,9 @@ export function withGroundDetail(
           }
           if (detailAurora > 0.0) {
             vec3 up = normalize(vDetailPosition);
-            float band = exp(-pow((acos(abs(up.y)) - 0.37) / 0.13, 2.0));
+            // Squared by hand: pow of a negative base is NaN (sea-light.ts).
+            float bandAt = (acos(abs(up.y)) - 0.37) / 0.13;
+            float band = exp(-bandAt * bandAt);
             float dark = 1.0 - smoothstep(-0.25, 0.02, dot(up, detailCloudSun));
             totalEmissiveRadiance += diffuseColor.rgb * vec3(0.12, 0.85, 0.42) * band * dark * detailAurora;
           }

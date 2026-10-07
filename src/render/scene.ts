@@ -1648,7 +1648,9 @@ function buildSky(world: Planet, pixelRatio: number): THREE.Points {
           float edge = off + (detailNoise(vSky * 9.0 + 4.0) - 0.5) * 0.06;
           float band = exp(-edge * edge / 0.005);
           // A dark lane down its middle, as dust splits the real one.
-          float lane = 1.0 - 0.6 * exp(-pow((off + (mottle - 0.5) * 0.03) / 0.014, 2.0));
+          // Squared by hand: pow of a negative base is NaN (sea-light.ts).
+          float laneAt = (off + (mottle - 0.5) * 0.03) / 0.014;
+          float lane = 1.0 - 0.6 * exp(-laneAt * laneAt);
           float light = band * (0.15 + 1.4 * pow(mottle, 1.6)) * lane * bandSeen;
           gl_FragColor = vec4(vec3(0.62, 0.62, 0.74) * light * 0.13, 1.0);
         }

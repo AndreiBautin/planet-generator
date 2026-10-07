@@ -1893,3 +1893,20 @@ the wider foot.
 none buried), bridges, and the towns' night glow from orbit and the top
 of the glide range — sparks with a faint halo on the larger towns, not
 the blooms an earlier note feared.
+
+**Audited after the comet: two more could black out a frame.** GLSL's
+`pow` is undefined for a negative base whatever the exponent, and two
+Gaussians squared a signed offset with it: the aurora's light on the
+ground (`detail.ts`, the band either side of 0.37 rad from the pole) and
+the dark lane down the galaxy band (`scene.ts`). Both square by hand now.
+`sea-light.ts` had been fixed for exactly this once before, which is why
+this paragraph exists. **Square a signed value by multiplying, and clamp
+any other `pow` base that interpolation or noise can push below nought.**
+The other `pow`, `sqrt` and `log` sites were read and take bases that
+cannot go negative (`max`, `abs`, `fract`, noise in 0–1, a guarded
+discriminant).
+
+**The milky river in the gorge under the coastal town's bridge is
+whitewater, on purpose**: the river falls from the town to the sea, its
+`rapids` read 1 throughout, and a waterfall is drawn solid white so it
+reads from afar. Left as it is.
