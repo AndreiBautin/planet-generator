@@ -1387,3 +1387,37 @@ neighbours by its own roll, so a wood colours in patches.
   woods painted on the ground take it, but there the canopy is a dark tone
   more than a colour. Not seen: blossom, which wants a broadleaf wood in
   spring.
+
+## Bridges and traffic
+
+- **Where a road crosses water** (`Settlements.bridges` in
+  generation/settlements.ts, tested): from the last dry ground before it to
+  the first after, **spanning the water alone** with a little bank either
+  side (`BRIDGE_BANK`), and only under `LONGEST_BRIDGE`. Three wrong answers
+  first, each measured: the road's steps (0.0028) walk straight over a
+  river, so at the steps alone a whole world had one bridge; looking along
+  finely still found one, because **a road's lights scatter sideways** up to
+  about 0.008 either side of its line, so two in a row over a river were
+  usually further apart than any bridge — spanning light to light, 162 of
+  163 crossings came out too long. Found by counting each stage with a
+  probe in the test runner. Now 9 to 26 a world.
+- **Kept cheap**: a stretch that skipped a step (over the sea, a lake, a
+  wide river) is looked along with the full dry test; any other only for a
+  river or a lake (`inlandWater`), which returns at once where the cells
+  round about have none. Fine sampling with the full test made the
+  settlements take seconds and timed out a test.
+- **Drawn** (`render/bridges.ts`, the banks' ground found in the build
+  worker): a stone deck arched enough to clear the water, low parapets, and
+  piers into the river under a long one. **A box built to stand on its base
+  is placed by its foot** — the piers were placed by their middle and stood
+  half their height up through the deck.
+- **Traffic** (`render/traffic.ts`): a horse and a covered wagon on each
+  road longer than 0.004, two on a long one, back and forth at a walk by the
+  shared clock, with a lantern hung over the front after dusk — a warm point
+  in the dark between the towns' glows. A road broken at a river is two
+  roads to the carts, which turn back at the water. With the herds' little
+  light of their own, or a high sun left the wagons' sides sky-blue.
+- **Seen**: two bridges over a river in a town (one arched, with a pier),
+  a wagon on a road by day and its lantern by night. **Seen and not
+  fixed**: houses standing in that same river — town lights keep off river channels
+  but not off the drawn water there; worth a look on its own.

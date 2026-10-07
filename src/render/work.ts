@@ -55,6 +55,7 @@ export function answer(request: WorkRequest): WorkResult {
         glow: townGlow(settlementsOf(planet).towns, CITY_GLOW_WIDTH),
         harbours: harboursOf(planet),
         ruins: ruinsOf(planet),
+        bridges: placedBridges(planet),
       }
     case 'falls':
       return { id: request.id, kind: 'falls', falls: placedFalls(planet) }
@@ -73,6 +74,16 @@ function placedFalls(planet: Planet): Float32Array {
 
 /** How wide the towns' glow map is: a texel is about a hundredth of a radius at the equator. */
 export const CITY_GLOW_WIDTH = 1024
+
+/** The bridges' two ends with the ground's radius under each, so a deck meets the road on both banks. */
+function placedBridges(planet: Planet): Float32Array {
+  const bridges = settlementsOf(planet).bridges
+  const out = new Float32Array(bridges.length * 8)
+  bridges.forEach(({ from, to }, k) => {
+    out.set([...from, groundRadiusAt(planet, from), ...to, groundRadiusAt(planet, to)], k * 8)
+  })
+  return out
+}
 
 /** The towns' lights stood on the drawn ground: the costly part of them, so made here, off the page. */
 function placedLights(planet: Planet): Float32Array {
@@ -96,7 +107,7 @@ export function transferables(result: WorkResult): Transferable[] {
     case 'clouds':
       return [result.texture.buffer]
     case 'lights':
-      return [result.lights.buffer, result.glow.buffer]
+      return [result.lights.buffer, result.glow.buffer, result.bridges.buffer]
     case 'falls':
       return [result.falls.buffer]
     case 'patch':

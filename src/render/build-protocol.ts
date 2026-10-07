@@ -40,4 +40,6 @@ export type WorkResult =
       readonly harbours: Harbours
       /** The ruins on its hilltops (ruins.ts). */
       readonly ruins: readonly Ruin[]
+      /** Where roads cross water, eight numbers each: each bank's direction and its ground's radius. */
+      readonly bridges: Float32Array
     }

@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { hydrologyOf, waterAt } from './hydrology'
 import { createPlanet, surfaceAt } from './planet'
 import { parseSeed } from './seed'
-import { settlementsOf, TOWN_LIGHT, townCoverOf } from './settlements'
+import { LONGEST_BRIDGE, settlementsOf, TOWN_LIGHT, townCoverOf } from './settlements'
 
 const planetOf = (raw: string): ReturnType<typeof createPlanet> => {
   const seed = parseSeed(raw)
@@ -24,6 +24,35 @@ describe('settlements', () => {
       const here = waterAt(temperate, water, d, near)
       expect(here.river).toBeLessThan(0.2)
       expect(Number.isFinite(here.lake)).toBe(false)
+    }
+  })
+
+  it('bridges a road over water, bank to bank, and never over a sea', () => {
+    // Both ends on dry land, short, and with water between: a river or a lake's narrows.
+    const { bridges } = settled
+    expect(bridges.length).toBeGreaterThan(3)
+    const water = hydrologyOf(temperate)
+    const near = new Map<number, readonly number[]>()
+    for (const { from, to } of bridges) {
+      for (const end of [from, to]) expect(surfaceAt(temperate, ...end).height).toBeGreaterThan(0)
+      const span = Math.acos(Math.min(1, from[0] * to[0] + from[1] * to[1] + from[2] * to[2]))
+      expect(span).toBeLessThan(LONGEST_BRIDGE)
+      let crosses = false
+      for (let t = 0.1; t < 1; t += 0.1) {
+        const p: [number, number, number] = [0, 1, 2].map(
+          (i) => (from[i] ?? 0) * (1 - t) + (to[i] ?? 0) * t,
+        ) as [number, number, number]
+        const l = Math.hypot(...p)
+        const d: [number, number, number] = [p[0] / l, p[1] / l, p[2] / l]
+        const here = waterAt(temperate, water, d, near)
+        if (
+          surfaceAt(temperate, ...d).height <= 0 ||
+          here.river >= 0.2 ||
+          Number.isFinite(here.lake)
+        )
+          crosses = true
+      }
+      expect(crosses).toBe(true)
     }
   })
 

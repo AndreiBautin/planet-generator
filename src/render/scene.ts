@@ -37,6 +37,8 @@ import { SeaLight } from './sea-light'
 import { Rainbow, rainbowStrength } from './rainbow'
 import { DETAIL_SEASON, seasonStrength } from './leaves'
 import { Ships } from './ships'
+import { Bridges } from './bridges'
+import { Traffic } from './traffic'
 import { SunFan } from './sun-fan'
 import { Lighthouses } from './lighthouses'
 import { Ruins } from './ruins'
@@ -475,6 +477,7 @@ export function startScene(
   let towns: Towns | undefined
   let ships: Ships | undefined
   let lighthouses: Lighthouses | undefined
+  let traffic: Traffic | undefined
   let ruins: Ruins | undefined
   const sunInGround = new THREE.Vector3()
   const sisters = new SisterWorlds(pixelRatio)
@@ -636,21 +639,31 @@ export function startScene(
     towns = undefined
     ships = undefined
     lighthouses = undefined
+    traffic = undefined
     ruins = undefined
     if (next.world.kind === 'temperate' || next.world.kind === 'oceanic') {
       const ground = next.terrain
       void options.builder
         .lights(next.world.seed, next.world.dials)
-        .then(({ lights, glow, harbours, ruins: found }) => {
+        .then(({ lights, glow, harbours, ruins: found, bridges }) => {
           if (shown?.terrain !== ground) return
           const points = cityLights(lights)
           if (points === undefined) return
           points.userData.withGround = true
           ground.group.add(points)
           // The buildings and roads those lights belong to, seen close to (towns.ts).
-          towns = new Towns(townSites(lights))
+          const sites = townSites(lights)
+          towns = new Towns(sites)
           towns.group.userData.withGround = true
           ground.group.add(towns.group)
+          // Bridges where the roads cross water (bridges.ts), and carts on
+          // the roads (traffic.ts).
+          const spans = new Bridges(bridges)
+          spans.group.userData.withGround = true
+          ground.group.add(spans.group)
+          traffic = new Traffic(sites.roads)
+          traffic.group.userData.withGround = true
+          ground.group.add(traffic.group)
           // Piers at the coastal towns, and ships sailing between them (ships.ts).
           ships = new Ships(harbours)
           ships.group.userData.withGround = true
@@ -1091,6 +1104,11 @@ export function startScene(
         DETAIL_TIME.value,
       )
       ruins?.update(inPlanetFrame(camera.position, turn, stage.scale))
+      traffic?.update(
+        inPlanetFrame(camera.position, turn, stage.scale),
+        sunInGround,
+        DETAIL_TIME.value,
+      )
       fish.update(
         inPlanetFrame(camera.position, turn, stage.scale),
         shown.terrain.group.matrixWorld,

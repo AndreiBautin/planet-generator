@@ -36,9 +36,31 @@ export interface Settlements {
    * and how warm in colour (0 a cold white, 1 sodium orange).
    */
   readonly lights: Float32Array
+  /**
+   * Where a road crosses water — a river, a lake's narrows — from the last
+   * dry ground before it to the first after: a bridge.
+   */
+  readonly bridges: readonly Bridge[]
 }
 
-const NONE: Settlements = { towns: [], lights: new Float32Array(0) }
+/** A bridge's two ends, unit directions on either bank. */
+export interface Bridge {
+  readonly from: Vec3
+  readonly to: Vec3
+}
+
+/** The longest water a road bridges, in radians; wider, and the road simply stops on either shore. */
+export const LONGEST_BRIDGE = 0.012
+
+/**
+ * How finely a road is looked along for water, in radians: the narrowest
+ * drawn river is about six times this across.
+ */
+const RIVER_STEP = 0.0003
+/** How far a bridge reaches onto the bank either side of the water, in radians. */
+const BRIDGE_BANK = 0.0005
+
+const NONE: Settlements = { towns: [], lights: new Float32Array(0), bridges: [] }
 
 /**
  * The glow the towns throw on the ground round them, as a map the width
@@ -142,6 +164,7 @@ function settle(planet: Planet): Settlements {
   }))
 
   const lights: number[] = []
+  const bridges: Bridge[] = []
   // Dry means off the sea and off the rivers and lakes too: each light is a
   // house when seen close to (render/towns.ts), and one standing in a river
   // channel or on a waterfall's lip was the first thing a low pass showed.
@@ -151,6 +174,13 @@ function settle(planet: Planet): Settlements {
     const length = Math.hypot(d[0], d[1], d[2]) || 1
     const here = waterAt(planet, water, [d[0] / length, d[1] / length, d[2] / length], near)
     return here.river < 0.2 && !Number.isFinite(here.lake)
+  }
+  // A river or a lake at a point, without asking about the sea: the costly
+  // part of the full test, and a stretch that met the sea skipped a step.
+  const inlandWater = (d: Vec3): boolean => {
+    const length = Math.hypot(d[0], d[1], d[2]) || 1
+    const here = waterAt(planet, water, [d[0] / length, d[1] / length, d[2] / length], near)
+    return here.river >= 0.2 || Number.isFinite(here.lake)
   }
   const light = (d: Vec3, bright: number, warm: number): void => {
     const length = Math.hypot(d[0], d[1], d[2]) || 1
@@ -214,6 +244,38 @@ function settle(planet: Planet): Settlements {
       const road = rng.fork(`road-${key}`)
       // A road bends a little, so it is not a ruled line between the two.
       const bend = (road.next() - 0.5) * 0.25
+      // The last dry ground the road passed, and whether it has gone over
+      // water since: on the next dry step, that stretch is a bridge.
+      let bank: Vec3 = town.at
+      let wet = false
+      const landed = (d: Vec3): void => {
+        // The lights of a road scatter either side of its line, so two in a
+        // row can be well over a bridge's length apart with only a river
+        // between: the bridge spans the water alone, found by looking along
+        // the stretch, with a little bank at each end. Spanning light to
+        // light, all but one of a world's crossings came out too long.
+        const span = angleBetween(bank, d)
+        // A stretch that skipped a step crossed something wide — sea, lake
+        // or river — and is looked along with the full test; one that did not
+        // only for a river or a lake, which is cheap where there is none.
+        const wetAt = wet ? (p: Vec3): boolean => !dry(p) : inlandWater
+        let first = -1
+        let last = -1
+        const step = RIVER_STEP / Math.max(span, 1e-9)
+        for (let t = step; t < 1; t += step) {
+          if (!wetAt(along(bank, d, t))) continue
+          if (first < 0) first = t
+          last = t
+        }
+        if (first >= 0) {
+          const from = Math.max(0, first - BRIDGE_BANK / Math.max(span, 1e-9))
+          const to = Math.min(1, last + BRIDGE_BANK / Math.max(span, 1e-9))
+          if ((to - from) * span < LONGEST_BRIDGE)
+            bridges.push({ from: along(bank, d, from), to: along(bank, d, to) })
+        }
+        bank = d
+        wet = false
+      }
       for (let s = 1; s < steps; s += 1) {
         const t = s / steps
         const sway = Math.sin(t * Math.PI) * bend * angle
@@ -223,13 +285,18 @@ function settle(planet: Planet): Settlements {
           town.at[2] * (1 - t) + other[2] * t,
         ]
         const d = offset(p, road.next() * Math.PI * 2, Math.abs(sway) * 0.3 + road.next() * 0.0006)
-        if (!dry(d)) continue
+        if (!dry(d)) {
+          wet = true
+          continue
+        }
+        landed(d)
         light(d, 0.22 + road.next() * 0.2, 0.9)
       }
+      landed(other)
     }
   })
 
-  return { towns, lights: Float32Array.from(lights) }
+  return { towns, lights: Float32Array.from(lights), bridges }
 }
 
 /** How a point stands to a world's towns: under a house (0 to 1), and in a town's fields (0 to 1). */
@@ -333,4 +400,14 @@ export const TOWN_LIGHT = 0.44
 function smoothRange(from: number, to: number, value: number): number {
   const t = Math.min(1, Math.max(0, (value - from) / (to - from)))
   return t * t * (3 - 2 * t)
+}
+
+const angleBetween = (a: Vec3, b: Vec3): number =>
+  Math.acos(Math.max(-1, Math.min(1, a[0] * b[0] + a[1] * b[1] + a[2] * b[2])))
+
+/** The point `t` of the way from `a` to `b`, as a unit direction. */
+function along(a: Vec3, b: Vec3, t: number): Vec3 {
+  const p: Vec3 = [a[0] * (1 - t) + b[0] * t, a[1] * (1 - t) + b[1] * t, a[2] * (1 - t) + b[2] * t]
+  const l = Math.hypot(p[0], p[1], p[2]) || 1
+  return [p[0] / l, p[1] / l, p[2] / l]
 }

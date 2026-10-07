@@ -35,6 +35,7 @@ export interface Builder {
     readonly glow: Uint8Array
     readonly harbours: Harbours
     readonly ruins: readonly Ruin[]
+    readonly bridges: Float32Array
   }>
   /** `urgency`: lower is sooner; about how far the patch is from the eye. */
   readonly patch: (
@@ -148,6 +149,7 @@ export function createBuilder(cores: number): Builder {
         glow: result.glow,
         harbours: result.harbours,
         ruins: result.ruins,
+        bridges: result.bridges,
       }
     },
     falls: async (seed, dials) => {
