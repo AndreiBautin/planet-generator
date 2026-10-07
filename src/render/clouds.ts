@@ -159,10 +159,15 @@ function layerMaterial(planet: Planet, texture: THREE.Texture, layer: Layer): TH
           float cover = flowBlend(
             texture2D(alphaMap, flowUv(vAlphaMapUv, 0) + warp).g,
             texture2D(alphaMap, flowUv(vAlphaMapUv, 1) + warp).g);
-          // Billows: finer noise rolling through, breaking the edges up.
-          float billow =
-            detailNoise(vCloudDir * 48.0 + vec3(t * 1.6, -t, t * 0.7)) * 0.6 +
-            detailNoise(vCloudDir * 130.0 - vec3(t * 2.5, t * 1.1, -t * 1.8)) * 0.4;
+          // Billows: finer noise rolling through, breaking the edges up —
+          // each faded to its average once a pixel spans its grain. Read
+          // raw, at the planet's rim, where the shell is seen edge-on and a
+          // pixel covers a long way of it, they were finer than a pixel and
+          // the clouds there sparkled as the planet turned.
+          float cloudSpan = length(fwidth(vCloudDir));
+          float billowA = mix(0.5, detailNoise(vCloudDir * 48.0 + vec3(t * 1.6, -t, t * 0.7)), 1.0 - smoothstep(0.15, 0.5, cloudSpan * 48.0));
+          float billowB = mix(0.5, detailNoise(vCloudDir * 130.0 - vec3(t * 2.5, t * 1.1, -t * 1.8)), 1.0 - smoothstep(0.15, 0.5, cloudSpan * 130.0));
+          float billow = billowA * 0.6 + billowB * 0.4;
           ${SHAPES[layer]}
         }`,
         )
@@ -180,7 +185,12 @@ export function cloudsFromTexture(
   const texture = new THREE.DataTexture(data, width, width / 2)
   texture.wrapS = THREE.RepeatWrapping
   texture.magFilter = THREE.LinearFilter
-  texture.minFilter = THREE.LinearFilter
+  // Mipmapped: read without, from orbit each pixel landed on a different
+  // texel of the map every frame as the winds (winds.ts) and the turn moved
+  // it a fraction of one, and every cloud edge and coast under a cloud's
+  // shadow sparkled — the flicker seen on a desktop.
+  texture.minFilter = THREE.LinearMipmapLinearFilter
+  texture.generateMipmaps = true
   texture.needsUpdate = true
 
   const shell = (layer: Layer, segments: number): THREE.Mesh => {

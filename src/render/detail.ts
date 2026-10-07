@@ -635,6 +635,15 @@ export function withGroundDetail(
             vec3(0.55, 0.3, 0.8),
             smoothstep(0.62, 0.85, hue));
           float body = smoothstep(0.5, 0.66, clump) * v_reef;
+          // Each noise faded to its average once a pixel spans its grain, as
+          // the canopy's are: read raw from orbit the clumps and lumps were
+          // finer than a pixel, and every warm coast sparkled as it turned.
+          float clumpSeen = 1.0 - smoothstep(0.15, 0.5, pixelSpan * 630.0);
+          float lumpSeen = 1.0 - smoothstep(0.15, 0.5, pixelSpan * 2880.0);
+          float hueSeen = 1.0 - smoothstep(0.15, 0.5, pixelSpan * 216.0);
+          coral = mix(vec3(0.8, 0.42, 0.38), coral, hueSeen);
+          body = mix(v_reef * 0.3, body, clumpSeen);
+          lumps = mix(0.5, lumps, lumpSeen);
           diffuseColor.rgb = mix(diffuseColor.rgb, coral * (0.7 + 0.5 * lumps), body);
           detailHeight += (lumps - 0.5) * 2.0 * body;
         }

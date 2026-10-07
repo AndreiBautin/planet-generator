@@ -617,7 +617,9 @@ export function startScene(
         ground.group.add(towns.group)
         const map = new THREE.DataTexture(glow, CITY_GLOW_WIDTH, CITY_GLOW_WIDTH / 2)
         map.magFilter = THREE.LinearFilter
-        map.minFilter = THREE.LinearFilter
+        // Mipmapped, as the clouds are: from orbit it sparkled as the planet turned.
+        map.minFilter = THREE.LinearMipmapLinearFilter
+        map.generateMipmaps = true
         map.needsUpdate = true
         DETAIL_CITIES.value?.dispose()
         DETAIL_CITIES.value = map
@@ -682,6 +684,29 @@ export function startScene(
   const ORIGIN = new THREE.Vector3(0, 0, 0)
 
   /** Put the camera where the view asks, blending the orbit and the glide. */
+  /** How far the eye is from the nearest thing that could stand in front of it: the air, the rings, a moon. */
+  const clearAhead = (): number => {
+    const scale = shown === undefined ? 1 : stageOf(shown).scale
+    let gap = camera.position.length() - AIR_RADIUS * scale
+    if (shown !== undefined) {
+      const { inner, outer, moons } = shown.heavens
+      if (outer > 0) {
+        const { x, y, z } = camera.position
+        const across = Math.hypot(x, z)
+        const off = Math.max(0, inner * scale - across, across - outer * scale)
+        gap = Math.min(gap, Math.hypot(off, y))
+      }
+      for (const moon of moons)
+        gap = Math.min(
+          gap,
+          camera.position.distanceTo(moonAt.copy(moon.mesh.position).multiplyScalar(scale)) -
+            moon.radius * scale,
+        )
+    }
+    return Math.max(0, gap)
+  }
+  const moonAt = new THREE.Vector3()
+
   const place = (view: CameraView, turn: number): void => {
     const { yaw, pitch, distance } = view.orbit
     orbitEye.set(
@@ -767,7 +792,13 @@ export function startScene(
     // hundred-to-one-thousandth span left a phone's depth buffer too coarse
     // to tell a tree from the ground under it or the sea from the shore, so
     // they fought and flickered. Now the span is a few hundred to one.
-    const near = Math.min(0.1, Math.max(0.0004, above * 0.2))
+    //
+    // Far out, the near plane stands back to half the way to the nearest
+    // thing that can be in front of the eye — the air's shell, the rings, a
+    // moon. Capped at a tenth, it left the depth buffer too coarse from orbit
+    // to tell the sea sheet from the shore it meets at a grazing angle, and
+    // every coastline flickered as the planet turned (seen on a desktop).
+    const near = Math.max(Math.min(0.1, Math.max(0.0004, above * 0.2)), clearAhead() * 0.5)
     const far = above + 1 + AIR_RADIUS + 0.1
     if (
       Math.abs(near - camera.near) > camera.near * 0.05 ||

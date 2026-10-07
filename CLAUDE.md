@@ -1083,3 +1083,31 @@ cannot disagree.
   buttons start asynchronously for almost nothing.
 - Checked by serving the production build: both chunks load, the planet
   draws, no console errors.
+
+## Flicker from orbit (reported on a desktop)
+
+Found by holding the camera, stepping frames 16–33 ms apart and marking
+pixels that change a lot and change back. That is how to look for it
+again: a screenshot shows nothing.
+
+- **The cloud map had no mipmaps.** Sampled minified with the winds
+  (winds.ts) and the turn moving it a fraction of a texel a frame, each
+  pixel landed on a different texel each frame and every cloud edge — and
+  every coast under a cloud's shadow on the ground — sparkled. Mipmapped
+  now, and so are the moons' faces and the towns' glow map, which had the
+  same fault. Flipping pixels fell three to four times.
+- **The coral read raw from orbit.** Its clumps and lumps were finer than
+  a pixel and every warm coast sparkled; each noise now fades to its
+  average once a pixel spans its grain, as the canopy's always did. So do
+  the clouds' billows, for the planet's rim, where the shell is seen
+  edge-on.
+- **The near plane stands back from orbit** — half the way to the nearest
+  thing that can be in front (the air, a ring, a moon), where it was capped
+  at a tenth. Not the cause, as it turned out, but ten times the depth
+  precision from orbit for nothing.
+- **Left:** the rim itself (silhouettes crossing pixels as the planet
+  turns, under 4× multisampling), rain (by design), and a faint line where
+  a waterfall's sheet meets the cliff's foot.
+- **A new noise in a shader fades by its own pixel span**, or it will
+  sparkle from orbit. `pixelSpan` in the ground shader, `cloudSpan` in the
+  clouds'.

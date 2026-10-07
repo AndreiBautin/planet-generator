@@ -51,7 +51,9 @@ export function buildHeavens(sky: Satellites): Heavens {
     const map = new THREE.DataTexture(flipped, width, height)
     map.colorSpace = THREE.SRGBColorSpace
     map.magFilter = THREE.LinearFilter
-    map.minFilter = THREE.LinearFilter
+    // Mipmapped, as the clouds are: small on the screen, it sparkled as it turned.
+    map.minFilter = THREE.LinearMipmapLinearFilter
+    map.generateMipmaps = true
     map.wrapS = THREE.RepeatWrapping
     map.needsUpdate = true
     const mesh = new THREE.Mesh(
