@@ -1,4 +1,5 @@
 import * as THREE from 'three'
+import { weather } from './weathered'
 
 /** A bridge's deck: how wide, how thick, and the parapets' height, in radii. */
 const WIDTH = 0.00034
@@ -96,6 +97,15 @@ export class Bridges {
     const stone = new THREE.MeshStandardMaterial({
       color: new THREE.Color(0.62, 0.58, 0.52),
       roughness: 0.9,
+    })
+    // Old stone, as the ruins' (weathered.ts): not cut true, mossed on top.
+    weather(stone, {
+      rough: 0.04,
+      mottle: 0.3,
+      grain: 14000,
+      top: { colour: [0.3, 0.38, 0.18], amount: 0.4 },
+      foot: { dark: 0.25, height: 0.2 },
+      own: 0.2,
     })
     const box = new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0)
     for (const list of [pieces, piers]) {

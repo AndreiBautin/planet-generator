@@ -4,6 +4,7 @@ import type { Harbours } from '@/generation/harbours'
 import type { Planet } from '@/generation/planet'
 
 import { groundRadiusAt } from './patches/patch-data'
+import { weather } from './weathered'
 
 /** A lighthouse's height and the width of its foot, in radii: a tall tower over houses 0.0003 high. */
 const HEIGHT = 0.0011
@@ -58,6 +59,14 @@ export class Lighthouses {
     }
     const count = Math.max(1, this.sites.length)
     const stone = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.7 })
+    // Salt-stained whitewash, grimed at the foot (weathered.ts).
+    weather(stone, {
+      rough: 0,
+      mottle: 0.15,
+      grain: 20000,
+      foot: { dark: 0.3, height: HEIGHT * 0.15 },
+      own: 0.2,
+    })
     this.towers = new THREE.InstancedMesh(towerGeometry(), stone, count)
     this.lanterns = new THREE.InstancedMesh(
       new THREE.CylinderGeometry(FOOT * 0.55, FOOT * 0.55, HEIGHT * 0.12, 8).translate(

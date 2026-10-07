@@ -8,6 +8,7 @@ import type { Planet } from '@/generation/planet'
 import { NearCells } from './near-cells'
 import { groundRadiusAt } from './patches/patch-data'
 import { SEA_RADIUS } from './water'
+import { weather } from './weathered'
 
 /** The most herds drawn at once: two rings of cells round the eye's hold about a quarter of this. */
 const MOST_HERDS = 32
@@ -79,12 +80,8 @@ export class Herds {
     // Their own coat as a little light of its own: lit by the scene alone,
     // the flanks away from a high sun went black, a herd of silhouettes on
     // ground the terrain shader lights more kindly.
-    material.onBeforeCompile = (shader) => {
-      shader.fragmentShader = shader.fragmentShader.replace(
-        '#include <emissivemap_fragment>',
-        '#include <emissivemap_fragment>\n  totalEmissiveRadiance += diffuseColor.rgb * 0.22;',
-      )
-    }
+    // And a coat patched rather than flat, each beast its own (weathered.ts).
+    weather(material, { rough: 0, mottle: 0.35, grain: 40000, own: 0.22 })
     const count = MOST_HERDS * MOST_BEASTS
     this.bodies = new THREE.InstancedMesh(bodyGeometry(), material, count)
     this.heads = new THREE.InstancedMesh(headGeometry(), material, count)

@@ -5,6 +5,7 @@ import type { Planet } from '@/generation/planet'
 import type { Ruin } from '@/generation/ruins'
 
 import { groundRadiusAt } from './patches/patch-data'
+import { weather } from './weathered'
 
 /** Ruins built at once: those within reach of the eye. */
 const MOST_RUINS = 12
@@ -57,14 +58,17 @@ export class Ruins {
     this.ruins = ruins
     this.world = world
     const stone = new THREE.MeshStandardMaterial({ roughness: 0.95 })
-    // Their own pallor as a little light: weathered stone reads pale even
-    // in shade, and lit by the scene alone a column's dark side was black.
-    stone.onBeforeCompile = (shader) => {
-      shader.fragmentShader = shader.fragmentShader.replace(
-        '#include <emissivemap_fragment>',
-        '#include <emissivemap_fragment>\n  totalEmissiveRadiance += diffuseColor.rgb * 0.18;',
-      )
-    }
+    // Old stone: no block cut true, patched with age, moss on what faces
+    // up and dark at the foot; its own pallor a little light by day, since
+    // lit by the scene alone a column's dark side was black (weathered.ts).
+    weather(stone, {
+      rough: 0.1,
+      mottle: 0.3,
+      grain: 14000,
+      top: { colour: [0.24, 0.34, 0.12], amount: 0.9 },
+      foot: { dark: 0.3, height: 0.25 },
+      own: 0.18,
+    })
     const count = MOST_RUINS * PIECES
     this.blocks = new THREE.InstancedMesh(
       new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0),

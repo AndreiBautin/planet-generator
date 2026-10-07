@@ -1,6 +1,7 @@
 import * as THREE from 'three'
 
 import type { Vec3 } from '@/generation/cube'
+import { weather } from './weathered'
 
 /** How fast a cart goes, radians a second. */
 const SPEED = 0.00035
@@ -76,12 +77,8 @@ export class Traffic {
     const wood = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85 })
     // A little light of its own colour, as the herds have: a high sun left
     // its flanks the deep blue of the sky's shade.
-    wood.onBeforeCompile = (shader) => {
-      shader.fragmentShader = shader.fragmentShader.replace(
-        '#include <emissivemap_fragment>',
-        '#include <emissivemap_fragment>\n  totalEmissiveRadiance += diffuseColor.rgb * 0.22;',
-      )
-    }
+    // Worn wood, not a painted toy (weathered.ts).
+    weather(wood, { rough: 0.02, mottle: 0.25, grain: 30000, own: 0.22 })
     this.bodies = new THREE.InstancedMesh(cartGeometry(), wood, count)
     this.bodies.frustumCulled = false
     this.bodies.instanceMatrix.setUsage(THREE.DynamicDrawUsage)

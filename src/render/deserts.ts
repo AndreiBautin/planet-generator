@@ -8,6 +8,7 @@ import type { Planet } from '@/generation/planet'
 import { DETAIL_TIME } from './detail'
 import { NearCells } from './near-cells'
 import { groundRadiusAt } from './patches/patch-data'
+import { weather } from './weathered'
 
 /** The most oases and caravans drawn at once. */
 const MOST_OASES = 16
@@ -114,16 +115,10 @@ export class Deserts {
   private readonly daylight = { value: 1 }
 
   constructor() {
-    const lit = (material: THREE.MeshStandardMaterial): THREE.MeshStandardMaterial => {
-      material.onBeforeCompile = (shader) => {
-        shader.uniforms.desertDay = this.daylight
-        shader.fragmentShader = shader.fragmentShader
-          .replace('void main() {', 'uniform float desertDay;\nvoid main() {')
-          .replace(
-            '#include <emissivemap_fragment>',
-            '#include <emissivemap_fragment>\n  totalEmissiveRadiance += diffuseColor.rgb * 0.25 * mix(0.15, 1.0, desertDay);',
-          )
-      }
+    // Weathered (weathered.ts): patched rather than flat, a little light of
+    // its own by day that goes with the sun, the green ring in clumps.
+    const lit = (material: THREE.MeshStandardMaterial, rough = 0): THREE.MeshStandardMaterial => {
+      weather(material, { rough, mottle: 0.3, grain: 12000, own: 0.25 })
       return material
     }
     const disc = new THREE.CircleGeometry(1, 20).rotateX(-Math.PI / 2)
@@ -143,6 +138,7 @@ export class Deserts {
           roughness: 0.9,
           side: THREE.DoubleSide,
         }),
+        0.03,
       ),
       MOST_OASES * MOST_PALMS,
     )

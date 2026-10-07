@@ -6,6 +6,7 @@ import { surfaceAt, type Planet } from '@/generation/planet'
 import { TOWN_LIGHT } from '@/generation/settlements'
 
 import { VALLEY_FOG } from './valley-fog'
+import { weather } from './weathered'
 
 /**
  * Towns you can see: the lit world's buildings and roads, close to.
@@ -204,8 +205,9 @@ const TILE: readonly Rgb3[] = [
   [0.3, 0.3, 0.33],
 ]
 const THATCH: readonly Rgb3[] = [
+  [0.72, 0.6, 0.32],
   [0.6, 0.48, 0.28],
-  [0.5, 0.4, 0.24],
+  [0.42, 0.36, 0.26],
 ]
 const TEMPERATE_WALLS: readonly Rgb3[] = [
   [0.9, 0.87, 0.8],
@@ -222,7 +224,9 @@ const ADOBE: readonly Rgb3[] = [
 ]
 const WOOD: readonly Rgb3[] = [
   [0.46, 0.34, 0.22],
-  [0.56, 0.44, 0.3],
+  [0.92, 0.9, 0.84],
+  [0.8, 0.56, 0.36],
+  [0.66, 0.42, 0.3],
 ]
 
 /**
@@ -258,7 +262,13 @@ export function houseStyle(
     return { pitch: 0.45, roof: pick(TILE, roll2), walls }
   }
   if (warmth > WARMEST_TOWNS && moisture > WETTEST_TOWNS) {
-    return { pitch: 1.3 + roll2 * 0.3, roof: pick(THATCH, roll), walls: pick(WOOD, roll2) }
+    // Thatch over timber, whitewash or red-earth plaster; a tiled roof here and there.
+    const tiled = roll > 0.85
+    return {
+      pitch: tiled ? 0.8 : 1.3 + roll2 * 0.3,
+      roof: tiled ? pick(TILE, roll2) : pick(THATCH, roll / 0.85),
+      walls: pick(WOOD, roll2),
+    }
   }
   const thatched = roll2 < 0.25
   return {
@@ -370,6 +380,9 @@ export class Towns {
     const model = houseGeometry()
     const material = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85 })
     growNear(material, this.scale)
+    // No wall laid true nor plastered even (weathered.ts); its own light and
+    // the shade's colour are seen to by growNear.
+    weather(material, { rough: 0.03, mottle: 0.12, grain: 14000, own: 0 })
     // Houses by cell, so only the near ones are drawn.
     const byCell = new Map<number, (typeof sites.houses)[number][]>()
     for (const house of sites.houses) {

@@ -10,6 +10,7 @@ import { DETAIL_TIME } from './detail'
 import { NearCells } from './near-cells'
 import { floorRadiusAt } from './patches/patch-data'
 import { SEA_RADIUS } from './water'
+import { weather } from './weathered'
 
 /** The most groups of rocks drawn at once. */
 const MOST_GROUPS = 24
@@ -61,12 +62,16 @@ export class CoastRocks {
     // A little light of its own colour, as the herds and ruins have: a stack
     // seen against the sun is nearly all shaded side, and the scene's sky
     // light made that side blue — a row of blue posts standing in the sea.
-    this.material.onBeforeCompile = (shader) => {
-      shader.fragmentShader = shader.fragmentShader.replace(
-        '#include <emissivemap_fragment>',
-        '#include <emissivemap_fragment>\n  totalEmissiveRadiance += diffuseColor.rgb * 0.35;',
-      )
-    }
+    // Weathered as the ruins are (weathered.ts): a little grass and lichen
+    // on the tops, dark and wet at the foot where the sea works at it.
+    weather(this.material, {
+      rough: 0.05,
+      mottle: 0.3,
+      grain: 9000,
+      top: { colour: [0.36, 0.42, 0.24], amount: 0.45 },
+      foot: { dark: 0.4, height: 0.15 },
+      own: 0.35,
+    })
     this.pillars = new THREE.InstancedMesh(pillarGeometry(), this.material, MOST_GROUPS * PIECES)
     this.pillars.frustumCulled = false
     this.pillars.instanceMatrix.setUsage(THREE.DynamicDrawUsage)

@@ -4,6 +4,7 @@ import type { Vec3 } from '@/generation/cube'
 import type { Harbours } from '@/generation/harbours'
 
 import { SEA_RADIUS } from './water'
+import { weather } from './weathered'
 
 /**
  * Harbours and ships (generation/harbours.ts): a pier out from each
@@ -64,6 +65,14 @@ export class Ships {
       vertexColors: true,
       roughness: 0.8,
       side: THREE.DoubleSide,
+    })
+    // Sea-worn planking, dark along the waterline (weathered.ts).
+    weather(material, {
+      rough: 0,
+      mottle: 0.25,
+      grain: 25000,
+      foot: { dark: 0.3, height: 0.00012 },
+      own: 0.15,
     })
     this.hulls = new THREE.InstancedMesh(shipGeometry(), material, Math.max(1, this.ships.length))
     this.hulls.frustumCulled = false
@@ -267,6 +276,7 @@ function piers(harbours: Harbours): THREE.Mesh {
     color: new THREE.Color(0.42, 0.3, 0.2),
     roughness: 0.9,
   })
+  weather(material, { rough: 0.03, mottle: 0.3, grain: 14000, own: 0.15 })
   const count = harbours.harbours.length * 4
   const mesh = new THREE.InstancedMesh(box, material, Math.max(1, count))
   const matrix = new THREE.Matrix4()

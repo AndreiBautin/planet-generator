@@ -1649,3 +1649,39 @@ town one red-roofed box turned every which way.
 - Seen: a temperate village and its woods on `83tzj46` and a mixed one
   with flat roofs on `2257afq`. Not seen: a cold-climate village close to,
   a phone.
+
+## Weathering: every model out in the weather
+
+`render/weathered.ts` (`weather`): one shader patch every built and grown
+thing on the ground shares — ruins, sea stacks, bridges, lighthouses,
+herds, wagons, ships and piers, palms, camels and the oasis green, and the
+houses' walls — wrapped round whatever patch the material already had.
+
+- **Rough**: each vertex nudged by a hash of where it is in the model, so
+  no block is cut true and no two stones alike. Keyed on the position, so
+  the corners several faces share move together and nothing cracks.
+- **Mottle, top and foot**: the colour patched by noise, moss or lichen
+  gathered on the faces that look up, darker low down where wet and dirt
+  splash. **The grain is in planet radii, measured on the model as
+  placed** — in the model's own units a wide slab of a ruin got three
+  patches and read as one clean grey.
+- **No sun through the planet.** These models were lit by the sun past
+  the terminator, which the ground and the trees cut and they did not: a
+  ruin glowed a dusky red at midnight in the reddened low sun. The sun's
+  direct light is cut where each fragment stands, as for the trees.
+- **Their own light goes with the day** (backlog 8, item 1). Each had a
+  constant own-colour light so a shaded side was not black or sky-blue;
+  that is faded with the sun now, in one place, and the sky's light in
+  shade loses most of its blue, as for the trees and houses.
+- **The hot-wet towns were one tan**: thatch over timber, both brown, so a
+  whole village read as one colour. Thatch now runs golden to old grey,
+  walls timber, whitewash or red-earth plaster, and a tiled roof here and
+  there.
+- **Two shader bugs from editing it, both silent**: a varying used and not
+  declared failed the program, and the ruin simply was not drawn — found
+  only because it had been on screen a minute before. **After any shader
+  patch, look for the thing, not for an error.**
+- Seen: the ruin by day (moss, chipped columns) and dark at midnight, the
+  temperate village and the hot-wet one. Not seen close since the change:
+  herds, sea stacks, bridges, lighthouses, ships, palms and camels — the
+  patch is the same one, and the program for each compiled.
