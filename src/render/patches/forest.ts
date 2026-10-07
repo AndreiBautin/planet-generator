@@ -261,8 +261,21 @@ const TREE_PLACE = /* glsl */ `
   vec3 up = normalize(ground);
   mat3 frame = treeFrame(up, treeWood.x * 40.0);
   // Set a little into the ground, so a trunk on a slope is not floating.
-  // A conifer's outline or a broadleaf's, by the tree's kind.
+  // A conifer's outline or a broadleaf's, by the tree's kind — then made
+  // this tree's own, so a wood is not one model stamped out: wider or
+  // slimmer, taller or squatter, its tiers or its crown irregular, and
+  // leaning a little its own way, all from its hash.
   vec3 shape = mix(position, broadleaf, treeFate.z);
+  vec3 treeOwn = fract(treeWood.x * vec3(13.71, 29.37, 51.13));
+  float leafy = step(0.3, shape.y);
+  float around = atan(shape.z, shape.x);
+  // A conifer's tiers each their own width; a broadleaf's crown lobed.
+  float tier = mix(0.82, 1.18, fract(sin(shape.y * 41.0 + treeOwn.x * 23.0) * 43758.5));
+  float lobes = 1.0 + 0.2 * sin(around * 3.0 + treeOwn.z * 6.2832 + shape.y * 6.0);
+  shape.xz *= mix(1.0, mix(tier, lobes, treeFate.z), leafy) * mix(0.72, 1.3, treeOwn.x);
+  shape.y *= mix(0.82, 1.22, treeOwn.y);
+  vec2 lean = vec2(cos(treeOwn.y * 6.2832), sin(treeOwn.y * 6.2832));
+  shape.xz += lean * shape.y * shape.y * (treeOwn.z - 0.3) * 0.14;
   transformed = ground - up * size * 0.08 + frame * (shape * size);
 `
 
@@ -298,6 +311,12 @@ export function treeMaterial(): THREE.MeshStandardMaterial {
         // with the broadleaves alone a whole autumn turned a tree in ten.
         float turns = max(treeFate.z, step(0.75, fract(treeWood.x * 7.31)) * 0.9);
         vTreeTint = mix(vTreeTint, leafColour(vTreeTint, leafSeason(up, treeWood.x), treeWood.x), turns);
+        // No two trees quite one green, and no crown one flat colour: a
+        // shift of hue each, a mottle across the leaves, and the tops
+        // catching a warmer light than the shade beneath.
+        vTreeTint *= vec3(mix(0.86, 1.14, treeOwn.x), 1.0, mix(0.82, 1.1, treeOwn.z));
+        vTreeTint *= 0.84 + 0.32 * fract(sin(dot(position, vec3(12.9898, 78.233, 37.719)) + treeWood.x * 91.0) * 43758.5453);
+        vTreeTint *= mix(vec3(0.92, 0.96, 1.0), vec3(1.08, 1.05, 0.86), smoothstep(0.45, 1.0, position.y));
         vTreeHeight = position.y;
         vTreeUp = normalize(normalMatrix * up);
         vTreePlanet = transformed;`,
@@ -317,6 +336,13 @@ export function treeMaterial(): THREE.MeshStandardMaterial {
         .replace(
           '#include <lights_fragment_end>',
           /* glsl */ `#include <lights_fragment_end>
+        // The sky's light in the shade, less its blue: a wood's shaded side
+        // read as a blue wall against green ground.
+        reflectedLight.indirectDiffuse = mix(
+          reflectedLight.indirectDiffuse,
+          vec3(dot(reflectedLight.indirectDiffuse, vec3(0.299, 0.587, 0.114))),
+          0.65
+        );
         // No sun past the terminator, as for the ground.
         #if NUM_DIR_LIGHTS > 0
         {

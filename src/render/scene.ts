@@ -678,7 +678,7 @@ export function startScene(
           ground.group.add(points)
           // The buildings and roads those lights belong to, seen close to (towns.ts).
           const sites = townSites(lights)
-          towns = new Towns(sites)
+          towns = new Towns(sites, next.world)
           towns.group.userData.withGround = true
           ground.group.add(towns.group)
           // Bridges where the roads cross water (bridges.ts), and carts on

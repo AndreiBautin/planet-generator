@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { townSites } from './towns'
+import { houseStyle, townSites } from './towns'
 
 /** Five numbers a light, as the worker places them: a point just over the ground, brightness, warmth. */
 const light = (angle: number, bright: number): number[] => [
@@ -42,5 +42,25 @@ describe('towns', () => {
     ])
     const { roads } = townSites(placed)
     expect(roads.map((road) => road.length)).toEqual([2, 2])
+  })
+})
+
+describe('houseStyle', () => {
+  const rolls = Array.from({ length: 40 }, (_, k) => [(k * 0.37) % 1, (k * 0.61) % 1] as const)
+
+  it('builds by the climate: steep where cold, mostly flat where hot and dry', () => {
+    for (const [a, b] of rolls) expect(houseStyle(0.1, 0.5, a, b).pitch).toBeGreaterThan(1.1)
+    const flat = rolls.filter(([a, b]) => houseStyle(0.3, 0.4, a, b).pitch < 0.1).length
+    expect(flat / rolls.length).toBeGreaterThan(0.6)
+  })
+
+  it('gives one village several looks, not one house repeated', () => {
+    const looks = new Set(
+      rolls.map(([a, b]) => {
+        const style = houseStyle(0.22, 0.5, a, b)
+        return `${style.roof.join()}|${style.walls.join()}`
+      }),
+    )
+    expect(looks.size).toBeGreaterThan(8)
   })
 })

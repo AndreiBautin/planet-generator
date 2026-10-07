@@ -1612,3 +1612,40 @@ the world laid flat — latitude up the side, longitude across, the planet's
   map can be white in midwinter when flown to.
 - Seen: maps of `k3m9xqa` and `83tzj46`, a press flying there and the
   arrow following north; a molten world bakes (tested). Not seen: a real phone.
+
+## Trees and houses that do not look stamped out
+
+Asked for as making the assets "look natural and varied like the terrain
+does" rather than "clearly assets". A wood was two models in rows and a
+town one red-roofed box turned every which way.
+
+- **Every tree its own** (forest.ts, `TREE_PLACE`): wider or slimmer,
+  taller or squatter, leaning a little its own way, a conifer's tiers each
+  their own width and a broadleaf's crown lobed — all from its hash, in the
+  vertex shader, in both the colour and the shadow passes so the shadow
+  is the tree's. Its colour shifts in hue tree to tree, is mottled across
+  the crown, and warms towards the top.
+- **The shade is not blue.** The sky's light in shade lit a wood's dark
+  side as a blue wall against green ground; trees and houses take it with
+  most of its colour taken out (`indirectDiffuse` mixed towards its own
+  luminance), and houses a little own-colour light by day.
+- **Houses are built for their climate** (towns.ts, `houseStyle`, tested):
+  steep slate over timber or stone where it is cold, tile or thatch over
+  pale or timbered walls in the temperate middle, flat-roofed adobe where
+  it is hot and dry, steep thatch over wood where it is hot and wet — each
+  house picking among its climate's ways, so a village is of a piece
+  without being one house repeated. The roof's pitch, its colour and the
+  walls' are an instance attribute; the walls darken at the foot and each
+  face differs a touch.
+- **The bands are where towns stand, not the planet's.** Settlements keep
+  to mild, wet enough ground: across five worlds their warmth ran 0.15 to
+  0.31 and moisture 0.40 to 0.68. Bands at the planet's own extremes (cold
+  below −0.15, hot over 0.3) put every town everywhere in the temperate
+  one; measured before believing the first build.
+- **A town has a shape**: houses face its heart (the cell's houses'
+  mean), give or take a little or square to it, rather than each its own
+  way; cottages, long houses and the odd second storey near the bright
+  middle; and the brightest house of a cell a tower with a steeple.
+- Seen: a temperate village and its woods on `83tzj46` and a mixed one
+  with flat roofs on `2257afq`. Not seen: a cold-climate village close to,
+  a phone.

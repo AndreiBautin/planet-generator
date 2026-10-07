@@ -2,6 +2,7 @@ import * as THREE from 'three'
 
 import type { Vec3 } from '@/generation/cube'
 import { cellOf, cellCentre } from '@/generation/hydrology'
+import { surfaceAt, type Planet } from '@/generation/planet'
 import { TOWN_LIGHT } from '@/generation/settlements'
 
 import { VALLEY_FOG } from './valley-fog'
@@ -170,6 +171,109 @@ function houseGeometry(): THREE.BufferGeometry {
 }
 
 /**
+ * How a house is built where it stands, by the climate: steep slate roofs
+ * over dark timber or stone where it is cold, tile or thatch over pale or
+ * timbered walls in the temperate middle, flat roofs on sun-baked adobe
+ * where it is hot and dry, and steep thatch over wood where it is hot and
+ * wet. Each house picks among its climate's ways by its own rolls, so a
+ * village is of a piece without being one house repeated.
+ */
+export interface HouseStyle {
+  /** How steep the roof, 0 flat to about 1.6. */
+  readonly pitch: number
+  readonly roof: Rgb3
+  readonly walls: Rgb3
+}
+
+type Rgb3 = readonly [number, number, number]
+const SLATE: readonly Rgb3[] = [
+  [0.22, 0.24, 0.28],
+  [0.3, 0.3, 0.32],
+  [0.26, 0.2, 0.18],
+]
+const COLD_WALLS: readonly Rgb3[] = [
+  [0.36, 0.26, 0.18],
+  [0.55, 0.53, 0.5],
+  [0.62, 0.22, 0.16],
+  [0.78, 0.74, 0.66],
+]
+const TILE: readonly Rgb3[] = [
+  [0.6, 0.24, 0.15],
+  [0.5, 0.2, 0.14],
+  [0.66, 0.36, 0.2],
+  [0.3, 0.3, 0.33],
+]
+const THATCH: readonly Rgb3[] = [
+  [0.6, 0.48, 0.28],
+  [0.5, 0.4, 0.24],
+]
+const TEMPERATE_WALLS: readonly Rgb3[] = [
+  [0.9, 0.87, 0.8],
+  [0.86, 0.78, 0.6],
+  [0.78, 0.7, 0.6],
+  [0.62, 0.48, 0.36],
+  [0.82, 0.82, 0.78],
+]
+const ADOBE: readonly Rgb3[] = [
+  [0.82, 0.66, 0.46],
+  [0.76, 0.56, 0.38],
+  [0.9, 0.84, 0.72],
+  [0.7, 0.5, 0.36],
+]
+const WOOD: readonly Rgb3[] = [
+  [0.46, 0.34, 0.22],
+  [0.56, 0.44, 0.3],
+]
+
+/**
+ * The climate bands, set where towns actually stand. Settlements keep to
+ * mild, wet enough ground (settlements.ts), so across five worlds their
+ * warmth ran only 0.15 to 0.31 and their moisture 0.40 to 0.68, tenth to
+ * ninetieth percentile; bands set by the planet's whole range (cold below
+ * −0.15, hot over 0.3) put every town on every world in the temperate one.
+ */
+const COLDEST_TOWNS = 0.17
+const WARMEST_TOWNS = 0.27
+const DRIEST_TOWNS = 0.47
+const WETTEST_TOWNS = 0.6
+
+const pick = (list: readonly Rgb3[], roll: number): Rgb3 =>
+  list[Math.min(list.length - 1, Math.floor(roll * list.length))] ?? [0.8, 0.8, 0.8]
+
+export function houseStyle(
+  warmth: number,
+  moisture: number,
+  roll: number,
+  roll2: number,
+): HouseStyle {
+  if (warmth < COLDEST_TOWNS) {
+    return { pitch: 1.2 + roll2 * 0.4, roof: pick(SLATE, roll), walls: pick(COLD_WALLS, roll2) }
+  }
+  if (warmth > WARMEST_TOWNS && moisture < DRIEST_TOWNS) {
+    const walls = pick(ADOBE, roll)
+    // Flat, the roof a shade darker than the walls; now and then a low tiled one.
+    if (roll2 < 0.8) {
+      return { pitch: 0.04, roof: [walls[0] * 0.85, walls[1] * 0.85, walls[2] * 0.85], walls }
+    }
+    return { pitch: 0.45, roof: pick(TILE, roll2), walls }
+  }
+  if (warmth > WARMEST_TOWNS && moisture > WETTEST_TOWNS) {
+    return { pitch: 1.3 + roll2 * 0.3, roof: pick(THATCH, roll), walls: pick(WOOD, roll2) }
+  }
+  const thatched = roll2 < 0.25
+  return {
+    pitch: thatched ? 1.25 : 0.8 + roll * 0.4,
+    roof: thatched ? pick(THATCH, roll) : pick(TILE, roll),
+    walls: pick(TEMPERATE_WALLS, roll2),
+  }
+}
+
+const packed = (c: Rgb3): number =>
+  Math.floor(Math.min(1, c[0]) * 255) * 65536 +
+  Math.floor(Math.min(1, c[1]) * 255) * 256 +
+  Math.floor(Math.min(1, c[2]) * 255)
+
+/**
  * Grow a material's instances up out of the ground as the eye comes near,
  * and light their windows at night: two rows of small panes along each
  * wall, some houses lit and some dark, warm against the dusk.
@@ -181,7 +285,7 @@ function growNear(material: THREE.MeshStandardMaterial, scale: { value: number }
     shader.vertexShader = shader.vertexShader
       .replace(
         'void main() {',
-        'uniform float townScale;\nuniform vec3 townSun;\nvarying vec3 vHouseLocal;\nvarying float vHouseDark;\nvarying float vHouseSeed;\nvoid main() {',
+        'uniform float townScale;\nuniform vec3 townSun;\nattribute vec4 houseStyle;\nvarying vec3 vHouseLocal;\nvarying float vHouseDark;\nvarying float vHouseSeed;\nvarying vec3 vHouseRoof;\nvarying vec3 vHouseWalls;\nvoid main() {',
       )
       .replace(
         '#include <begin_vertex>',
@@ -189,7 +293,11 @@ function growNear(material: THREE.MeshStandardMaterial, scale: { value: number }
         {
           vec4 townAt = modelMatrix * instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0);
           float townAway = distance(townAt.xyz, cameraPosition) / max(townScale, 1e-6);
+          // The roof as steep as its style: from flat to a tall pitch.
+          if (transformed.y > 1.001) transformed.y = 1.0 + (transformed.y - 1.0) * houseStyle.x;
           transformed.y *= 1.0 - smoothstep(${HOUSES_WHOLE.toFixed(4)}, ${HOUSES_FROM.toFixed(4)}, townAway);
+          vHouseRoof = vec3(floor(houseStyle.y / 65536.0), mod(floor(houseStyle.y / 256.0), 256.0), mod(houseStyle.y, 256.0)) / 255.0;
+          vHouseWalls = vec3(floor(houseStyle.z / 65536.0), mod(floor(houseStyle.z / 256.0), 256.0), mod(houseStyle.z, 256.0)) / 255.0;
           vHouseLocal = position;
           vec3 townUp = normalize(townAt.xyz);
           vHouseDark = 1.0 - smoothstep(-0.12, 0.04, dot(townUp, normalize(townSun)));
@@ -199,11 +307,29 @@ function growNear(material: THREE.MeshStandardMaterial, scale: { value: number }
     shader.fragmentShader = shader.fragmentShader
       .replace(
         'void main() {',
-        'varying vec3 vHouseLocal;\nvarying float vHouseDark;\nvarying float vHouseSeed;\nvoid main() {',
+        'varying vec3 vHouseLocal;\nvarying float vHouseDark;\nvarying float vHouseSeed;\nvarying vec3 vHouseRoof;\nvarying vec3 vHouseWalls;\nvoid main() {',
+      )
+      .replace(
+        '#include <color_fragment>',
+        /* glsl */ `#include <color_fragment>
+        {
+          // The model's own colours only say which is roof and which wall.
+          float roof = step(diffuseColor.g, 0.5);
+          vec3 walls = vHouseWalls;
+          // Weathered: darker at the foot where the rain splashes, and each
+          // face a touch different from the next.
+          walls *= mix(0.72, 1.0, smoothstep(0.0, 0.35, vHouseLocal.y));
+          walls *= 0.92 + 0.16 * fract(sin(dot(floor(vHouseLocal * 2.0 + 0.5), vec3(17.1, 31.7, 11.3)) + vHouseSeed * 40.0) * 4375.85);
+          vec3 roofColour = vHouseRoof * (0.9 + 0.2 * fract(vHouseSeed * 13.0));
+          diffuseColor.rgb = mix(walls, roofColour, roof);
+        }`,
       )
       .replace(
         '#include <emissivemap_fragment>',
         /* glsl */ `#include <emissivemap_fragment>
+        // A little light of their own colour by day, as the herds have:
+        // a wall in shade is still a white wall, not a dark slab.
+        totalEmissiveRadiance += diffuseColor.rgb * 0.22 * (1.0 - vHouseDark);
         // Windows: on the walls only (below the eaves), in two rows of
         // panes along each face, on most houses after dark.
         if (vHouseDark > 0.01 && vHouseLocal.y < 0.95) {
@@ -213,6 +339,17 @@ function growNear(material: THREE.MeshStandardMaterial, scale: { value: number }
           float lit = step(0.25, vHouseSeed);
           totalEmissiveRadiance += vec3(1.0, 0.7, 0.35) * pane * row * lit * vHouseDark * 1.6;
         }`,
+      )
+      .replace(
+        '#include <lights_fragment_end>',
+        /* glsl */ `#include <lights_fragment_end>
+        // The sky's light in the shade, less its blue, as for the trees:
+        // a whitewashed wall in shade is grey, not sky-coloured.
+        reflectedLight.indirectDiffuse = mix(
+          reflectedLight.indirectDiffuse,
+          vec3(dot(reflectedLight.indirectDiffuse, vec3(0.299, 0.587, 0.114))),
+          0.65
+        ) * mix(1.4, 1.0, vHouseDark);`,
       )
   }
   material.customProgramCacheKey = () => 'planet-houses'
@@ -229,8 +366,8 @@ export class Towns {
   private readonly scale = { value: 1 }
   private readonly roadFade = { value: 1 }
 
-  constructor(sites: TownSites) {
-    const geometry = houseGeometry()
+  constructor(sites: TownSites, planet: Planet) {
+    const model = houseGeometry()
     const material = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85 })
     growNear(material, this.scale)
     // Houses by cell, so only the near ones are drawn.
@@ -247,33 +384,75 @@ export class Towns {
     const spin = new THREE.Quaternion()
     const size = new THREE.Vector3()
     const place = new THREE.Vector3()
-    const tint = new THREE.Color()
     const Y = new THREE.Vector3(0, 1, 0)
+    const towards = new THREE.Vector3()
+    const side = new THREE.Vector3()
+    const basis = new THREE.Matrix4()
     for (const [cell, houses] of byCell) {
+      // Each cell its own handle on the model, to carry its houses' styles.
+      const geometry = new THREE.BufferGeometry()
+      for (const [name, attribute] of Object.entries(model.attributes)) {
+        geometry.setAttribute(name, attribute)
+      }
+      const styles = new Float32Array(houses.length * 4)
       const mesh = new THREE.InstancedMesh(geometry, material, houses.length)
+      // The heart of the town here: houses face it, so they ring it in
+      // streets rather than each turned its own way.
+      const heart = new THREE.Vector3()
+      for (const house of houses) heart.add(towards.set(...house.at))
+      heart.normalize()
+      // The brightest house of the cell is its tower: a church, a temple, a hall.
+      let tower = 0
+      houses.forEach((house, k) => {
+        if (house.bright > (houses[tower]?.bright ?? 0)) tower = k
+      })
       houses.forEach((house, k) => {
         const h = Math.sin((house.at[0] * 7919 + house.at[2] * 104729) * 1e3) * 43758.5453
         const roll = h - Math.floor(h)
+        const h2 = Math.sin((house.at[1] * 6271 + house.at[0] * 92821) * 1e3) * 43758.5453
+        const roll2 = h2 - Math.floor(h2)
         up.set(...house.at).normalize()
-        turn.setFromUnitVectors(Y, up)
-        spin.setFromAxisAngle(Y, roll * Math.PI * 2)
+        // Facing the heart, give or take a little — or square to it.
+        towards.copy(heart).addScaledVector(up, -heart.dot(up))
+        if (towards.lengthSq() < 1e-12) towards.set(1, 0, 0).cross(up)
+        towards.normalize()
+        side.crossVectors(up, towards).normalize()
+        basis.makeBasis(side, up, towards)
+        turn.setFromRotationMatrix(basis)
+        spin.setFromAxisAngle(Y, (roll2 < 0.3 ? Math.PI / 2 : 0) + (roll - 0.5) * 0.35)
         // Bigger towards the heart of a town, where its lights are brightest.
         const grand = 0.7 + house.bright * 0.6
-        size.set(
-          0.0004 * grand,
-          (0.00028 + roll * 0.0003) * grand,
-          (0.0003 + roll * 0.0002) * grand,
-        )
+        const isTower = k === tower && houses.length > 4
+        if (isTower) {
+          size.set(0.00026 * grand, 0.0006 * grand, 0.00026 * grand)
+        } else {
+          // Cottages, long houses and the odd second storey.
+          const long = roll2 > 0.7 ? 1.6 : 1
+          const storeys = roll > 0.82 && house.bright > 0.7 ? 1.7 : 1
+          size.set(
+            0.00034 * grand * (0.85 + roll * 0.3),
+            (0.00026 + roll * 0.00008) * grand * storeys,
+            0.0003 * grand * long,
+          )
+        }
         // Sunk a little, so a house on a slope does not stand on a corner.
         place.set(...house.at).addScaledVector(up, -0.00008)
         matrix.compose(place, turn.multiply(spin), size)
         mesh.setMatrixAt(k, matrix)
-        // Walls from white to ochre; a few cold-lit ones grey.
-        tint.setRGB(1, 0.94 + roll * 0.06, 0.86 + house.warm * 0.1)
-        mesh.setColorAt(k, tint)
+        const surface = surfaceAt(planet, up.x, up.y, up.z)
+        const style = houseStyle(surface.warmth, surface.moisture, roll, roll2)
+        styles.set(
+          [
+            isTower ? Math.max(style.pitch, 1.6) : style.pitch,
+            packed(style.roof),
+            packed(style.walls),
+            0,
+          ],
+          k * 4,
+        )
       })
+      geometry.setAttribute('houseStyle', new THREE.InstancedBufferAttribute(styles, 4))
       mesh.instanceMatrix.needsUpdate = true
-      if (mesh.instanceColor !== null) mesh.instanceColor.needsUpdate = true
       mesh.computeBoundingSphere()
       mesh.visible = false
       mesh.receiveShadow = true
