@@ -1176,3 +1176,51 @@ an overlay image and that was screenshotted.
 the hull colours were lifted once for that. **Not seen: a pier on
 screen** — its matrices were checked numerically (on the shore, along
 `out`, tiny) but no view in the session put one in frame.
+
+## Kelp, light under the sea, and reefs from below
+
+- **Reefs could not be seen from below, and the cause was the dive, not
+  the reef.** Warm seas here run 0.006 to 0.008 deep, reefs thinned out by
+  0.006, and the dive wanted 0.006 of water under its ceiling (0.0072 in
+  all) — so every reef was in water too shallow to dive into. Two changes:
+  `DEEP_ENOUGH` in rig.ts is 0.0042 (a little over the 0.0025 the glide
+  keeps off the bed, so a dive has room before it surfaces by itself; a
+  lagoon at 0.002 is still refused, and `rig.test.ts` → "dives into a warm
+  sea" fails at the old value), and reefs stay full to 0.007 and fade by
+  0.012 (`REEF_FULL`, `REEF_DEEPEST` in patch-data.ts). Seen: coral clumps
+  across the bed on a dive, fish over them.
+- **Kelp** (`generation/kelp.ts`, tested; `render/kelp.ts`): the cool
+  sea's reef, at most a forest to a drainage cell where the water is too
+  cold for coral (`KELP_WARMEST` 0.2) and open, on rolls of its own apart
+  from the fish. Each stalk a ribbon of twelve segments from the bed most
+  of the way to the surface, blades widening and narrowing, twisting as
+  it rises, swaying with the swell and leaning with a current — all in the
+  shader by time. Grows only where the bed is 0.0035 to 0.016 down, which
+  is water a dive can be in: the first range (to 0.009) put nearly every
+  forest where no dive could reach it. Kept round the eye by `NearCells`
+  as the fish are.
+- **Kelp lit by the haze as the fish are came out the water's blue**, and
+  then pale grey-pink once lifted; colours are linear in these shaders and
+  read twice as pale on screen. Dark olive values, a lighter rib and
+  ruffled edges, so a blade close by is not a flat plank.
+- **Light shafts** (`render/sea-light.ts`): soft additive quads hanging
+  from the surface, slanted the way the sun comes in and bent towards
+  straight down, fading as they fall and shimmering as waves pass. The
+  sunbeams pass is off under the sea, since it works from the sun's place
+  on the screen. **Anchored to a lattice on the planet**, one shaft to at
+  most half the cells, so swimming moves through them rather than
+  carrying them along; gathered each frame round the point of the surface
+  over the eye (deep down, the eye's own cells never reach the surface)
+  and faded out by distance from that point **inside** the lattice's
+  reach, so none pops at the rim.
+- **A NaN in a shaft blacked out the whole frame.** `pow(1.0 - y, …)` with
+  `y` interpolated a hair past 1 is NaN, additive blending carried it, and
+  the bloom spread it over everything. Found by hiding each new mesh in
+  turn and reading a pixel back. The coordinate is clamped now and the
+  output floored at zero.
+- **Checked by reading the frame back**, not by screenshot: in record mode
+  the pane's screenshot shows a stale frame, so the render call was
+  wrapped to copy the canvas after the last pass and the copy shown as an
+  image. A frame-to-frame difference with the shafts on and off found no
+  recurring jump.
+- Not seen: a phone, and kelp at night.

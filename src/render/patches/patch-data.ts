@@ -302,7 +302,7 @@ export function samplePatch(planet: Planet, key: PatchKey, segments: number): Pa
         reef[j * side + i] =
           smoothRange(0.1, 0.4, surface.warmth) *
           smoothRange(0, REEF_FROM, under) *
-          (1 - smoothRange(REEF_FROM * 3, REEF_DEEPEST, under))
+          (1 - smoothRange(REEF_FULL, REEF_DEEPEST, under))
       }
       // Light and shade from the same fine noise, and a mottle at field
       // scale — patches of lusher and drier, lighter and darker ground —
@@ -673,9 +673,16 @@ const MIST_ON_WATER = 0.0009
 
 const mix = (from: number, to: number, t: number): number => from + (to - from) * t
 
-/** Reefs grow from just under the surface down to this depth, in radii: the lit shallows. */
+/**
+ * Reefs grow from just under the surface down to this depth, in radii. They
+ * thinned out from 0.0018 to 0.006 at first, which is all water too shallow
+ * to dive into (rig.ts wants 0.006 under its ceiling): from below they were
+ * never seen. Full to 0.007 and gone by 0.012 puts them on the bed a dive
+ * flies over; from above, water that deep hides their colour anyway.
+ */
 const REEF_FROM = 0.0006
-const REEF_DEEPEST = 0.006
+const REEF_FULL = 0.007
+const REEF_DEEPEST = 0.012
 
 /** A river's slope, in radii per radian, where white water begins and where it is all white. */
 const RAPIDS_FROM = 0.15

@@ -47,6 +47,12 @@ describe('under the sea', () => {
     expect(rig.submerged()).toBe(false)
   })
 
+  it('dives into a warm sea, where the reefs are', () => {
+    // Warm seas run 0.006 to 0.008 deep; refusing them hid the coral from below.
+    const { rig } = start()
+    expect(rig.submerge(() => SEA_RADIUS - 0.0065)).toBe(true)
+  })
+
   it('comes up by itself where the water grows shallow, and says so', () => {
     const { rig, clock } = start()
     let depth = 0.015

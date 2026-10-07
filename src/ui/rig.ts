@@ -144,8 +144,15 @@ const SEA_CEILING = SEA_RADIUS - 0.0012
 const UNDER_CLEARANCE = 0.0025
 /** How high over the sea the glide climbs to when it comes up. */
 const RISE_TO = 0.008
-/** The least depth to dive into: enough water to fly in, not a lagoon. */
-const DEEP_ENOUGH = 0.006
+/**
+ * The least depth under the ceiling to dive into: enough water to fly in,
+ * not a lagoon. It was 0.006, which put the warm seas — mostly 0.006 to
+ * 0.008 deep in all — out of reach, and their reefs with them: the coral
+ * could be seen from above and never from below. A little over the
+ * clearance the glide keeps off the bed, so a dive has room before it
+ * comes up by itself.
+ */
+const DEEP_ENOUGH = 0.0042
 
 const clamp = (value: number, low: number, high: number): number =>
   Math.min(high, Math.max(low, value))

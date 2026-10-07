@@ -31,6 +31,8 @@ import { spray } from './waterfalls'
 import { Birds } from './birds'
 import { Meteors } from './meteors'
 import { Fish } from './fish'
+import { Kelp } from './kelp'
+import { SeaLight } from './sea-light'
 import { Ships } from './ships'
 import { Towns, townSites } from './towns'
 import { SisterWorlds } from './sisters'
@@ -450,6 +452,12 @@ export function startScene(
   scene.add(marineSnow.object)
   const fish = new Fish()
   scene.add(fish.object)
+  const kelp = new Kelp()
+  scene.add(kelp.object)
+  const seaLight = new SeaLight()
+  scene.add(seaLight.object)
+  const seaEye = new THREE.Vector3()
+  const seaFrame = new THREE.Matrix4()
   let towns: Towns | undefined
   let ships: Ships | undefined
   const sisters = new SisterWorlds(pixelRatio)
@@ -582,6 +590,7 @@ export function startScene(
     scene.add(next.terrain.group)
     birds.setWorld(next.world)
     fish.setWorld(next.world)
+    kelp.setWorld(next.world)
     meteors.setWorld(next.world.seed)
     // Smoke from a molten world's peaks, turning with its ground.
     const smoke = plumes(next.world, volcanoesOf(next.world))
@@ -1048,6 +1057,14 @@ export function startScene(
         fog.color,
         fog.density,
       )
+      kelp.update(
+        inPlanetFrame(camera.position, turn, stage.scale),
+        shown.terrain.group.matrixWorld,
+        stage.scale,
+        DETAIL_UNDER.value,
+        fog.color,
+        fog.density,
+      )
       birds.update(
         inPlanetFrame(camera.position, turn, stage.scale),
         shown.terrain.group.matrixWorld,
@@ -1138,6 +1155,22 @@ export function startScene(
     }
     scene.background = air ? null : deepBackground.copy(waterColour)
     marineSnow.update(camera.position, under, waterColour, day, scale)
+    if (shown !== undefined && under > 0) {
+      // The eye in the planet's own frame, for the shafts' lattice.
+      const ground = shown.terrain.group.matrixWorld
+      seaEye.copy(camera.position).applyMatrix4(seaFrame.copy(ground).invert())
+      seaLight.update(
+        [seaEye.x, seaEye.y, seaEye.z],
+        ground,
+        sunDirection,
+        scale,
+        under,
+        day,
+        waterColour,
+      )
+    } else {
+      seaLight.object.visible = false
+    }
   }
 
   /** Where the sun is on the screen and how strong its beams are, this frame. */
