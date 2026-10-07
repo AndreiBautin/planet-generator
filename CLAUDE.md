@@ -1479,3 +1479,37 @@ all go at once.
   glowing mass over the vent — the existing lit puffs, before eruptions.
 - Seen: a fountain over a vent and three flows down its flank at night on
   `h999999`. Not seen: a fountain by day, a phone.
+
+## Deserts that live
+
+`generation/oases.ts` (`oasisIn`, `caravanIn`, `desertAt`, tested on the
+arid seed `aaangxg`) and `render/deserts.ts`: on desert ground — the
+features' cactus share, scaled back up to a share of desert — a drainage
+cell may hold an oasis (one in seven, deep desert only) and a caravan (one
+in five, desert the whole way), each decided by the cell and the seed.
+
+- **Dunes** (detail.ts): on sand, near enough that a crest spans pixels,
+  long ripples run across the ground on a fixed wind — a slow rise to the
+  crest and a shaded lee face — warped so they do not read as ruled lines.
+- **Oases**: a still pool with a slow ripple of light, a ring of green
+  round it, and six to fifteen palms leaning out over the water.
+- **Caravans**: four to eight camels, each with an indigo-robed rider,
+  plodding there and back along a way of their own by the shared clock,
+  bobbing with each stride.
+- **The drawn ground is not the true ground on a dune.** The mesh runs
+  straight between vertices about 0.0003 apart, and on a steep dune face it
+  stood up to 0.0006 above `groundRadiusAt` — over twice a camel's height.
+  The first caravans were drawn, in view, and entirely buried: found by
+  drawing them with the depth test off. Each point of a way now takes the
+  **highest** ground within 0.0003 of it (`FEEL`), and a way rougher than
+  0.0006 across that is not walked (`ROUGHEST`) — which turns away about
+  three caravans in five, so caravans were made twice as common to keep
+  their number. Anything else set on rough ground by `groundRadiusAt`
+  alone has this problem.
+- **The glide's pitch is clamped to about −12.6°**, so a `shot` link's tilt
+  past that does nothing: to look down at something, stand further off.
+- **Camels were first a pale grey-beige** and read as ghosts on the sand;
+  a dark coat and an indigo rider stand out against it.
+- Seen: dunes and an oasis with palms on `aaangxg`, and a caravan on the
+  dunes at `shot=g,-36.734,126.65,270,4.0,10.00,-30`. Not seen: a phone,
+  a caravan at night.

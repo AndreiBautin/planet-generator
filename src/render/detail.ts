@@ -624,6 +624,26 @@ export function withGroundDetail(
           detailRough = mix(detailRough, 0.95, canopy);
         }
 
+        // Dunes on open sand: long crests laid across one wind, wandering
+        // a little, each a gentle slope up and a steep, shadowed lee face
+        // down. Faded out by how much ground a pixel spans, never by
+        // distance — the hand-drawn ripples below were cut off at a range
+        // and appeared ahead of the eye — so from orbit a sand sea is plain.
+        {
+          float sandy = v_pattern.y * (1.0 - v_pattern.z) * (1.0 - v_pattern.x);
+          float duneSeen = 1.0 - smoothstep(0.15, 0.5, pixelSpan * 1000.0);
+          if (sandy * duneSeen > 0.03) {
+            float warp = detailNoise(vDetailPosition * 90.0) * 2.2;
+            float crest = dot(vDetailPosition * 650.0, vec3(0.8, 0.15, 0.58)) + warp;
+            float phase = fract(crest);
+            float profile = phase < 0.78 ? phase / 0.78 : (1.0 - phase) / 0.22;
+            float lee = smoothstep(0.74, 0.82, phase) * (1.0 - smoothstep(0.97, 1.0, phase));
+            float weight = sandy * duneSeen;
+            detailHeight += (profile - 0.5) * 1.4 * weight;
+            detailShade *= mix(1.0, mix(1.05, 0.7, lee), weight);
+          }
+        }
+
         // No sand ripples, snow ridges or stone cracks drawn by hand here.
         // Each was drawn only within a certain distance, so each appeared
         // ahead of the eye as it flew — and the cracks, on a world that is
