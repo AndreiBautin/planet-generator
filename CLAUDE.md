@@ -1001,3 +1001,25 @@ beams fall exactly where the picture shows a gap.
 - Checked in the preview by frame difference over a second: the river
   changes, the land beside it does not. **The direction was checked by
   the test, not by eye.**
+
+## Reefs and fish
+
+- **Reefs** (`reef` in patch-data.ts, a ground attribute; drawn in the
+  ground's shader): warm sea bed from just under the surface to 0.006
+  down, as clumps of coral in reds, oranges and violets with the plain bed
+  between. Seen through the shallows from above — the turquoise lagoons
+  read as reef flats — and close to on a dive.
+- **Fish** (`generation/fish.ts`, tested; `render/fish.ts`): at most a
+  school to a sea cell, by the cell and the seed, on rolls of their own
+  (the birds' rolls would put a school under every gull flock). Silver
+  and blue anywhere open, orange too where it is warm. Drawn only under
+  the water, side-on with a beating tail, circling between the bed and
+  the surface, hazed by the water by hand (a shader of its own takes no
+  fog).
+- **Kept to the cells round the eye by `NearCells`** (render/near-cells.ts),
+  now shared with the birds: things in two rings of cells, each holding
+  its slot while near, so nothing pops.
+- **Tuned on the dive**: at first the nearest school was always just past
+  the fade (0.012) and a seen one was five pixels long. They fade at 0.02
+  now, as far as the haze lets anything be seen, and are drawn larger than
+  life, as the birds are.

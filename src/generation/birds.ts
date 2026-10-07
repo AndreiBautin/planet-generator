@@ -61,8 +61,8 @@ const unit = (v: Vec3): Vec3 => {
   return [v[0] / l, v[1] / l, v[2] / l]
 }
 
-/** Numbers 0 to 1 fixed by a seed and a cell, one for each slot asked for. */
-function hashed(seed: string, cell: number): (slot: number) => number {
+/** Numbers 0 to 1 fixed by a seed and a cell, one for each slot asked for: shared with the fish. */
+export function hashed(seed: string, cell: number): (slot: number) => number {
   let base = 2166136261
   for (let k = 0; k < seed.length; k += 1) base = Math.imul(base ^ seed.charCodeAt(k), 16777619)
   base = Math.imul(base ^ cell, 16777619)

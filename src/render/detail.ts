@@ -333,7 +333,7 @@ export function withGroundDetail(
     // shape: a vertex drawn where the parent puts it, painted as the parent
     // paints it.
     shader.vertexShader =
-      'attribute vec3 coarseColour;\nattribute vec4 coarsePattern;\nattribute vec4 ground;\nattribute vec4 coarseGround;\nvarying vec4 v_ground;\n' +
+      'attribute vec3 coarseColour;\nattribute vec4 coarsePattern;\nattribute vec4 ground;\nattribute vec4 coarseGround;\nattribute float reef;\nvarying vec4 v_ground;\nvarying float v_reef;\n' +
       shader.vertexShader
         .replace(
           '#include <color_vertex>',
@@ -348,6 +348,7 @@ export function withGroundDetail(
   vDetailNormal = objectNormal;
   v_pattern = mix(pattern, coarsePattern, terrainMorph);
   v_ground = mix(ground, coarseGround, terrainMorph);
+  v_reef = reef;
 #include <project_vertex>`,
         )
     // Only the photographs this kind of world uses: a phone allows about
@@ -358,7 +359,7 @@ export function withGroundDetail(
       ? ['basalt', 'ash']
       : ['grass', 'sand', 'stone', 'snow', 'needles', 'savanna', 'tundra', 'salt']
     const flat: ReadonlySet<GroundKind> = new Set(['needles', 'savanna', 'tundra', 'salt'])
-    let declare = 'varying vec4 v_ground;\n'
+    let declare = 'varying vec4 v_ground;\nvarying float v_reef;\n'
     for (const kind of layers) {
       const name = kind.charAt(0).toUpperCase() + kind.slice(1)
       // The same uniform objects for every material, so a photograph that
@@ -620,6 +621,23 @@ export function withGroundDetail(
         // mostly stone, read as a honeycomb over the whole ground. The
         // photographs above carry the grain, and the GPU filters them
         // smoothly at every distance, so nothing of theirs pops.
+
+        // Coral on a warm, shallow sea bed (patch-data.ts, reef): clumps
+        // of it in a few colours, lumpy, with the plain bed between —
+        // seen through the shallows from above, and close to on a dive.
+        if (v_reef > 0.01) {
+          vec3 rp = vDetailPosition * 1800.0;
+          float clump = detailNoise(rp * 0.35);
+          float lumps = detailNoise(rp * 1.6);
+          float hue = detailNoise(rp * 0.12 + 17.0);
+          vec3 coral = mix(
+            mix(vec3(0.9, 0.32, 0.3), vec3(0.95, 0.6, 0.22), smoothstep(0.3, 0.6, hue)),
+            vec3(0.55, 0.3, 0.8),
+            smoothstep(0.62, 0.85, hue));
+          float body = smoothstep(0.5, 0.66, clump) * v_reef;
+          diffuseColor.rgb = mix(diffuseColor.rgb, coral * (0.7 + 0.5 * lumps), body);
+          detailHeight += (lumps - 0.5) * 2.0 * body;
+        }
 
         diffuseColor.rgb *= detailShade * (1.0 + detailHeight * 0.3);
         diffuseColor.rgb *= 1.0 - cloudShadow(vDetailPosition) * 0.55;`,

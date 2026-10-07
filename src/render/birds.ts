@@ -2,10 +2,11 @@ import * as THREE from 'three'
 
 import { flockIn, MOST_BIRDS, type Flock } from '@/generation/birds'
 import type { Vec3 } from '@/generation/cube'
-import { cellOf, neighboursOf } from '@/generation/hydrology'
+import { cellOf } from '@/generation/hydrology'
 import type { Planet } from '@/generation/planet'
 
 import { DETAIL_TIME } from './detail'
+import { NearCells } from './near-cells'
 import { groundRadiusAt } from './patches/patch-data'
 import { VALLEY_FOG } from './valley-fog'
 import { SEA_RADIUS } from './water'
@@ -34,10 +35,17 @@ export class Birds {
   private readonly flocks: THREE.InstancedBufferAttribute
   private readonly birds: THREE.InstancedBufferAttribute
   private readonly seen = { value: SEEN }
-  private readonly slots: (number | undefined)[] = new Array<number | undefined>(MOST_FLOCKS)
-  private readonly known = new Map<number, Flock | undefined>()
+  private readonly near = new NearCells<Flock>(
+    MOST_FLOCKS,
+    (cell) => (this.world === undefined ? undefined : flockIn(this.world, cell)),
+    (slot, cell, flock) => {
+      this.fill(slot, cell, flock)
+    },
+    (slot) => {
+      this.clear(slot)
+    },
+  )
   private world: Planet | undefined
-  private cell = -1
 
   constructor() {
     // A bird in the PS1 way: a body and two long narrow wings bent at the
@@ -157,9 +165,7 @@ export class Birds {
   /** A new world: its own flocks, none of the last one's. */
   setWorld(world: Planet): void {
     this.world = world
-    this.known.clear()
-    this.slots.fill(undefined)
-    this.cell = -1
+    this.near.reset()
     this.birds.array.fill(0)
     this.birds.needsUpdate = true
   }
@@ -175,49 +181,14 @@ export class Birds {
     this.object.matrix.copy(ground)
     this.object.matrixWorld.copy(ground)
     this.seen.value = SEEN * scale
-    const cell = cellOf(eye)
-    if (cell === this.cell) return
-    this.cell = cell
-    this.gather(cell)
-  }
-
-  /** The flocks of two rings of cells round `cell`, each kept in the slot it had. */
-  private gather(cell: number): void {
-    const world = this.world
-    if (world === undefined) return
-    const wanted = new Set<number>([cell])
-    for (const near of neighboursOf(cell)) {
-      wanted.add(near)
-      for (const further of neighboursOf(near)) wanted.add(further)
-    }
-    const flocking = new Set<number>()
-    for (const k of wanted) if (this.flockOf(world, k) !== undefined) flocking.add(k)
-    // Free the slots of flocks no longer near, keep the rest where they are.
-    this.slots.forEach((held, slot) => {
-      if (held !== undefined && !flocking.has(held)) {
-        this.slots[slot] = undefined
-        this.clear(slot)
-      }
-    })
-    for (const k of flocking) {
-      if (this.slots.includes(k)) continue
-      const free = this.slots.indexOf(undefined)
-      if (free < 0) break
-      this.slots[free] = k
-      this.fill(free, world, k)
-    }
+    if (!this.near.near(cellOf(eye))) return
     this.flocks.needsUpdate = true
     this.birds.needsUpdate = true
   }
 
-  private flockOf(world: Planet, cell: number): Flock | undefined {
-    if (!this.known.has(cell)) this.known.set(cell, flockIn(world, cell))
-    return this.known.get(cell)
-  }
-
-  private fill(slot: number, world: Planet, cell: number): void {
-    const flock = this.flockOf(world, cell)
-    if (flock === undefined) return
+  private fill(slot: number, cell: number, flock: Flock): void {
+    const world = this.world
+    if (world === undefined) return
     // Gulls low over the water; land birds clear of the canopy (trees stand
     // 0.0015, forest.ts), where they show against the sky rather than
     // vanishing into the dark of the woods.

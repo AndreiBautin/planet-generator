@@ -30,6 +30,7 @@ import { Embers, plumes, PLUME_SUN } from './volcanic'
 import { spray } from './waterfalls'
 import { Birds } from './birds'
 import { Meteors } from './meteors'
+import { Fish } from './fish'
 import { SUNBEAM_SHADER, sunbeamStrength } from './sunbeams'
 import { MarineSnow, underwaterAt, WATER_FOG_DENSITY, waterFog } from './underwater'
 import { DETAIL_CLOUD_MOONS, DETAIL_MOONS, moonShadow, type MoonDisc } from './eclipse'
@@ -439,6 +440,8 @@ export function startScene(
   scene.add(birds.object)
   const marineSnow = new MarineSnow()
   scene.add(marineSnow.object)
+  const fish = new Fish()
+  scene.add(fish.object)
   const waterColour = new THREE.Color()
   const deepBackground = new THREE.Color()
   let underSide: THREE.Side = THREE.FrontSide
@@ -566,6 +569,7 @@ export function startScene(
     }
     scene.add(next.terrain.group)
     birds.setWorld(next.world)
+    fish.setWorld(next.world)
     meteors.setWorld(next.world.seed)
     // Smoke from a molten world's peaks, turning with its ground.
     const smoke = plumes(next.world, volcanoesOf(next.world))
@@ -971,6 +975,14 @@ export function startScene(
         (1 - smooth(-0.15, -0.03, meteorUp.dot(sunDirection))) *
           (1 - smooth(0.04, 0.12, camera.position.length() / stage.scale - 1)),
         stage.scale,
+      )
+      fish.update(
+        inPlanetFrame(camera.position, turn, stage.scale),
+        shown.terrain.group.matrixWorld,
+        stage.scale,
+        DETAIL_UNDER.value,
+        fog.color,
+        fog.density,
       )
       birds.update(
         inPlanetFrame(camera.position, turn, stage.scale),

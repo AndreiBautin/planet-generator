@@ -109,6 +109,7 @@ export function transferables(result: WorkResult): Transferable[] {
         result.patch.mist.buffer,
         result.patch.rapids.buffer,
         result.patch.current.buffer,
+        result.patch.reef.buffer,
         result.patch.ground.buffer,
         result.patch.water.buffer,
       ]

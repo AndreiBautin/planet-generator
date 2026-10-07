@@ -90,6 +90,12 @@ export interface PatchData {
    */
   readonly current: Float32Array
   /**
+   * How much of the sea bed at each vertex is reef, 0 to 1: warm shallow
+   * water, a little under the surface. The coral itself is drawn in the
+   * ground's shader (detail.ts) from this.
+   */
+  readonly reef: Float32Array
+  /**
    * Each biome's own ground, four weights a vertex — forest needles,
    * savanna, tundra, and salt flat (ash on a molten world) — then the same
    * four as the parent patch has them: eight a vertex. See `groundOf`.
@@ -192,6 +198,7 @@ export function samplePatch(planet: Planet, key: PatchKey, segments: number): Pa
   const mist = new Float32Array(vertexCount(segments))
   const rapids = new Float32Array(vertexCount(segments))
   const current = new Float32Array(vertexCount(segments) * 3)
+  const reef = new Float32Array(vertexCount(segments))
   const ground = new Float32Array(vertexCount(segments) * 8)
   const water = new Float32Array(vertexCount(segments))
   const wetted = new Float32Array(side * side)
@@ -285,6 +292,13 @@ export function samplePatch(planet: Planet, key: PatchKey, segments: number): Pa
         ? 0
         : Math.min(1, Math.max(0, (FREEZES + 0.2 - surface.warmth) / 0.2))
       surfaces[j * side + i] = surface
+      if (surface.height < 0 && !planet.molten) {
+        const under = SEA_RADIUS - radius
+        reef[j * side + i] =
+          smoothRange(0.1, 0.4, surface.warmth) *
+          smoothRange(0, REEF_FROM, under) *
+          (1 - smoothRange(REEF_FROM * 3, REEF_DEEPEST, under))
+      }
       // Light and shade from the same fine noise, and a mottle at field
       // scale — patches of lusher and drier, lighter and darker ground —
       // so a plain of one biome is never one flat colour.
@@ -593,6 +607,7 @@ export function samplePatch(planet: Planet, key: PatchKey, segments: number): Pa
       water[skirt] = water[vertex] ?? 0
       mist[skirt] = mist[vertex] ?? 0
       rapids[skirt] = rapids[vertex] ?? 0
+      reef[skirt] = reef[vertex] ?? 0
       current[skirt * 3] = current[vertex * 3] ?? 0
       current[skirt * 3 + 1] = current[vertex * 3 + 1] ?? 0
       current[skirt * 3 + 2] = current[vertex * 3 + 2] ?? 0
@@ -617,6 +632,7 @@ export function samplePatch(planet: Planet, key: PatchKey, segments: number): Pa
     mist,
     rapids,
     current,
+    reef,
     ground,
     water,
   }
@@ -632,6 +648,10 @@ const MIST_COAST = 0.0012
 const MIST_ON_WATER = 0.0009
 
 const mix = (from: number, to: number, t: number): number => from + (to - from) * t
+
+/** Reefs grow from just under the surface down to this depth, in radii: the lit shallows. */
+const REEF_FROM = 0.0006
+const REEF_DEEPEST = 0.006
 
 /** A river's slope, in radii per radian, where white water begins and where it is all white. */
 const RAPIDS_FROM = 0.15
