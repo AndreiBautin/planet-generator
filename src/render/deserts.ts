@@ -110,13 +110,19 @@ export class Deserts {
   private readonly place = new THREE.Vector3()
   private readonly size = new THREE.Vector3()
 
+  /** 1 by day to 0 at night where the eye is: the own light, and the pool's, go with it. */
+  private readonly daylight = { value: 1 }
+
   constructor() {
     const lit = (material: THREE.MeshStandardMaterial): THREE.MeshStandardMaterial => {
       material.onBeforeCompile = (shader) => {
-        shader.fragmentShader = shader.fragmentShader.replace(
-          '#include <emissivemap_fragment>',
-          '#include <emissivemap_fragment>\n  totalEmissiveRadiance += diffuseColor.rgb * 0.25;',
-        )
+        shader.uniforms.desertDay = this.daylight
+        shader.fragmentShader = shader.fragmentShader
+          .replace('void main() {', 'uniform float desertDay;\nvoid main() {')
+          .replace(
+            '#include <emissivemap_fragment>',
+            '#include <emissivemap_fragment>\n  totalEmissiveRadiance += diffuseColor.rgb * 0.25 * mix(0.15, 1.0, desertDay);',
+          )
       }
       return material
     }
@@ -128,7 +134,7 @@ export class Deserts {
       ),
       MOST_OASES,
     )
-    this.pools = new THREE.InstancedMesh(disc, poolMaterial(), MOST_OASES)
+    this.pools = new THREE.InstancedMesh(disc, poolMaterial(this.daylight), MOST_OASES)
     this.palms = new THREE.InstancedMesh(
       palmGeometry(),
       lit(
@@ -167,7 +173,7 @@ export class Deserts {
   }
 
   /** Follow the eye: `eye` in the planet's frame, in radii; `ground` the planet's matrix; `seconds` the clock. */
-  update(eye: Vec3, ground: THREE.Matrix4, seconds: number): void {
+  update(eye: Vec3, ground: THREE.Matrix4, sun: THREE.Vector3, seconds: number): void {
     const length = Math.hypot(eye[0], eye[1], eye[2]) || 1
     this.group.visible = this.world !== undefined && !this.world.molten && length - 1 < HIGHEST_EYE
     if (!this.group.visible) return
@@ -178,6 +184,13 @@ export class Deserts {
     this.nearOases.near(cell)
     this.nearCaravans.near(cell)
     const under: Vec3 = [eye[0] / length, eye[1] / length, eye[2] / length]
+    // Their own light kept a lit oasis glowing green in the dark.
+    const sunLength = sun.length() || 1
+    this.daylight.value = smooth(
+      -0.1,
+      0.15,
+      (under[0] * sun.x + under[1] * sun.y + under[2] * sun.z) / sunLength,
+    )
     const shownAt = (at: Vec3): number =>
       1 - smooth(SHRINK_FROM, GONE_AT, Math.acos(Math.min(1, dot(at, under))))
     this.oases.forEach((placed, s) => {
@@ -343,14 +356,14 @@ function pointOn(way: Way, distance: number): Vec3 {
 }
 
 /** A still pool, deep in the middle and pale at its rim, catching a slow ripple of light. */
-function poolMaterial(): THREE.ShaderMaterial {
+function poolMaterial(daylight: { value: number }): THREE.ShaderMaterial {
   return new THREE.ShaderMaterial({
     transparent: true,
     depthWrite: false,
     polygonOffset: true,
     polygonOffsetFactor: -2,
     polygonOffsetUnits: -2,
-    uniforms: { poolTime: DETAIL_TIME },
+    uniforms: { poolTime: DETAIL_TIME, poolDay: daylight },
     vertexShader: /* glsl */ `
       varying vec2 vAt;
       void main() {
@@ -360,6 +373,7 @@ function poolMaterial(): THREE.ShaderMaterial {
     `,
     fragmentShader: /* glsl */ `
       uniform float poolTime;
+      uniform float poolDay;
       varying vec2 vAt;
       void main() {
         float r = length(vAt);
@@ -368,6 +382,8 @@ function poolMaterial(): THREE.ShaderMaterial {
         vec3 colour = mix(deep, shallow, smoothstep(0.3, 1.0, r));
         float ripple = sin(r * 18.0 - poolTime * 1.4) * 0.5 + 0.5;
         colour += vec3(0.08, 0.1, 0.1) * ripple * (1.0 - r);
+        // Its own colour by day; at night a dark pool with a glint of sky.
+        colour *= mix(0.1, 1.0, poolDay);
         gl_FragColor = vec4(colour, smoothstep(1.0, 0.85, r));
         #include <tonemapping_fragment>
         #include <colorspace_fragment>

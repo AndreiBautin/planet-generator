@@ -1552,3 +1552,31 @@ land only) and an airship (one in seventy, over land or sea).
 - Seen: a meet of four over snowy woods by day and the burner glowing at
   night, and an airship by day and lit at night, on `k3m9xqa`. Not seen:
   the flame itself up close, a phone.
+
+## Comets
+
+`generation/comet.ts` (`cometOf`, `cometInSky`, tested) and
+`render/comet.ts`: about one world in three has a great comet in its sky,
+decided by the seed — its head 30–70° from the sun, so it shows at dusk
+and dawn and on through the night, and its tail 15–30° long.
+
+- **The tail streams away from the sun**, not behind the comet along its
+  path: `cometInSky` takes the anti-sun direction less its part along the
+  head, and a test holds the tail square to the head and pointing away.
+- **Two tails, as a great comet has**: a broad pale dust tail fanning out
+  and curling a little off the straight, brighter along its leading edge,
+  and a longer, narrow blue ion tail dead straight, its streamers drifting
+  slowly outward. A hard nucleus in a soft green-white coma.
+- **Drawn as the sister worlds are**: round the eye just inside the far
+  plane, so the ground and the clouds hide it; out with the stars, a
+  little before them, and faintly there by day, as a great comet is. It
+  stands still among the stars and is laid out again only when the sun
+  moves (the seasons), not each frame.
+- **The oasis glowed green at night**, found looking at the comet over
+  the desert: the little own-colour light that keeps shaded sides from the
+  sky's blue went on burning in the dark. It fades with the sun where the
+  eye is now (`desertDay`), and the pool darkens with it — the balloons'
+  fix, as one uniform, since an oasis is never far from the eye.
+- Seen: the comet over the desert at dusk on `aaangxg`
+  (`shot=g,-36.734,126.65,302,6.0,19.40,0`), and the oasis dark under it.
+  Not seen: from orbit, a phone.

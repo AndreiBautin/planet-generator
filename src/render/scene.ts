@@ -20,6 +20,7 @@ import { BORN, birthAt, type Birth } from './birth'
 import type { Builder } from './builder'
 import { cloudDataOf, cloudsFromTexture, cloudsSeenFrom } from './clouds'
 import { fromPalette } from './colour'
+import { CometSky } from './comet'
 import { buildHeavens, type Heavens } from './heavens'
 import { Rain } from './rain'
 import { flowingCoverAt, updateFlow } from './winds'
@@ -492,6 +493,8 @@ export function startScene(
   const sunInGround = new THREE.Vector3()
   const sisters = new SisterWorlds(pixelRatio)
   scene.add(sisters.object)
+  const comet = new CometSky(pixelRatio)
+  scene.add(comet.group)
   const waterColour = new THREE.Color()
   const deepBackground = new THREE.Color()
   let underSide: THREE.Side = THREE.FrontSide
@@ -628,6 +631,7 @@ export function startScene(
     DETAIL_SEASON.value.set(next.world.dials.season, seasonStrength(next.world.tilt))
     kelp.setWorld(next.world)
     meteors.setWorld(next.world.seed)
+    comet.setWorld(next.world.seed)
     // Smoke from a molten world's peaks, turning with its ground.
     const volcanoes = volcanoesOf(next.world)
     const smoke = plumes(next.world, volcanoes)
@@ -987,6 +991,7 @@ export function startScene(
         material.uniforms.bandSeen.value = starsSeen
     })
     sisters.update(camera.position, camera.far * 0.85, sunDirection, starsSeen)
+    comet.update(camera.position, camera.far * 0.86, sunDirection, starsSeen)
   }
 
   const tick = (): void => {
@@ -1151,6 +1156,7 @@ export function startScene(
       deserts.update(
         inPlanetFrame(camera.position, turn, stage.scale),
         shown.terrain.group.matrixWorld,
+        sunInGround.set(...inPlanetFrame(sunDirection, turn, 1)),
         DETAIL_TIME.value,
       )
       aircraft.update(
@@ -1241,6 +1247,7 @@ export function startScene(
     }
     if (!air) {
       sisters.object.visible = false
+      comet.group.visible = false
       birds.object.visible = false
       aircraft.group.visible = false
       herds.object.visible = false
