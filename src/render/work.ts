@@ -133,6 +133,7 @@ export function transferables(result: WorkResult): Transferable[] {
         result.patch.farm.buffer,
         result.patch.ground.buffer,
         result.patch.water.buffer,
+        result.patch.dry.buffer,
       ]
   }
 }

@@ -1819,3 +1819,38 @@ every weathered model alike (backlog 8, item 7).
 - Seen: the night side from orbit, a herd grazing, a sea stack, the ruin's
   moss after the change, and a bridge in a town on the coast. Ships were
   not looked at again (colour mottle only).
+
+## The shore, and what floats on it
+
+**Pale glassy shards stood over every low coast, and three wrong causes
+were ruled out before the right one.** Wave fold-over was real (the trains'
+steepness summed to 0.83, past a fold once shoaled — halved now) and fixing
+it changed nothing about the shards; neither did a river-settle edit, a
+below-ground discard, killing the waves, the ice, the inland flag or the
+ripple bump. What found it was **colouring the water by its own facet
+normal**: near-vertical faces of water along the shore.
+
+**The cause is the ramp in `liftOf`.** Land rises to `LAND_CLEARANCE` over
+a band of height either side of nought, so land with a height just over
+nought is drawn _under_ `SEA_RADIUS`. The dry vertex next to the sea then
+held its sheet at `ground − DRY` — below the sea — and the triangle from
+the sea vertex ran down into the beach as a tilted pane. Now a dry vertex
+whose ground lies under the water beside it holds the sheet **level** at
+that water's height (`patch-data.ts`), and every dry vertex carries
+`dry = 1`: the water fades clear towards one and is discarded among them
+(`detail.ts`). The shore reads as turquoise shallows going over sand.
+`patch-data.test.ts` → "holds the sheet level over land sunk below the sea
+beside it" fails without the rule, on a real coast of seed 83tzj46.
+
+**`inland` is settled from the wet neighbours too** (`terrain.ts`): every
+dry vertex's sheet sits above sea level wherever its ground does, so read
+raw it called the whole coast a lake and blended lake shading into every
+shore triangle.
+
+**Ships ride the swell (`swell.ts`).** The swell heaves about five times a
+hull's height, so a ship at a fixed height sailed under a blue lid of sea.
+The four Gerstner trains are one table: the water's shader is generated
+from it (`SWELL_TRAINS_GLSL`) and `swellHeaveAt` lifts hulls and wakes by
+the same heave, faded with distance as the shader fades it. It reads the
+open-sea swell only — no shoaling, ice or inland damping — which is right
+on the lanes and slightly low in the shallows by a harbour.

@@ -101,6 +101,58 @@ describe('samplePatch', () => {
   })
 })
 
+describe('the water past a shore', () => {
+  // A coast of seed 83tzj46 where the ramp up from the sea floor leaves
+  // the lowest land under the sea's surface (surface-data.ts).
+  const coastSeed = parseSeed('83tzj46')
+  if (coastSeed === undefined) throw new Error('coast seed must parse')
+  const coastSegments = 32
+  const coast = samplePatch(
+    createPlanet(coastSeed),
+    { face: 4, level: 5, x: 19, y: 12 },
+    coastSegments,
+  )
+  const side = coastSegments + 1
+  const radius = (vertex: number): number => Math.hypot(...at(coast.positions, vertex))
+
+  it('marks dry only the vertices the water does not cover', () => {
+    for (let vertex = 0; vertex < side * side; vertex += 1) {
+      if ((coast.dry[vertex] ?? 0) === 0)
+        expect(coast.water[vertex]).toBeGreaterThan(radius(vertex))
+    }
+  })
+
+  it('holds the sheet level over land sunk below the sea beside it, rather than tilting it into the beach', () => {
+    let sunk = 0
+    for (let j = 0; j < side; j += 1) {
+      for (let i = 0; i < side; i += 1) {
+        const vertex = j * side + i
+        if ((coast.dry[vertex] ?? 0) === 0 || radius(vertex) >= SEA_RADIUS) continue
+        let bySea = false
+        for (let dj = -1; dj <= 1; dj += 1) {
+          for (let di = -1; di <= 1; di += 1) {
+            const ni = i + di
+            const nj = j + dj
+            if (ni < 0 || nj < 0 || ni >= side || nj >= side) continue
+            const near = nj * side + ni
+            if (
+              (coast.dry[near] ?? 0) === 0 &&
+              Math.abs((coast.water[near] ?? 0) - SEA_RADIUS) < 1e-6
+            )
+              bySea = true
+          }
+        }
+        if (!bySea) continue
+        sunk += 1
+        // Dropped under its own ground, the sheet ran down from the sea
+        // into the beach and stood over a coastal plain in glassy panes.
+        expect(coast.water[vertex]).toBeCloseTo(SEA_RADIUS, 6)
+      }
+    }
+    expect(sunk).toBeGreaterThan(0)
+  })
+})
+
 describe('groundRadiusAt', () => {
   it('puts the ground where the patches draw it, and never under the sea', () => {
     for (let vertex = 0; vertex < (segments + 1) ** 2; vertex += 7) {

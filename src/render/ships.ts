@@ -3,6 +3,7 @@ import * as THREE from 'three'
 import type { Vec3 } from '@/generation/cube'
 import type { Harbours } from '@/generation/harbours'
 
+import { swellHeaveAt } from './swell'
 import { SEA_RADIUS } from './water'
 import { weather } from './weathered'
 
@@ -159,8 +160,9 @@ export class Ships {
       const side = new THREE.Vector3().crossVectors(up, forward).normalize()
       this.basis.makeBasis(side, up, forward)
       this.turn.setFromRotationMatrix(this.basis)
-      // A gentle roll on the swell.
-      const bob = Math.sin(seconds * 1.3 + s * 2.1) * 0.00003
+      // Riding the swell the water draws (swell.ts), and a gentle roll on it.
+      const sea: Vec3 = [at[0] * SEA_RADIUS, at[1] * SEA_RADIUS, at[2] * SEA_RADIUS]
+      const bob = Math.sin(seconds * 1.3 + s * 2.1) * 0.00003 + swellHeaveAt(sea, seconds, eye)
       this.place.set(...at).multiplyScalar(SEA_RADIUS + RIDE + bob)
       this.matrix.compose(this.place, this.turn, this.size)
       this.hulls.setMatrixAt(s, this.matrix)
@@ -174,7 +176,10 @@ export class Ships {
         dir.addScaledVector(pu, -dir.dot(pu)).normalize()
         const across = new THREE.Vector3().crossVectors(pu, dir).normalize()
         const half = 0.00006 + k * 0.00003
-        const r = SEA_RADIUS + 0.00004
+        const r =
+          SEA_RADIUS +
+          0.00004 +
+          swellHeaveAt([p[0] * SEA_RADIUS, p[1] * SEA_RADIUS, p[2] * SEA_RADIUS], seconds, eye)
         const v = (s * WAKE_POINTS + k) * 6
         for (const [o, sign] of [
           [0, -1],

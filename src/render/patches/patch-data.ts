@@ -44,6 +44,12 @@ export interface PatchData {
    */
   readonly water: Float32Array
   /**
+   * 1 where the vertex is dry and its sheet is only held there for the
+   * shore to meet, 0 where it is under water: the water fades out towards
+   * a dry vertex and is not drawn among them (detail.ts).
+   */
+  readonly dry: Float32Array
+  /**
    * How the ground reads close up, four weights a vertex — canopy, sand,
    * snow, stone (see `patternAt`) — which the ground shader draws as tree
    * crowns, wind ripples, carved ridges and cracks.
@@ -206,6 +212,7 @@ export function samplePatch(planet: Planet, key: PatchKey, segments: number): Pa
   const towns = townCoverOf(planet)
   const ground = new Float32Array(vertexCount(segments) * 8)
   const water = new Float32Array(vertexCount(segments))
+  const dry = new Float32Array(vertexCount(segments))
   const wetted = new Float32Array(side * side)
   // Any water's surface radius — sea, lake or river — over the whole ring,
   // borders included, so a shore at a patch's edge is read the same from
@@ -383,7 +390,15 @@ export function samplePatch(planet: Planet, key: PatchKey, segments: number): Pa
         positions[vertex * 3 + 1] ?? 0,
         positions[vertex * 3 + 2] ?? 0,
       )
-      water[vertex] = spill > 0 ? Math.min(spill, ground - DRY) : ground - DRY
+      // Where the shore's ground has sunk below the water beside it — the
+      // ramp up from the sea floor (surface-data.ts) leaves the lowest land
+      // under the sea's surface — the sheet stays level over it rather than
+      // dropping under it. Dropped, it ran down from the water into the
+      // beach as a tilted pane, and a coastal plain stood in glassy shards.
+      // It is dry all the same: the water fades out towards it.
+      water[vertex] =
+        spill > ground ? spill : spill > 0 ? Math.min(spill, ground - DRY) : ground - DRY
+      dry[vertex] = 1
     }
   }
 
@@ -627,6 +642,7 @@ export function samplePatch(planet: Planet, key: PatchKey, segments: number): Pa
       for (let k = 0; k < 4; k += 1)
         coarsePattern[skirt * 4 + k] = coarsePattern[vertex * 4 + k] ?? 0
       water[skirt] = water[vertex] ?? 0
+      dry[skirt] = dry[vertex] ?? 0
       mist[skirt] = mist[vertex] ?? 0
       rapids[skirt] = rapids[vertex] ?? 0
       reef[skirt] = reef[vertex] ?? 0
@@ -659,6 +675,7 @@ export function samplePatch(planet: Planet, key: PatchKey, segments: number): Pa
     farm,
     ground,
     water,
+    dry,
   }
 }
 

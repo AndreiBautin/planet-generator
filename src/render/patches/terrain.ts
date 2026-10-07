@@ -552,6 +552,9 @@ export class Terrain {
         // their shores a sheet held under the dry ground (patch-data.ts).
         const level = patch.water[vertex] ?? 0
         const surface = level > 0 ? level : SEA_RADIUS
+        // Settled below for a dry vertex: a level above the sea's is not by
+        // itself a lake, since every dry vertex holds its sheet under its
+        // own ground.
         inland[vertex] = level > SEA_RADIUS + 1e-6 ? 1 : 0
         const coarse =
           surface -
@@ -576,6 +579,41 @@ export class Terrain {
         positions[vertex * 3 + 1] = (y / length) * surface
         positions[vertex * 3 + 2] = (z / length) * surface
       }
+      // A dry vertex's sheet is held under its own ground, above the sea's
+      // level wherever the ground is, and read as a lake for it: every
+      // triangle on a coast then blended sea and lake water, and the
+      // shallows stood over the beach in pale, glassy shards. A dry vertex
+      // takes its kind from the wet ones beside it instead — a lake's bank
+      // is lake, the sea's shore is sea.
+      const settled = inland.slice()
+      for (let vertex = 0; vertex < grid; vertex += 1) {
+        if ((patch.dry[vertex] ?? 0) === 0) continue
+        const i = vertex % side
+        const j = (vertex - i) / side
+        let lake = 0
+        for (let dj = -1; dj <= 1; dj += 1) {
+          for (let di = -1; di <= 1; di += 1) {
+            const ni = i + di
+            const nj = j + dj
+            if (ni < 0 || nj < 0 || ni >= side || nj >= side) continue
+            const near = nj * side + ni
+            if ((patch.dry[near] ?? 0) === 0) lake = Math.max(lake, inland[near] ?? 0)
+          }
+        }
+        settled[vertex] = lake
+      }
+      // The skirt follows the edge vertex it hangs from.
+      const edgeInland = new Map<string, number>()
+      for (let vertex = 0; vertex < count; vertex += 1) {
+        const key = keyOf(
+          patch.positions[vertex * 3] ?? 0,
+          patch.positions[vertex * 3 + 1] ?? 0,
+          patch.positions[vertex * 3 + 2] ?? 1,
+        )
+        if (vertex < grid) edgeInland.set(key, settled[vertex] ?? 0)
+        else settled[vertex] = edgeInland.get(key) ?? 0
+      }
+      inland.set(settled)
       const water = new THREE.BufferGeometry()
       water.setAttribute('position', new THREE.BufferAttribute(positions, 3))
       water.setAttribute('normal', new THREE.BufferAttribute(normals, 3))
@@ -585,6 +623,7 @@ export class Terrain {
       water.setAttribute('ice', new THREE.BufferAttribute(patch.ice, 2))
       water.setAttribute('mistTop', new THREE.BufferAttribute(patch.mist, 1))
       water.setAttribute('rapids', new THREE.BufferAttribute(patch.rapids, 1))
+      water.setAttribute('dry', new THREE.BufferAttribute(patch.dry, 1))
       water.setAttribute('current', new THREE.BufferAttribute(patch.current, 3))
       water.setAttribute('coarsePosition', new THREE.BufferAttribute(patch.coarsePositions, 4))
       water.setIndex(new THREE.BufferAttribute(this.index, 1))

@@ -7,6 +7,7 @@ import { DETAIL_MOONS, MOON_SHADOW } from './eclipse'
 import { withValleyFog } from './valley-fog'
 import { DETAIL_SEASON, LEAF_SEASON_GLSL } from './leaves'
 import { SEA_RADIUS } from './water'
+import { SWELL_FAR, SWELL_NEAR, SWELL_TRAINS, SWELL_TRAINS_GLSL } from './swell'
 import { CLOUD_FLOW, CLOUD_FLOW_LIFE, FLOW_GLSL } from './winds'
 
 /**
@@ -808,12 +809,12 @@ export function withWaterDetail(material: THREE.Material): THREE.Material {
     shader.uniforms.terrainMorphLod = TERRAIN_MORPH
     shader.vertexShader = (
       MORPH_DECLARE +
-      'attribute float coarseDepth;\nattribute vec2 ice;\nattribute float inland;\nattribute float rapids;\nattribute vec3 current;\nvarying float v_ice;\nvarying float v_inland;\nvarying float v_rapids;\nvarying vec3 v_current;\nvarying vec3 v_up;\n' +
+      'attribute float coarseDepth;\nattribute float dry;\nvarying float v_dry;\nattribute vec2 ice;\nattribute float inland;\nattribute float rapids;\nattribute vec3 current;\nvarying float v_ice;\nvarying float v_inland;\nvarying float v_rapids;\nvarying vec3 v_current;\nvarying vec3 v_up;\n' +
       shader.vertexShader
     )
       .replace(
         'void main() {',
-        'void main() {\n  float seaMorph = terrainMorphAt(position);\n  float seaDepth = mix(depth, coarseDepth, seaMorph);\n  v_ice = mix(ice.x, ice.y, seaMorph);\n  v_inland = inland;\n  v_rapids = rapids;\n  v_current = current;\n  v_up = normalize(normalMatrix * normalize(position));',
+        'void main() {\n  float seaMorph = terrainMorphAt(position);\n  float seaDepth = mix(depth, coarseDepth, seaMorph);\n  v_ice = mix(ice.x, ice.y, seaMorph);\n  v_inland = inland;\n  v_dry = dry;\n  v_rapids = rapids;\n  v_current = current;\n  v_up = normalize(normalMatrix * normalize(position));',
       )
       .replace('v_depth = depth;', 'v_depth = seaDepth;')
       .replace('smoothstep(0.0, 0.0004, depth)', 'smoothstep(0.0, 0.0004, seaDepth)')
@@ -836,21 +837,17 @@ export function withWaterDetail(material: THREE.Material): THREE.Material {
           // And calm under ice, which damps the sea: waves lifted the water
           // over the floes as the eye came down, and the ice drowned.
           // And none on a lake or river: a swell needs a sea's fetch.
-          float lift = (1.0 - smoothstep(0.02, 0.14, seaView)) * smoothstep(0.0, 0.0004, seaDepth) * (1.0 - smoothstep(0.05, 0.4, v_ice)) * (1.0 - inland);
+          float lift = (1.0 - smoothstep(${String(SWELL_NEAR)}, ${String(SWELL_FAR)}, seaView)) * smoothstep(0.0, 0.0004, seaDepth) * (1.0 - smoothstep(0.05, 0.4, v_ice)) * (1.0 - inland);
           float shoal = 1.0 + 0.7 * (1.0 - smoothstep(0.0, 0.004, depth));
-          // (direction, wavelength, steepness, period) for four trains.
-          vec4 trainA = vec4(0.3, 0.02, 0.16, 11.0);
-          vec4 trainB = vec4(1.9, 0.0105, 0.2, 7.5);
-          vec4 trainC = vec4(-0.8, 0.0055, 0.22, 5.2);
-          vec4 trainD = vec4(2.6, 0.0028, 0.25, 3.6);
-          vec4 trains[4];
-          trains[0] = trainA; trains[1] = trainB; trains[2] = trainC; trains[3] = trainD;
+          // (direction, wavelength, steepness, period) for each train, from
+          // the table the ships ride (swell.ts).
+          ${SWELL_TRAINS_GLSL}
           float nx = 0.0;
           float nz = 0.0;
           float ny = 1.0;
           float heave = 0.0;
           float span = 0.0;
-          for (int i = 0; i < 4; i++) {
+          for (int i = 0; i < ${String(SWELL_TRAINS.length)}; i++) {
             vec4 w = trains[i];
             vec3 d = cos(w.x) * east + sin(w.x) * north;
             float k = 6.2831853 / w.y;
@@ -893,12 +890,15 @@ export function withWaterDetail(material: THREE.Material): THREE.Material {
       value: seaIce instanceof THREE.Color ? seaIce : new THREE.Color(0.9, 0.94, 0.97),
     }
     shader.fragmentShader =
-      'uniform vec3 seaSky;\nuniform vec3 seaZenith;\nuniform vec3 seaIce;\nvarying vec3 v_up;\nvarying float v_ice;\nvarying float v_inland;\nvarying float v_rapids;\nvarying vec3 v_current;\nvarying float v_jac;\nvarying float v_heave;\n' +
+      'uniform vec3 seaSky;\nuniform vec3 seaZenith;\nuniform vec3 seaIce;\nvarying float v_dry;\nvarying vec3 v_up;\nvarying float v_ice;\nvarying float v_inland;\nvarying float v_rapids;\nvarying vec3 v_current;\nvarying float v_jac;\nvarying float v_heave;\n' +
       shader.fragmentShader
     shader.fragmentShader = shader.fragmentShader
       .replace(
         '#include <color_fragment>',
         /* glsl */ `#include <color_fragment>
+        // Among dry vertices the sheet is only held for the shore to meet
+        // (patch-data.ts): not drawn, and faded out towards one.
+        if (v_dry > 0.97) discard;
         float seaDistance = length(vViewPosition);
         float seaNear = 1.0 - smoothstep(0.015, 0.12, seaDistance);
         vec3 drift = vec3(detailTime * 0.9, detailTime * 0.6, -detailTime * 0.7) * 0.001;
@@ -1013,6 +1013,11 @@ export function withWaterDetail(material: THREE.Material): THREE.Material {
           vec3 mirrored = mix(seaSky, seaZenith, smoothstep(0.0, 0.45, rise));
           totalEmissiveRadiance += mirrored * mirror * (1.0 - white);
           diffuseColor.a = mix(diffuseColor.a, 1.0, mirror * 0.85);
+          // Clear towards the dry land, so the shore is wet sand going under
+          // rather than an edge of water standing on it.
+          float shoreClear = smoothstep(0.35, 0.97, v_dry);
+          totalEmissiveRadiance *= 1.0 - shoreClear;
+          diffuseColor.a *= 1.0 - shoreClear;
         }`,
       )
       .replace(
