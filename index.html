@@ -283,6 +283,99 @@
         color: #ffd27a;
         border-color: transparent;
       }
+      /* The map: under the clip's button; the sheet covers the view, the world laid flat. */
+      .map-button {
+        position: fixed;
+        top: calc(max(16px, env(safe-area-inset-top)) + 232px);
+        right: var(--gutter);
+        width: 48px;
+        padding: 0;
+        display: grid;
+        place-items: center;
+      }
+      .touring .map-button,
+      .postcarding .map-button,
+      .systeming .map-button {
+        display: none;
+      }
+      .map[hidden],
+      .map [hidden] {
+        display: none;
+      }
+      .map {
+        position: fixed;
+        inset: 0;
+        z-index: 20;
+        overflow-y: auto;
+        box-sizing: border-box;
+        padding: max(16px, env(safe-area-inset-top)) var(--gutter) 24px;
+        background: rgba(5, 6, 10, 0.86);
+        backdrop-filter: blur(14px);
+        -webkit-backdrop-filter: blur(14px);
+      }
+      .map-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        max-width: 1100px;
+        margin: 0 auto 12px;
+      }
+      .map h2 {
+        margin: 0;
+        font-size: 28px;
+        font-weight: 650;
+      }
+      .map-frame {
+        position: relative;
+        max-width: 1100px;
+        margin: 0 auto;
+        aspect-ratio: 2;
+        border: 1px solid rgba(255, 255, 255, 0.16);
+        border-radius: 6px;
+        overflow: hidden;
+        background: #0b0f18;
+      }
+      .map-canvas {
+        display: block;
+        width: 100%;
+        height: 100%;
+        image-rendering: pixelated;
+        cursor: crosshair;
+      }
+      .map-waiting {
+        position: absolute;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        margin: 0;
+        color: var(--dim);
+      }
+      .map-marker {
+        position: absolute;
+        width: 22px;
+        height: 22px;
+        margin: -11px 0 0 -11px;
+        pointer-events: none;
+        color: #fff;
+        filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.9));
+      }
+      .map-marker svg {
+        display: block;
+        transform: rotate(var(--bearing, 0deg));
+      }
+      .map-marker[data-flying='false'] .map-arrow,
+      .map-marker[data-flying='true'] .map-ring {
+        display: none;
+      }
+      .map-hint {
+        max-width: 1100px;
+        margin: 10px auto 0;
+        font-size: 13px;
+        color: var(--dim);
+      }
+      .flying .dive {
+        top: calc(max(16px, env(safe-area-inset-top)) + 290px);
+      }
       /* A clip: below the system's button, red and counting down while it records. */
       .clip {
         position: fixed;
@@ -885,6 +978,42 @@
       </header>
       <svg class="system-map" id="system-map" viewBox="-100 -48 200 96" aria-hidden="true"></svg>
       <ul class="system-list" id="system-list"></ul>
+    </section>
+    <button type="button" class="map-button" id="map-button" aria-label="Map of this world">
+      <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
+        <path
+          d="M3.5 6.5l5.5-2 6 2 5.5-2v13l-5.5 2-6-2-5.5 2z M9 4.5v13 M15 6.5v13"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.5"
+          stroke-linejoin="round"
+        />
+      </svg>
+    </button>
+    <section class="map" id="map" hidden aria-label="Map of this world">
+      <header class="map-head">
+        <h2 id="map-title">Map</h2>
+        <button type="button" id="map-close" aria-label="Close the map">Close</button>
+      </header>
+      <div class="map-frame">
+        <canvas class="map-canvas" id="map-canvas" width="2" height="1"></canvas>
+        <p class="map-waiting" id="map-waiting">Drawing the map…</p>
+        <span class="map-marker" id="map-marker" hidden>
+          <svg viewBox="0 0 22 22" width="22" height="22" aria-hidden="true">
+            <path class="map-arrow" d="M11 2l6 16-6-4-6 4z" fill="currentColor" />
+            <circle
+              class="map-ring"
+              cx="11"
+              cy="11"
+              r="6"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2.5"
+            />
+          </svg>
+        </span>
+      </div>
+      <p class="map-hint">Press anywhere on the map to fly there. M opens and closes it.</p>
     </section>
     <section class="atlas" id="atlas" hidden aria-label="Atlas of worlds">
       <header class="atlas-head">

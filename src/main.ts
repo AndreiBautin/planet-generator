@@ -34,6 +34,8 @@ import { systemOf, type SystemWorld } from '@/generation/system'
 import { attachSystem } from '@/ui/system-panel'
 import { keep, picture, visit } from '@/app/atlas'
 import { attachAtlas, pictureOf } from '@/ui/atlas-panel'
+import { attachMap } from '@/ui/map-panel'
+import type { WorldMap } from '@/generation/world-map'
 import { loadAtlas, saveAtlas } from '@/ui/atlas-store'
 
 /**
@@ -98,10 +100,11 @@ const recordClock = fixedClock(Number.isFinite(recordStart) && recordStart > 0 ?
 const clock = recording ? recordClock : systemClock
 const rig = createRig(clock, () => (direction) => groundRadiusAt(planet, direction))
 attachGestures(canvas, clock, rig.gestures)
+const builder = createBuilder(navigator.hardwareConcurrency)
 const scene = startScene(canvas, clock, rig.view, {
   manual: recording,
   quality,
-  builder: createBuilder(navigator.hardwareConcurrency),
+  builder,
   reducedMotion: window.matchMedia('(prefers-reduced-motion: reduce)').matches,
   assetBase: config.assetBase,
 })
@@ -418,6 +421,33 @@ document.getElementById('atlas-button')?.addEventListener('click', () => {
 })
 
 /**
+ * The map (generation/world-map.ts, ui/map-panel.ts): the world laid flat,
+ * drawn in the builder's worker the first time it is opened for a world
+ * and kept while that world is on screen. A press on it flies there.
+ */
+const MAP_WIDTH = 512
+let drawnMap: { key: string; map: Promise<WorldMap> } | undefined
+const mapPanel = attachMap({
+  onGo: (direction) => {
+    letGo()
+    rig.fly({ position: direction, heading: headingOf(direction, 0) })
+    hud.flying(true)
+  },
+})
+const openMap = (): void => {
+  if (journeying || postcard.isOpen() || rig.touring()) return
+  const key = `${seed}|${JSON.stringify(dials)}`
+  if (drawnMap?.key !== key) {
+    drawnMap = { key, map: builder.map(seed, dials, MAP_WIDTH) }
+  }
+  mapPanel.show(planet.name, drawnMap.map, () => ({
+    under: scene.underEye(),
+    facing: rig.flying() ? scene.eyeFacing() : undefined,
+  }))
+}
+document.getElementById('map-button')?.addEventListener('click', openMap)
+
+/**
  * The star system: zooming out past the farthest orbit, or the system
  * button, shows the star and its worlds; choosing one flies there in one
  * unbroken shot — the camera draws far back from this world with the
@@ -479,6 +509,10 @@ function takePicture(): void {
 // picture whether flying or not; making a postcard, P sends it and Escape
 // puts it away.
 window.addEventListener('keydown', (event) => {
+  if (mapPanel.isOpen()) {
+    if (event.key === 'Escape' || event.key === 'm' || event.key === 'M') mapPanel.hide()
+    return
+  }
   if (atlasPanel.isOpen()) {
     if (event.key === 'Escape') atlasPanel.hide()
     return
@@ -499,6 +533,10 @@ window.addEventListener('keydown', (event) => {
   if (event.target instanceof HTMLInputElement) return
   if (event.key === 'p' || event.key === 'P') {
     takePicture()
+    return
+  }
+  if (event.key === 'm' || event.key === 'M') {
+    openMap()
     return
   }
   if (!rig.flying()) return

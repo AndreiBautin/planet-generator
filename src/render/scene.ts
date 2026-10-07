@@ -150,6 +150,8 @@ export interface Scene {
   readonly sunInRoom: () => Vec3
   /** The point under the eye, a unit direction in the planet's own frame. */
   readonly underEye: () => Vec3
+  /** Which way the eye looks, a unit direction in the planet's own frame: for the map's marker. */
+  readonly eyeFacing: () => Vec3
   /** Where the sun is, as a direction in the planet's own frame, as it is turned now. */
   readonly sunInPlanet: () => Vec3
   readonly dispose: () => void
@@ -501,6 +503,7 @@ export function startScene(
   const meteors = new Meteors()
   scene.add(meteors.object)
   const meteorUp = new THREE.Vector3()
+  const eyeLook = new THREE.Vector3()
   const rainEye = new THREE.Vector3()
 
   const { quality, builder } = options
@@ -1428,6 +1431,7 @@ export function startScene(
       if (camera.position.lengthSq() < 1e-9) place(view(), lastTurn)
       return unit(inPlanetFrame(camera.position, lastTurn, 1))
     },
+    eyeFacing: () => unit(inPlanetFrame(camera.getWorldDirection(eyeLook), lastTurn, 1)),
     capture: () =>
       new Promise((resolve) => {
         tick()

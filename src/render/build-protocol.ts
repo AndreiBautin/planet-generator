@@ -2,6 +2,7 @@ import type { Dials } from '@/generation/planet'
 import type { Seed } from '@/generation/seed'
 import type { Harbours } from '@/generation/harbours'
 import type { Ruin } from '@/generation/ruins'
+import type { WorldMap } from '@/generation/world-map'
 
 import type { PatchKey } from './patches/cube'
 import type { PatchData } from './patches/patch-data'
@@ -23,10 +24,13 @@ export type WorkRequest =
   | (Planned & { readonly kind: 'patch'; readonly key: PatchKey; readonly segments: number })
   | (Planned & { readonly kind: 'lights' })
   | (Planned & { readonly kind: 'falls' })
+  | (Planned & { readonly kind: 'map'; readonly width: number })
 
 export type WorkResult =
   | { readonly id: number; readonly kind: 'clouds'; readonly texture: Uint8Array }
   | { readonly id: number; readonly kind: 'patch'; readonly patch: PatchData }
+  /** The world laid flat (generation/world-map.ts). */
+  | { readonly id: number; readonly kind: 'map'; readonly map: WorldMap }
   /** Waterfalls, five numbers each: the foot's direction, its ground radius, and how far it drops. */
   | { readonly id: number; readonly kind: 'falls'; readonly falls: Float32Array }
   /** Towns' lights, five numbers each: a position on the ground, brightness and warmth. */

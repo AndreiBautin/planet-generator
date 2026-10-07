@@ -1580,3 +1580,35 @@ and dawn and on through the night, and its tail 15–30° long.
 - Seen: the comet over the desert at dusk on `aaangxg`
   (`shot=g,-36.734,126.65,302,6.0,19.40,0`), and the oasis dark under it.
   Not seen: from orbit, a phone.
+
+## The world map
+
+`generation/world-map.ts` (`bakeMap`, `mapPoint`, `mapDirection`, tested)
+and `ui/map-panel.ts`: the map button (under the clip's) or **M** opens
+the world laid flat — latitude up the side, longitude across, the planet's
++z at the middle — and a press anywhere on it flies there, heading north.
+
+- **Drawn as the ground is from orbit**, from `surfaceAt`'s own colours,
+  shaded as if lit from the north-west so the ranges stand off the page,
+  with sea ice, lakes and the biggest rivers (the top 1.5% of the drainage
+  map's flow on land) drawn on, faint lines every thirty degrees, and the
+  towns as warm squares, larger for the larger.
+- **Baked in the builder's worker** (`kind: 'map'`), 512 across, the first
+  time it is opened for a world and kept until the seed or a dial changes:
+  about 130,000 surface samples is too slow for the page.
+- **Where the eye is**: a ring in orbit, an arrow the way it looks when
+  flying (`eyeFacing` on the scene, its bearing worked out along the
+  ground), moved every frame while the sheet is open.
+- **The pixel art is the point**: the canvas is drawn at 512 and shown
+  with `image-rendering: pixelated`, a chart in the PS1 manner rather
+  than a smoothed photograph.
+- **The Dive button moved down a place when flying** (+290) to make room.
+- **The browser pane's screenshot showed the map canvas filling the whole
+  view**, header and all gone — the tool captured the canvas, not the
+  page. The layout was checked by measuring instead: at 375 the map is
+  343 by 173 with nothing over the edge.
+- **Seasonal snow is not on the map**: it is `surfaceAt`'s colour, and the
+  season's snow is laid on in the ground's shader. A green valley on the
+  map can be white in midwinter when flown to.
+- Seen: maps of `k3m9xqa` and `83tzj46`, a press flying there and the
+  arrow following north; a molten world bakes (tested). Not seen: a real phone.

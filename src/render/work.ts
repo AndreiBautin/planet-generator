@@ -5,6 +5,7 @@ import { settlementsOf, townGlow } from '@/generation/settlements'
 import { waterfallsOf } from '@/generation/waterfalls'
 import { harboursOf } from '@/generation/harbours'
 import { ruinsOf } from '@/generation/ruins'
+import { bakeMap } from '@/generation/world-map'
 
 import { groundRadiusAt, samplePatch } from './patches/patch-data'
 import { bakeClouds } from './surface-data'
@@ -59,6 +60,8 @@ export function answer(request: WorkRequest): WorkResult {
       }
     case 'falls':
       return { id: request.id, kind: 'falls', falls: placedFalls(planet) }
+    case 'map':
+      return { id: request.id, kind: 'map', map: bakeMap(planet, request.width) }
   }
 }
 
@@ -110,6 +113,8 @@ export function transferables(result: WorkResult): Transferable[] {
       return [result.lights.buffer, result.glow.buffer, result.bridges.buffer]
     case 'falls':
       return [result.falls.buffer]
+    case 'map':
+      return [result.map.pixels.buffer, result.map.towns.buffer]
     case 'patch':
       return [
         result.patch.positions.buffer,

@@ -3,6 +3,7 @@ import type { Seed } from '@/generation/seed'
 import { logger } from '@/shared/logger'
 import type { Harbours } from '@/generation/harbours'
 import type { Ruin } from '@/generation/ruins'
+import type { WorldMap } from '@/generation/world-map'
 
 import type { WorkRequest, WorkResult } from './build-protocol'
 import type { PatchKey } from './patches/cube'
@@ -24,6 +25,8 @@ import { answer } from './work'
  */
 export interface Builder {
   readonly clouds: (seed: Seed, dials: Dials, width: number) => Promise<Uint8Array>
+  /** The world laid flat (generation/world-map.ts), `width` across. */
+  readonly map: (seed: Seed, dials: Dials, width: number) => Promise<WorldMap>
   /** A world's waterfalls (generation/waterfalls.ts), five numbers each (build-protocol.ts). */
   readonly falls: (seed: Seed, dials: Dials) => Promise<Float32Array>
   /** A lived-on world's lights (generation/settlements.ts), placed on its ground. */
@@ -138,6 +141,13 @@ export function createBuilder(cores: number): Builder {
       const result = await run({ id: next, kind: 'clouds', seed, dials, width }, -1)
       if (result.kind !== 'clouds') throw new Error('builder answered clouds with something else')
       return result.texture
+    },
+    map: async (seed, dials, width) => {
+      next += 1
+      // Asked for when the map is opened: wanted now, but not before the ground under the eye.
+      const result = await run({ id: next, kind: 'map', seed, dials, width }, -1)
+      if (result.kind !== 'map') throw new Error('builder answered a map with something else')
+      return result.map
     },
     lights: async (seed, dials) => {
       next += 1
