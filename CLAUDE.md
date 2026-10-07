@@ -1475,8 +1475,13 @@ all go at once.
   with no error on the page. Found by diffing the frame with the points on
   and off (nothing changed) after reproducing their arithmetic in
   JavaScript (they should have been there).
-- **Seen, not fixed**: close to a volcano at night its plume is a large
-  glowing mass over the vent — the existing lit puffs, before eruptions.
+- **Fixed since** (backlog 8): close to a volcano at night its plume was
+  a large glowing mass. Two causes, the second the bigger: the vent's
+  light was added to every young puff as raw orange, and the night ash
+  itself was 0.05 — far brighter than the black sky, so the whole column
+  read as lit. The vent now lights the smoke's own dark brown, mostly from
+  beneath and falling off fast with height, and the night ash is 0.012: a
+  dark shape against the stars with its foot glowing.
 - Seen: a fountain over a vent and three flows down its flank at night on
   `h999999`. Not seen: a fountain by day, a phone.
 

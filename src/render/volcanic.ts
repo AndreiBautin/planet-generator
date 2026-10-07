@@ -126,12 +126,20 @@ export function plumes(planet: Planet, volcanoes: readonly Volcano[]): THREE.Mes
         // Each puff lit on top and shadowed underneath, which is what gives
         // smoke its lumps; brown-grey ash, not white steam.
         float top = 0.6 + 0.4 * smoothstep(-0.8, 0.8, vCorner.y + (lump - 0.5) * 0.8);
-        vec3 ash = mix(vec3(0.05, 0.045, 0.045), vec3(0.27, 0.24, 0.22) * top * (0.8 + 0.3 * lump), vDay);
+        // At night a dark shape against the stars, its foot lit by the vent:
+        // at 0.05 it was brighter than the sky by far and read as a lit column.
+        vec3 ash = mix(vec3(0.012, 0.011, 0.011), vec3(0.27, 0.24, 0.22) * top * (0.8 + 0.3 * lump), vDay);
         // A little fiercer while erupting, no more: doubled, the lit puffs at
         // the vent swelled into one glowing ball over the summit.
-        float vent = exp(-vAge * 9.0) * vHeat * (0.85 + 0.35 * vErupting);
-        float under = exp(-vAge * 3.5) * smoothstep(-0.2, -1.0, vCorner.y) * 0.4 * vHeat;
-        vec3 colour = ash + vec3(1.0, 0.36, 0.07) * (vent * 2.0 + under);
+        float vent = exp(-vAge * 16.0) * vHeat * (0.85 + 0.35 * vErupting);
+        float under = exp(-vAge * 6.0) * smoothstep(-0.2, -1.0, vCorner.y) * 0.4 * vHeat;
+        // The vent's light is light on smoke, not a colour of its own: the
+        // ash's own dark brown lit a deep red-orange, mostly from beneath.
+        // Added as raw orange, every young puff glowed and stacked into
+        // one peach-coloured column over the summit at night.
+        float beneath = 0.35 + 0.65 * smoothstep(0.3, -0.8, vCorner.y + (lump - 0.5) * 0.6);
+        vec3 lit = vec3(0.27, 0.24, 0.22) * vec3(1.0, 0.42, 0.12);
+        vec3 colour = ash + lit * (vent * 2.6 * beneath + under * 2.0);
         gl_FragColor = vec4(colour, density * mix(0.85, 0.5, vAge));
         #include <tonemapping_fragment>
         #include <colorspace_fragment>
