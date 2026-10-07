@@ -1,13 +1,26 @@
-import { neighboursOf } from '@/generation/hydrology'
+import { cellCentre, neighboursOf } from '@/generation/hydrology'
+
+/**
+ * How many rings of cells round the eye's are held. Two were thought to
+ * reach two cells (0.0245) every way; measured, they reached only 0.0175
+ * near the edges of the cube's faces, where a step of one cell across the
+ * seam goes less far — inside where most things here fade out, so a
+ * flock or a balloon could appear part-grown there. Three reach just short
+ * of 0.0265 at the worst (measured over 3,200 eyes, scattered and crowded at the
+ * cube's corners and edges), outside every fade in use.
+ */
+export const RINGS = 3
+/** What the rings reach at the least, in radians: everything drawn must have faded by here. */
+export const HELD_REACH = 0.026
 
 /**
  * Things kept to the cells round the eye: a flock of birds, a school of
  * fish. Each cell of the drainage map has one or none, decided by `find`
- * and remembered; those of two rings of cells round the eye's cell are
- * held in a fixed number of slots, each keeping the slot it had while it
- * stays near, so nothing already drawn moves to another slot and pops.
- * The drawing fades things out well inside the rings' reach, so one
- * joining or leaving is never seen to.
+ * and remembered; those of `RINGS` rings of cells round the eye's cell
+ * are held in a fixed number of slots, each keeping the slot it had while
+ * it stays near, so nothing already drawn moves to another slot and pops.
+ * The drawing fades things out inside `HELD_REACH`, so one joining or
+ * leaving is never seen to.
  */
 export class NearCells<T> {
   private readonly slots: (number | undefined)[]
@@ -40,13 +53,25 @@ export class NearCells<T> {
   near(cell: number): boolean {
     if (cell === this.cell) return false
     this.cell = cell
-    const wanted = new Set<number>([cell])
-    for (const next of neighboursOf(cell)) {
-      wanted.add(next)
-      for (const further of neighboursOf(next)) wanted.add(further)
+    let wanted = new Set<number>([cell])
+    for (let ring = 0; ring < RINGS; ring += 1) {
+      const next = new Set(wanted)
+      for (const k of wanted) for (const n of neighboursOf(k)) next.add(n)
+      wanted = next
     }
-    const present = new Set<number>()
-    for (const k of wanted) if (this.thingIn(k) !== undefined) present.add(k)
+    // Nearest first: were the slots ever short, it is the far cells, past
+    // where anything is drawn, that go without.
+    const [ex, ey, ez] = cellCentre(cell)
+    const present = new Set<number>(
+      [...wanted]
+        .filter((k) => this.thingIn(k) !== undefined)
+        .map((k) => {
+          const [x, y, z] = cellCentre(k)
+          return { k, near: x * ex + y * ey + z * ez }
+        })
+        .sort((a, b) => b.near - a.near)
+        .map(({ k }) => k),
+    )
     // Free the slots of things no longer near; keep the rest where they are.
     this.slots.forEach((held, slot) => {
       if (held !== undefined && !present.has(held)) {

@@ -11,8 +11,8 @@ import { floorRadiusAt } from './patches/patch-data'
 import { SEA_RADIUS } from './water'
 
 /** The most schools drawn at once. */
-const MOST_SCHOOLS = 32
-/** How far off a fish can be seen, in radii, fading over the last third: as far as the water's haze lets anything be seen, and well inside the two rings of cells the schools are gathered from. */
+const MOST_SCHOOLS = 48
+/** How far off a fish can be seen, in radii, fading over the last third: as far as the water's haze lets anything be seen, and inside the rings of cells the schools are gathered from (near-cells.ts). */
 const SEEN = 0.02
 
 /**

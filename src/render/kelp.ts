@@ -11,7 +11,7 @@ import { floorRadiusAt } from './patches/patch-data'
 import { SEA_RADIUS } from './water'
 
 /** The most forests drawn at once. */
-const MOST_FORESTS = 24
+const MOST_FORESTS = 48
 /** Stalks in a forest. */
 const STALKS = 80
 /** Segments up a stalk. */

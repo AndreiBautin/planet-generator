@@ -10,8 +10,8 @@ import { groundRadiusAt } from './patches/patch-data'
 import { SEA_RADIUS } from './water'
 import { weather } from './weathered'
 
-/** The most herds drawn at once: two rings of cells round the eye's hold about a quarter of this. */
-const MOST_HERDS = 32
+/** The most herds drawn at once: the rings of cells round the eye hold up to 33 (measured). */
+const MOST_HERDS = 40
 /** How far off a beast is drawn, in radii; it shrinks away over the last third, where it is a few pixels. */
 const SEEN = 0.016
 /** Above this height, in radii, there are no herds to look for. */

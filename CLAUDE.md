@@ -1685,3 +1685,29 @@ houses' walls — wrapped round whatever patch the material already had.
   temperate village and the hot-wet one. Not seen close since the change:
   herds, sea stacks, bridges, lighthouses, ships, palms and camels — the
   patch is the same one, and the program for each compiled.
+
+## Nothing appears part-grown at the edge of reach
+
+**`NearCells` holds three rings of cells, and the two it held reached
+less far than everything here assumed.** Two rings were taken to reach
+two cells, 0.0245, every way; measured over thousands of eyes, they
+reached only 0.0175 near the edges of the cube's faces, where a step of
+one cell across the seam goes less far. Nearly everything held by them —
+flocks, fish, balloons, oases, caravans, sea stacks — fades out between
+0.02 and 0.026, so near a seam one could be met part-grown as its cell
+came into the rings. Three rings reach just short of 0.0265 at the worst
+(`HELD_REACH`, 0.026, held by a test scattered over the cube and crowded
+at its corners and edges).
+
+- **Nearest first.** The held cells are filled in order of nearness, so
+  were the slots ever short it is the far ones, past where anything is
+  drawn, that go without — a slot freed later would otherwise let a near
+  thing in all at once.
+- **Slots raised to fit**: 49 cells hold up to 43 schools of fish, 45
+  kelp beds and 33 herds on the worlds measured, so those went to 48, 48
+  and 40. Kelp already overflowed its 24 under two rings.
+- **Sea stacks fade by their cell's centre too**: the search for a coast
+  can carry a group half a cell outside its own cell, so its own distance
+  says nothing about whether its cell is held.
+- Checked: the reach by test, every program linking, the caravan still
+  drawn. Not measured: frame time with more schools and herds held.

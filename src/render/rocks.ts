@@ -2,7 +2,7 @@ import * as THREE from 'three'
 
 import { rocksIn, type Rocks } from '@/generation/coasts'
 import type { Vec3 } from '@/generation/cube'
-import { cellOf } from '@/generation/hydrology'
+import { cellCentre, cellOf } from '@/generation/hydrology'
 import type { Planet } from '@/generation/planet'
 
 import { fromPalette } from './colour'
@@ -21,6 +21,12 @@ const SPRAY = 10
 /** Where rocks shrink away into the sea, in radians from the eye: well inside the cells gathered. */
 const SHRINK_FROM = 0.018
 const GONE_AT = 0.026
+/**
+ * The same by the cell's centre, which is always inside the cell: gone by
+ * `HELD_REACH` (near-cells.ts), inside which every cell is held.
+ */
+const HOME_FROM = 0.021
+const HOME_GONE = 0.026
 /** Above this height there are no rocks to look for. */
 const HIGHEST_EYE = 0.06
 
@@ -40,12 +46,20 @@ export class CoastRocks {
   private readonly spray: THREE.Points
   private readonly sprayAt: Float32Array
   private readonly sprayOf: Float32Array
-  private readonly placed: { matrices: THREE.Matrix4[]; sprays: boolean[]; at: Vec3 }[] = []
+  private readonly placed: {
+    matrices: THREE.Matrix4[]
+    sprays: boolean[]
+    at: Vec3
+    /** The centre of the cell it belongs to: always inside it, unlike the stacks. */
+    home: Vec3
+  }[] = []
   private readonly near = new NearCells<Rocks>(
     MOST_GROUPS,
     (cell) => (this.world === undefined ? undefined : rocksIn(this.world, cell)),
-    (slot, _cell, rocks) => {
+    (slot, cell, rocks) => {
       this.build(slot, rocks)
+      const placed = this.placed[slot]
+      if (placed !== undefined) placed.home = cellCentre(cell)
     },
     (slot) => {
       this.clear(slot)
@@ -77,7 +91,7 @@ export class CoastRocks {
     this.pillars.instanceMatrix.setUsage(THREE.DynamicDrawUsage)
     for (let k = 0; k < MOST_GROUPS * PIECES; k += 1) this.pillars.setMatrixAt(k, this.gone)
     for (let k = 0; k < MOST_GROUPS; k += 1)
-      this.placed.push({ matrices: [], sprays: [], at: [0, 0, 1] })
+      this.placed.push({ matrices: [], sprays: [], at: [0, 0, 1], home: [0, 0, 1] })
     const count = MOST_GROUPS * PIECES * SPRAY
     this.sprayAt = new Float32Array(count * 3)
     this.sprayOf = new Float32Array(count * 4)
@@ -154,7 +168,16 @@ export class CoastRocks {
       const away = Math.acos(
         Math.min(1, slot.at[0] * under[0] + slot.at[1] * under[1] + slot.at[2] * under[2]),
       )
-      const shown = 1 - smooth(SHRINK_FROM, GONE_AT, away)
+      // Gone too by its cell's centre: the search for a coast can carry a
+      // group half a cell outside its own, past the rings of cells
+      // `NearCells` is sure to hold, where it could be met part-grown.
+      const home = Math.acos(
+        Math.min(1, slot.home[0] * under[0] + slot.home[1] * under[1] + slot.home[2] * under[2]),
+      )
+      const shown = Math.min(
+        1 - smooth(SHRINK_FROM, GONE_AT, away),
+        1 - smooth(HOME_FROM, HOME_GONE, home),
+      )
       for (let k = 0; k < PIECES; k += 1) {
         const at = s * PIECES + k
         const rest = slot.matrices[k]

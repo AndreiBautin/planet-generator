@@ -11,7 +11,7 @@ import { groundRadiusAt } from './patches/patch-data'
 import { VALLEY_FOG } from './valley-fog'
 import { SEA_RADIUS } from './water'
 
-/** The most flocks drawn at once: two rings of cells round the eye's hold about a quarter of this. */
+/** The most flocks drawn at once: the rings of cells round the eye hold fewer than this (measured: 25 at most). */
 const MOST_FLOCKS = 32
 /** How far off a bird can be seen, in radii; it fades out over the last third. */
 const SEEN = 0.02
@@ -26,7 +26,7 @@ const HIGHEST_EYE = 0.06
  * PS1 way, every wingbeat and turn a function of time in the vertex
  * shader, so nothing moves on the page frame by frame.
  *
- * The flocks are those of the cells in two rings round the eye; a bird
+ * The flocks are those of the cells in the rings round the eye; a bird
  * fades out well inside the reach of those rings, so a flock joining or
  * leaving the set is never seen to.
  */

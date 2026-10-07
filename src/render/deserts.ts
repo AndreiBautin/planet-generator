@@ -18,7 +18,7 @@ const MOST_CAMELS = 8
 /**
  * Where things shrink away into the sand, in radians from the eye — from
  * the point each is placed by, which is always inside its own cell, so
- * inside the two rings of cells `NearCells` holds (two cells, 0.0245)
+ * inside the rings of cells `NearCells` holds (`HELD_REACH`, 0.026)
  * whenever it is drawn at all. At 0.03 an oasis out at the edge could
  * appear part-grown as its cell came into the rings.
  */

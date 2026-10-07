@@ -20,8 +20,8 @@ const MOST_MEETS = 12
 const MOST_SHIPS = 8
 /**
  * Where they shrink away, in radians from the eye, measured from the point
- * each is anchored to — always inside its own cell, so inside the two rings
- * of cells `NearCells` holds (two cells, 0.0245) whenever it is drawn at all.
+ * each is anchored to — always inside its own cell, so inside the rings
+ * of cells `NearCells` holds (`HELD_REACH`, 0.026) whenever it is drawn at all.
  */
 const SHRINK_FROM = 0.015
 const GONE_AT = 0.023
