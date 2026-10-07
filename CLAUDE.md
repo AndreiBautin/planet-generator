@@ -1023,3 +1023,24 @@ beams fall exactly where the picture shows a gap.
   the fade (0.012) and a seen one was five pixels long. They fade at 0.02
   now, as far as the haze lets anything be seen, and are drawn larger than
   life, as the birds are.
+
+## Sister worlds and the galaxy
+
+- **The galaxy's band** (`galaxyBand` in generation/stars.ts; drawn in
+  `buildSky`): its plane from the seed, 6000 faint stars crowded along it
+  as a bell either side and clumped into a few clouds, and behind them a
+  soft glow, mottled, edge frayed, with a dark lane down its middle. The
+  first glow was a broad even grey sweep; narrowed and made clumpier.
+  Fades with the stars by day (the sky's opacity now walks its children).
+- **Sister worlds** (`skyWorlds` in generation/system.ts, tested;
+  `render/sisters.ts`): the system's other worlds where they would stand
+  from here, the star in the sun's direction and the orbits in the plane
+  holding it and the horizontal square to it. Brightness with size
+  squared, over the square of the distance between and of the world's own
+  distance from the star, and with how much of its lit face is turned
+  this way — beyond the star full, between a dark crescent (which can
+  still out-shine a far full one, being near: the test says so). Drawn as
+  small discs with a glow, in pale versions of their colours, coming out
+  a little before the stars. Recomputed only when the sun moves.
+- Seen: an evening star over a sunset from a glide, and the band behind
+  the planet from orbit.

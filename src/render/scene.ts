@@ -4,7 +4,7 @@ import type { Clock } from '@/app/clock'
 import { sunDeclination, surfaceAt, type Planet } from '@/generation/planet'
 import { createRng } from '@/generation/rng'
 import { RING_BANDS, satellitesOf } from '@/generation/satellites'
-import { starField } from '@/generation/stars'
+import { galaxyBand, starField } from '@/generation/stars'
 import { logger } from '@/shared/logger'
 
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js'
@@ -31,6 +31,9 @@ import { spray } from './waterfalls'
 import { Birds } from './birds'
 import { Meteors } from './meteors'
 import { Fish } from './fish'
+import { SisterWorlds } from './sisters'
+import type { StarSystem } from '@/generation/system'
+import type { Seed } from '@/generation/seed'
 import { SUNBEAM_SHADER, sunbeamStrength } from './sunbeams'
 import { MarineSnow, underwaterAt, WATER_FOG_DENSITY, waterFog } from './underwater'
 import { DETAIL_CLOUD_MOONS, DETAIL_MOONS, moonShadow, type MoonDisc } from './eclipse'
@@ -41,6 +44,7 @@ import { Lightning, rainShafts, SHAFT_LIGHT } from './weather'
 import {
   DETAIL_AURORA,
   DETAIL_UNDER,
+  NOISE,
   DETAIL_CITIES,
   DETAIL_CITY_LIGHT,
   DETAIL_CLOUD_LAYER_SUN,
@@ -110,6 +114,8 @@ export interface Scene {
   }
   /** Sound on or off (sound.ts), from inside a press; says which it is now. */
   readonly toggleSound: () => boolean
+  /** The star system this world is in, and which of its worlds it is: for its sisters in the sky (sisters.ts). */
+  readonly setSystem: (system: StarSystem | undefined, from: Seed) => void
   /** The sound as a stream for a clip, once it has ever played (sound.ts). */
   readonly soundStream: () => MediaStream | undefined
   /** Called after every frame is drawn, while the canvas still holds it: for a clip. */
@@ -442,6 +448,8 @@ export function startScene(
   scene.add(marineSnow.object)
   const fish = new Fish()
   scene.add(fish.object)
+  const sisters = new SisterWorlds(pixelRatio)
+  scene.add(sisters.object)
   const waterColour = new THREE.Color()
   const deepBackground = new THREE.Color()
   let underSide: THREE.Side = THREE.FrontSide
@@ -853,8 +861,15 @@ export function startScene(
       .copy(sunDirection)
       .transformDirection(camera.matrixWorldInverse)
       .multiplyScalar(low * day)
-    const stars: unknown = shown?.sky.material
-    if (stars instanceof THREE.PointsMaterial) stars.opacity = 1 - low * (1 - starlit) * 0.95
+    const starsSeen = 1 - low * (1 - starlit) * 0.95
+    // The stars, the galaxy's band behind them, and the sister worlds.
+    shown?.sky.traverse((node) => {
+      const material: unknown = (node as THREE.Points).material
+      if (material instanceof THREE.PointsMaterial) material.opacity = starsSeen
+      else if (material instanceof THREE.ShaderMaterial && material.uniforms.bandSeen !== undefined)
+        material.uniforms.bandSeen.value = starsSeen
+    })
+    sisters.update(camera.position, camera.far * 0.85, sunDirection, starsSeen)
   }
 
   const tick = (): void => {
@@ -1060,6 +1075,7 @@ export function startScene(
       shown.heavens.group.visible = air
     }
     if (!air) {
+      sisters.object.visible = false
       birds.object.visible = false
       meteors.object.visible = false
       rain.object.visible = false
@@ -1139,6 +1155,9 @@ export function startScene(
     root: scene,
     toggleSound: () => sound.toggle(),
     soundStream: () => sound.stream(),
+    setSystem: (system, from) => {
+      sisters.setSystem(system, from)
+    },
     onFrame: (listener) => {
       frameListener = listener
     },
@@ -1325,21 +1344,69 @@ function ringsOnGround(heavens: Heavens): void {
 
 function buildSky(world: Planet, pixelRatio: number): THREE.Points {
   const stars = starField(createRng(world.seed).fork('stars'), 2500, STAR_RADIUS)
-  const geometry = new THREE.BufferGeometry()
-  geometry.setAttribute('position', new THREE.BufferAttribute(stars.positions, 3))
-  geometry.setAttribute('color', new THREE.BufferAttribute(stars.colours, 3))
-  return new THREE.Points(
-    geometry,
-    new THREE.PointsMaterial({
-      size: 1.2 * pixelRatio,
-      sizeAttenuation: false,
-      vertexColors: true,
-      toneMapped: false,
-      // Stars are far beyond the air and must not take the haze's colour.
-      fog: false,
+  const points = (positions: Float32Array, colours: Float32Array, size: number): THREE.Points => {
+    const geometry = new THREE.BufferGeometry()
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3))
+    geometry.setAttribute('color', new THREE.BufferAttribute(colours, 3))
+    return new THREE.Points(
+      geometry,
+      new THREE.PointsMaterial({
+        size: size * pixelRatio,
+        sizeAttenuation: false,
+        vertexColors: true,
+        toneMapped: false,
+        // Stars are far beyond the air and must not take the haze's colour.
+        fog: false,
+        transparent: true,
+      }),
+    )
+  }
+  const sky = points(stars.positions, stars.colours, 1.2)
+  // The galaxy's band (stars.ts): thousands of faint stars crowded along a
+  // great circle, and behind them a soft glow, mottled, so it reads as a
+  // band of light and not a stripe of dots.
+  const band = galaxyBand(createRng(world.seed).fork('galaxy'), 6000, STAR_RADIUS * 0.995)
+  sky.add(points(band.positions, band.colours, 1))
+  const glow = new THREE.Mesh(
+    new THREE.SphereGeometry(STAR_RADIUS * 0.99, 48, 24),
+    new THREE.ShaderMaterial({
+      side: THREE.BackSide,
       transparent: true,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+      uniforms: {
+        bandNormal: { value: new THREE.Vector3(...band.normal) },
+        bandSeen: { value: 1 },
+      },
+      vertexShader: /* glsl */ `
+        varying vec3 vSky;
+        void main() {
+          vSky = normalize(position);
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+      `,
+      fragmentShader: /* glsl */ `
+        uniform vec3 bandNormal;
+        uniform float bandSeen;
+        varying vec3 vSky;
+        ${NOISE}
+        void main() {
+          float off = dot(vSky, bandNormal);
+          float mottle = detailNoise(vSky * 6.0) * 0.6 + detailNoise(vSky * 17.0) * 0.4;
+          // Its edge frayed by the same mottle, so it is not a ruled stripe.
+          float edge = off + (detailNoise(vSky * 9.0 + 4.0) - 0.5) * 0.06;
+          float band = exp(-edge * edge / 0.005);
+          // A dark lane down its middle, as dust splits the real one.
+          float lane = 1.0 - 0.6 * exp(-pow((off + (mottle - 0.5) * 0.03) / 0.014, 2.0));
+          float light = band * (0.15 + 1.4 * pow(mottle, 1.6)) * lane * bandSeen;
+          gl_FragColor = vec4(vec3(0.62, 0.62, 0.74) * light * 0.13, 1.0);
+        }
+      `,
     }),
   )
+  glow.renderOrder = -2
+  sky.add(glow)
+  return sky
 }
 
 /**

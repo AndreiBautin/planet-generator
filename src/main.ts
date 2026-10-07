@@ -119,6 +119,8 @@ const show = async (born: boolean): Promise<void> => {
   // False when a later planet was asked for first; that one will clear the
   // forming state when it arrives.
   if (!(await scene.show(next, { born }))) return
+  // Its sister worlds in the sky (render/sisters.ts).
+  scene.setSystem(systemOf(home), seed)
   document.body.classList.remove('forming')
   logger.info('planet.shown', { seed, kind: next.kind })
   remember(next)
