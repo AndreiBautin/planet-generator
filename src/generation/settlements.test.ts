@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
+import { hydrologyOf, waterAt } from './hydrology'
 import { createPlanet, surfaceAt } from './planet'
 import { parseSeed } from './seed'
 import { settlementsOf } from './settlements'
@@ -13,6 +14,18 @@ const planetOf = (raw: string): ReturnType<typeof createPlanet> => {
 describe('settlements', () => {
   const temperate = planetOf('83tzj46')
   const settled = settlementsOf(temperate)
+
+  it('puts no light on a river or a lake: each is a house, seen close to', () => {
+    const water = hydrologyOf(temperate)
+    const near = new Map<number, readonly number[]>()
+    const { lights } = settled
+    for (let k = 0; k < lights.length; k += 5 * 7) {
+      const d: [number, number, number] = [lights[k] ?? 0, lights[k + 1] ?? 0, lights[k + 2] ?? 1]
+      const here = waterAt(temperate, water, d, near)
+      expect(here.river).toBeLessThan(0.2)
+      expect(Number.isFinite(here.lake)).toBe(false)
+    }
+  })
 
   it('lives on temperate worlds and not on molten or frozen ones', () => {
     expect(temperate.kind).toBe('temperate')

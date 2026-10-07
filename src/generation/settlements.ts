@@ -1,5 +1,5 @@
 import type { Vec3 } from './cube'
-import { cellCentre, hydrologyOf, neighboursOf, RIVER_FLOW } from './hydrology'
+import { cellCentre, hydrologyOf, neighboursOf, RIVER_FLOW, waterAt } from './hydrology'
 import { surfaceAt, type Planet } from './planet'
 import { createRng } from './rng'
 
@@ -134,7 +134,16 @@ function settle(planet: Planet): Settlements {
   }))
 
   const lights: number[] = []
-  const dry = (d: Vec3): boolean => surfaceAt(planet, d[0], d[1], d[2]).height > 0
+  // Dry means off the sea and off the rivers and lakes too: each light is a
+  // house when seen close to (render/towns.ts), and one standing in a river
+  // channel or on a waterfall's lip was the first thing a low pass showed.
+  const near = new Map<number, readonly number[]>()
+  const dry = (d: Vec3): boolean => {
+    if (surfaceAt(planet, d[0], d[1], d[2]).height <= 0) return false
+    const length = Math.hypot(d[0], d[1], d[2]) || 1
+    const here = waterAt(planet, water, [d[0] / length, d[1] / length, d[2] / length], near)
+    return here.river < 0.2 && !Number.isFinite(here.lake)
+  }
   const light = (d: Vec3, bright: number, warm: number): void => {
     const length = Math.hypot(d[0], d[1], d[2]) || 1
     lights.push(d[0] / length, d[1] / length, d[2] / length, bright, warm)

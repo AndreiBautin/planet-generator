@@ -1044,3 +1044,27 @@ beams fall exactly where the picture shows a gap.
   a little before the stars. Recomputed only when the sun moves.
 - Seen: an evening star over a sunset from a glide, and the band behind
   the planet from orbit.
+
+## Towns you can see
+
+`render/towns.ts`. The buildings and roads are **made from the lights**
+(settlements.ts, placed on the drawn ground in the worker): each light of
+a town is a house, and the fainter lights strung between towns are a
+road, so a house stands wherever a window is lit at night and the two
+cannot disagree.
+
+- **Houses**: boxes with pitched roofs, white to ochre walls, red roofs,
+  bigger towards a town's bright heart, each turned its own way and sunk a
+  little so a slope does not stand it on a corner. Instanced, one mesh per
+  cell of the drainage map, so only cells near the eye are drawn; they grow
+  up out of the ground from 0.05 to 0.032 radii rather than appearing.
+- **Roads**: a narrow strip along each run of road lights, broken where
+  two lights are further apart than 0.0045 (another road), faded with
+  distance as the houses grow.
+- **Town lights now keep off rivers and lakes** (settlements.ts, `dry`,
+  tested): the first low pass showed houses standing in a river channel
+  and on a waterfall's lip. That moves the lights too, which is right.
+- **The threshold between a town's light and a road's is 0.44**, not the
+  0.45 a town light starts at: stored as a float32, 0.45 comes back a hair
+  under it, and the faintest houses vanished.
+- Not done: trees still grow among the houses.

@@ -31,6 +31,7 @@ import { spray } from './waterfalls'
 import { Birds } from './birds'
 import { Meteors } from './meteors'
 import { Fish } from './fish'
+import { Towns, townSites } from './towns'
 import { SisterWorlds } from './sisters'
 import type { StarSystem } from '@/generation/system'
 import type { Seed } from '@/generation/seed'
@@ -448,6 +449,7 @@ export function startScene(
   scene.add(marineSnow.object)
   const fish = new Fish()
   scene.add(fish.object)
+  let towns: Towns | undefined
   const sisters = new SisterWorlds(pixelRatio)
   scene.add(sisters.object)
   const waterColour = new THREE.Color()
@@ -600,6 +602,7 @@ export function startScene(
     // The towns' lights, on a world that has towns: made in a worker, and
     // added if this ground is still the one on screen when they come.
     DETAIL_CITY_LIGHT.value = 0
+    towns = undefined
     if (next.world.kind === 'temperate' || next.world.kind === 'oceanic') {
       const ground = next.terrain
       void options.builder.lights(next.world.seed, next.world.dials).then(({ lights, glow }) => {
@@ -608,6 +611,10 @@ export function startScene(
         if (points === undefined) return
         points.userData.withGround = true
         ground.group.add(points)
+        // The buildings and roads those lights belong to, seen close to (towns.ts).
+        towns = new Towns(townSites(lights))
+        towns.group.userData.withGround = true
+        ground.group.add(towns.group)
         const map = new THREE.DataTexture(glow, CITY_GLOW_WIDTH, CITY_GLOW_WIDTH / 2)
         map.magFilter = THREE.LinearFilter
         map.minFilter = THREE.LinearFilter
@@ -991,6 +998,7 @@ export function startScene(
           (1 - smooth(0.04, 0.12, camera.position.length() / stage.scale - 1)),
         stage.scale,
       )
+      towns?.update(inPlanetFrame(camera.position, turn, stage.scale), stage.scale)
       fish.update(
         inPlanetFrame(camera.position, turn, stage.scale),
         shown.terrain.group.matrixWorld,
