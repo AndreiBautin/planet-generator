@@ -2,6 +2,7 @@ import * as THREE from 'three'
 
 import { DETAIL_CLOUD_SUN, DETAIL_NORMAL_MATRIX, TERRAIN_MORPH } from '../detail'
 import { DETAIL_MOONS, MOON_SHADOW } from '../eclipse'
+import { DETAIL_SEASON, LEAF_SEASON_GLSL } from '../leaves'
 import { withValleyFog } from '../valley-fog'
 import type { PatchData } from './patch-data'
 
@@ -276,7 +277,8 @@ export function treeMaterial(): THREE.MeshStandardMaterial {
     shader.uniforms.treeNormalMatrix = DETAIL_NORMAL_MATRIX
     shader.uniforms.detailMoons = DETAIL_MOONS
     shader.uniforms.treeSun = DETAIL_CLOUD_SUN
-    shader.vertexShader = (TREE_VERTEX + shader.vertexShader)
+    shader.uniforms.detailSeason = DETAIL_SEASON
+    shader.vertexShader = (TREE_VERTEX + LEAF_SEASON_GLSL + shader.vertexShader)
       .replace(
         '#include <beginnormal_vertex>',
         /* glsl */ `#include <beginnormal_vertex>
@@ -291,6 +293,11 @@ export function treeMaterial(): THREE.MeshStandardMaterial {
         ${TREE_PLACE}
         float packed = treeLook.y;
         vTreeTint = vec3(floor(packed / 65536.0), mod(floor(packed / 256.0), 256.0), mod(packed, 256.0)) / 255.0;
+        // A broadleaf through the year (leaves.ts), and a conifer in four
+        // that is a larch: the temperate woods here are mostly conifer, and
+        // with the broadleaves alone a whole autumn turned a tree in ten.
+        float turns = max(treeFate.z, step(0.75, fract(treeWood.x * 7.31)) * 0.9);
+        vTreeTint = mix(vTreeTint, leafColour(vTreeTint, leafSeason(up, treeWood.x), treeWood.x), turns);
         vTreeHeight = position.y;
         vTreeUp = normalize(normalMatrix * up);
         vTreePlanet = transformed;`,

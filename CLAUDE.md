@@ -1357,3 +1357,33 @@ screen** — its matrices were checked numerically (on the shore, along
 - Seen: the fan at sunset on the modest profile (`?cores=4`, 375 × 812).
   Not measured: what it costs on a real phone, which is the checklist's
   job.
+
+## Autumn and spring
+
+`render/leaves.ts` (`leafSeason`, tested; the same rule as GLSL for the
+trees in `patches/forest.ts` and the woods painted on the ground in
+`detail.ts`): the Season dial turns the woods — red, orange and gold in
+autumn, bare grey-brown twigs in winter, fresh green in spring with now and
+then a tree in pink-white blossom. Each tree a few days before or after its
+neighbours by its own roll, so a wood colours in patches.
+
+- **The default equinox (0.25) stays summer green everywhere**, so every
+  link made before this opens on the same woods. That fixed the edges of
+  the windows: the south runs half a year on, so its phase at the default
+  is 0.75, and spring begun at 0.72 opened the south in blossom; winter
+  ending at 0.75 caught it too. Autumn now starts at 0.27, winter ends by
+  0.72 and spring starts at 0.78 — the gaps between are plain green.
+- **The band is lower than Earth's**: these worlds are colder, their woods
+  growing mostly between about 6 and 23 degrees with snow from about 40, so
+  the first band (17 to 30 degrees) found almost no trees to turn. Out of
+  the tropics from about 6 degrees, full by about 14.
+- **One conifer in four turns too, as a larch.** The temperate woods here
+  are nearly all conifer — `featuresAt` gave broadleaf at most 0.13 on
+  `83tzj46` — and with the broadleaves alone an autumn turned a tree in ten.
+- **How strong is the planet's lean**: `seasonStrength`, nothing below
+  about 2 degrees, full by about 14.
+- Seen: gold and orange larches among the dark conifers in autumn (`s=35`),
+  a bare one in winter (`s=58`). **From orbit the change is faint** — the
+  woods painted on the ground take it, but there the canopy is a dark tone
+  more than a colour. Not seen: blossom, which wants a broadleaf wood in
+  spring.

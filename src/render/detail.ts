@@ -5,6 +5,7 @@ import type { GroundKind } from './ground-atlas'
 import type { GroundTextures } from './textures'
 import { DETAIL_MOONS, MOON_SHADOW } from './eclipse'
 import { withValleyFog } from './valley-fog'
+import { DETAIL_SEASON, LEAF_SEASON_GLSL } from './leaves'
 import { SEA_RADIUS } from './water'
 import { CLOUD_FLOW, CLOUD_FLOW_LIFE, FLOW_GLSL } from './winds'
 
@@ -373,8 +374,10 @@ export function withGroundDetail(
         declare += `uniform sampler2D ground${name}Normal;\n`
       }
     }
+    shader.uniforms.detailSeason = DETAIL_SEASON
     shader.fragmentShader =
       declare +
+      LEAF_SEASON_GLSL +
       /* glsl */ `
       // A texture laid on from three sides and blended by which way the
       // ground faces, so a sphere carries it with no stretching anywhere.
@@ -612,6 +615,11 @@ export function withGroundDetail(
           float tone = (0.34 + broad * 0.2) * (0.7 + crown * 0.55);
           detailShade *= mix(1.0, tone, canopy);
           diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(0.7, 0.95, 0.78), canopy);
+          // The broadleaf part of a wood through the year (leaves.ts), as
+          // the trees standing on it are: the conifers keep their green.
+          vec3 leafAt = leafSeason(normalize(vDetailPosition), broad);
+          float broadleaves = (1.0 - v_ground.x * 0.75) * canopy;
+          diffuseColor.rgb = mix(diffuseColor.rgb, leafColour(diffuseColor.rgb, leafAt, broad) * 0.55, broadleaves * (leafAt.x + leafAt.y + leafAt.z));
           detailHeight += (crown - 0.5) * 2.0 * canopy;
           detailRough = mix(detailRough, 0.95, canopy);
         }

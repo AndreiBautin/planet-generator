@@ -35,6 +35,7 @@ import { Herds } from './herds'
 import { Kelp } from './kelp'
 import { SeaLight } from './sea-light'
 import { Rainbow, rainbowStrength } from './rainbow'
+import { DETAIL_SEASON, seasonStrength } from './leaves'
 import { Ships } from './ships'
 import { SunFan } from './sun-fan'
 import { Lighthouses } from './lighthouses'
@@ -607,6 +608,8 @@ export function startScene(
     birds.setWorld(next.world)
     herds.setWorld(next.world)
     fish.setWorld(next.world)
+    // The woods' colours through the year (leaves.ts).
+    DETAIL_SEASON.value.set(next.world.dials.season, seasonStrength(next.world.tilt))
     kelp.setWorld(next.world)
     meteors.setWorld(next.world.seed)
     // Smoke from a molten world's peaks, turning with its ground.
