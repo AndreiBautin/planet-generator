@@ -1910,3 +1910,31 @@ discriminant).
 whitewater, on purpose**: the river falls from the town to the sea, its
 `rapids` read 1 throughout, and a waterfall is drawn solid white so it
 reads from afar. Left as it is.
+
+## The glide clears the trees
+
+**The glide kept its distance from the ground alone, and at its lowest
+flew through the pines.** Its floor is `canopyRadiusAt` now
+(`patch-data.ts`, wired in `main.ts`): the ground plus `TREE_TOP` where
+the patches would grow a wood, read from the same canopy and groves the
+ground is painted from — so over open grass and the sea nothing changes.
+`groundRadiusAt` stays the floor for everything that stands _on_ the
+ground. It costs about what `groundRadiusAt` does (0.03 ms a call,
+measured).
+
+**And it looks to either side** (`groundAhead` in `glide.ts`, `ABREAST`):
+skimming a coast it passed a shore pine broadside, close enough to fill
+half the view, because only the line ahead was sampled.
+
+**What actually filled the view was a stand-in's tree.** While finer
+patches load, a coarse patch stands in close to the eye (`TERRAIN_STATS`
+read 170 stand-ins, the nearest 0.0066 away), and its trees are each
+drawn for 4^(6 − level) trees at a far patch's distance — a level-4 pine
+0.0068 tall, 0.005 from the eye. The forest shader caps a tree's height
+at 0.35 of its distance from the eye, never below the finest level's
+tallest (`forest.ts`). Normal LOD never meets the cap: a level-5 tree is
+capped only nearer than 0.012 and a level-4 one nearer than 0.019, far
+inside where those levels are drawn. **The record mode makes this easy to
+see and the real flight can hit it too**: stepping frames faster than the
+workers build patches leaves stand-ins near the eye, which a slow device
+does as well.

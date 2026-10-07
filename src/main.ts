@@ -6,7 +6,7 @@ import { KINDS } from '@/generation/kinds'
 import { createPlanet, DEFAULT_DIALS, type Dials, type Planet } from '@/generation/planet'
 import { newSeed, type Seed } from '@/generation/seed'
 import { createBuilder } from '@/render/builder'
-import { floorRadiusAt, groundRadiusAt } from '@/render/patches/patch-data'
+import { canopyRadiusAt, floorRadiusAt } from '@/render/patches/patch-data'
 import { pickQuality } from '@/render/quality'
 import { startScene } from '@/render/scene'
 import { logger, setLogLevel } from '@/shared/logger'
@@ -98,7 +98,8 @@ const recording = config.developer && new URLSearchParams(window.location.search
 const recordStart = Number(new URLSearchParams(window.location.search).get('record'))
 const recordClock = fixedClock(Number.isFinite(recordStart) && recordStart > 0 ? recordStart : 1000)
 const clock = recording ? recordClock : systemClock
-const rig = createRig(clock, () => (direction) => groundRadiusAt(planet, direction))
+// Over the trees as well as the ground: at its lowest the glide flew through the pines.
+const rig = createRig(clock, () => (direction) => canopyRadiusAt(planet, direction))
 attachGestures(canvas, clock, rig.gestures)
 const builder = createBuilder(navigator.hardwareConcurrency)
 const scene = startScene(canvas, clock, rig.view, {

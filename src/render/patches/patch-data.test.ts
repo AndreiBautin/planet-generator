@@ -4,6 +4,7 @@ import { createPlanet, type Surface } from '@/generation/planet'
 import { parseSeed, type Seed } from '@/generation/seed'
 
 import {
+  canopyRadiusAt,
   groundOf,
   groundRadiusAt,
   patchIndex,
@@ -150,6 +151,25 @@ describe('the water past a shore', () => {
       }
     }
     expect(sunk).toBeGreaterThan(0)
+  })
+})
+
+describe('canopyRadiusAt', () => {
+  it('stands over the ground, never under it, and over the trees where a wood grows', () => {
+    let wooded = 0
+    for (let k = 0; k < 400; k += 1) {
+      const a = k * 2.399963
+      const z = 1 - (2 * (k + 0.5)) / 400
+      const r = Math.sqrt(1 - z * z)
+      const direction = [Math.cos(a) * r, Math.sin(a) * r, z] as const
+      const ground = groundRadiusAt(planet, direction)
+      const canopy = canopyRadiusAt(planet, direction)
+      expect(canopy).toBeGreaterThanOrEqual(ground)
+      // A tree at the finest level stands up to 1.4 × 0.0015.
+      if (canopy - ground > 0.0021) wooded += 1
+    }
+    // The glide flew through the pines when it kept off the ground alone.
+    expect(wooded).toBeGreaterThan(0)
   })
 })
 

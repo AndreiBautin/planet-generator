@@ -48,6 +48,8 @@ export const MAX_ALTITUDE = 0.12
 export const START_ALTITUDE = 0.016
 /** However the eye is easing, it never comes closer to the ground than this. */
 const CLEARANCE = 0.0025
+/** How far to either side of its line the flight looks for rising ground and trees, in radians. */
+const ABREAST = 0.0025
 /** How far ahead the flight looks for rising ground, in seconds of travel. */
 const LOOK_AHEAD_SECONDS = 1.6
 /** How quickly the eye settles onto its height: by e every 1/RATE seconds. */
@@ -198,13 +200,28 @@ export function pinchGlide(glide: Glide, factor: number): Glide {
   return { ...glide, altitude: clamp(glide.altitude / factor, MIN_ALTITUDE, MAX_ALTITUDE) }
 }
 
-/** The highest ground over the next stretch of the flight path. */
+/**
+ * The highest ground over the next stretch of the flight path, and a
+ * little to either side of it: along the line alone, the glide skimmed a
+ * coast at its lowest and passed a shore pine close enough to fill half
+ * the view.
+ */
 function groundAhead(glide: Glide, ground: Ground): number {
   const axis = unit(cross(glide.position, glide.heading))
   const reach = speedOf(glide) * LOOK_AHEAD_SECONDS
   let highest = ground(glide.position)
   for (let step = 1; step <= 4; step += 1) {
-    highest = Math.max(highest, ground(rotate(glide.position, axis, (reach * step) / 4)))
+    const ahead = rotate(glide.position, axis, (reach * step) / 4)
+    highest = Math.max(highest, ground(ahead))
+    if (step % 2 === 0) {
+      // Out to either side, a wingspan away, along the line's own sides.
+      const along = unit(cross(axis, ahead))
+      highest = Math.max(
+        highest,
+        ground(rotate(ahead, along, ABREAST)),
+        ground(rotate(ahead, along, -ABREAST)),
+      )
+    }
   }
   return highest
 }

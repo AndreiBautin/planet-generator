@@ -259,6 +259,15 @@ const TREE_PLACE = /* glsl */ `
   // Shared with the parent: grows to its size. Not: shrinks away.
   float fate = treeFate.y > 0.5 ? mix(1.0, 2.0, morph) : 1.0 - morph;
   float size = treeLook.x * ${TREE_HEIGHT.toFixed(6)} * fate * present;
+  // A coarse patch's trees stand for many and are drawn for its distance;
+  // stood in close to the eye while the finer patches load, they were
+  // drawn there at four times a tree's height, and the glide passed a
+  // single pine filling half the view. Never taller than a share of their
+  // distance — and never shorter than the finest level's tallest, so the
+  // trees the eye flies among are untouched.
+  float treeScale = length((modelMatrix * vec4(1.0, 0.0, 0.0, 0.0)).xyz);
+  float treeAway = length((modelViewMatrix * vec4(ground, 1.0)).xyz) / max(treeScale, 1e-6);
+  size = min(size, max(${(TREE_HEIGHT * 1.4).toFixed(6)}, treeAway * 0.35));
   vec3 up = normalize(ground);
   mat3 frame = treeFrame(up, treeWood.x * 40.0);
   // Set a little into the ground, so a trunk on a slope is not floating.

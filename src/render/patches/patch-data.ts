@@ -141,6 +141,29 @@ function drawnHeight(
   }
 }
 
+/** The tallest a tree stands near the eye, in radii (forest.ts: a size of 1.4 at the finest level), with a little to spare. */
+const TREE_TOP = 0.0024
+
+/**
+ * What something flying low over a wood must clear: the ground, and the
+ * trees on it where the patches would grow a wood (the same canopy and
+ * groves the ground is painted from). The glide kept its distance from
+ * the ground alone, and at its lowest flew through the pines.
+ */
+export function canopyRadiusAt(
+  planet: Planet,
+  direction: readonly [number, number, number],
+): number {
+  const [x, y, z] = direction
+  const length = Math.hypot(x, y, z) || 1
+  const ground = groundRadiusAt(planet, direction)
+  const surface = surfaceAt(planet, x / length, y / length, z / length)
+  if (surface.height < 0) return ground
+  const grove = groupingsAt(planet, x / length, y / length, z / length).grove
+  const wood = patternAt(planet, surface, 0).canopy * Math.min(1, grove * 1.4)
+  return ground + TREE_TOP * Math.min(1, wood * 2)
+}
+
 /**
  * How far from the centre the drawn ground is in a direction, and never
  * below the sea: what something flying low must stay above. The same
