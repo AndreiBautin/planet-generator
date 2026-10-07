@@ -31,6 +31,7 @@ import { spray } from './waterfalls'
 import { Birds } from './birds'
 import { Meteors } from './meteors'
 import { Fish } from './fish'
+import { Herds } from './herds'
 import { Kelp } from './kelp'
 import { SeaLight } from './sea-light'
 import { Ships } from './ships'
@@ -448,6 +449,8 @@ export function startScene(
   scene.add(embers.object)
   const birds = new Birds()
   scene.add(birds.object)
+  const herds = new Herds()
+  scene.add(herds.object)
   const marineSnow = new MarineSnow()
   scene.add(marineSnow.object)
   const fish = new Fish()
@@ -589,6 +592,7 @@ export function startScene(
     }
     scene.add(next.terrain.group)
     birds.setWorld(next.world)
+    herds.setWorld(next.world)
     fish.setWorld(next.world)
     kelp.setWorld(next.world)
     meteors.setWorld(next.world.seed)
@@ -1070,6 +1074,11 @@ export function startScene(
         shown.terrain.group.matrixWorld,
         stage.scale,
       )
+      herds.update(
+        inPlanetFrame(camera.position, turn, stage.scale),
+        shown.terrain.group.matrixWorld,
+        DETAIL_TIME.value,
+      )
       embers.update(
         rainEye,
         shown.world.molten
@@ -1143,6 +1152,7 @@ export function startScene(
     if (!air) {
       sisters.object.visible = false
       birds.object.visible = false
+      herds.object.visible = false
       meteors.object.visible = false
       rain.object.visible = false
     }

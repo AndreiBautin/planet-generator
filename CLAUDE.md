@@ -1224,3 +1224,35 @@ screen** — its matrices were checked numerically (on the shore, along
   image. A frame-to-frame difference with the shafts on and off found no
   recurring jump.
 - Not seen: a phone, and kelp at night.
+
+## Herds
+
+- **Where** (`generation/herds.ts`, tested): at most a herd to a drainage
+  cell, on rolls of their own apart from the birds, on open `land` — not
+  the shore, the high ground or the snow, not where it is too cold for
+  grass, and **not in the woods** (`featuresAt`'s trees over 0.4), where
+  a herd would stand inside the trees. More where it is grassland than
+  scrub. Three coats by the land: tawny on warm dry plains, brown in the
+  temperate grass, dark where it is cold. The first thresholds (trees
+  under 0.25, a third the chance) left this world with almost none: seven
+  in ten land cells carry more trees than that.
+- **Drawn** (`render/herds.ts`) as boxes in the PS1 way — a body with a
+  higher rump, four legs, a tail, and a head on a neck that pivots at the
+  shoulders: down to graze most of the time, up now and then to look
+  round. **Instanced meshes in the scene's own light and fog**, not a
+  shader of their own, so a herd is lit and hazed exactly as the ground
+  under it; with a little of their own coat as light, since flanks away
+  from a high sun went black against ground the terrain lights more
+  kindly.
+- **The ground is measured once per beast**, when its herd comes near:
+  each stands where it was placed, turning slowly and shuffling a step
+  back and forth, so nothing samples the surface frame by frame. A beast
+  in the water or on ground too steep to stand on (the rise over two body
+  lengths) is not drawn.
+- **Larger than life**, as the birds and trees are: at 0.00013 a herd
+  under a glide was specks beside trees ten times its height. 0.0002 now,
+  and spread over 0.0011.
+- Kept round the eye by `NearCells`; a beast shrinks away between 0.0104
+  and 0.016 from the eye, where it is a few pixels, rather than vanishing.
+- Seen: a tawny herd of fifteen grazing on a hillside from a glide. Not
+  seen: the dark kind, a herd at dusk, a phone.
