@@ -127,7 +127,16 @@ export class Herds {
         continue
       }
       this.at.set(b[o] ?? 0, b[o + 1] ?? 0, b[o + 2] ?? 1)
-      const away = Math.hypot(this.at.x - eye[0], this.at.y - eye[1], this.at.z - eye[2])
+      // From where the beast stands, not from its direction at radius one:
+      // measured from the unit sphere, the ground's own height counted as
+      // distance, and on any land much above the sea the herds were never
+      // near enough to show.
+      const r = b[o + 3] ?? 1
+      const away = Math.hypot(
+        this.at.x * r - eye[0],
+        this.at.y * r - eye[1],
+        this.at.z * r - eye[2],
+      )
       const shown = 1 - smooth(SEEN * 0.65, SEEN, away)
       if (shown <= 0) {
         this.bodies.setMatrixAt(k, this.gone)

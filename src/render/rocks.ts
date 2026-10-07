@@ -81,8 +81,9 @@ export class CoastRocks {
     // on the tops, dark and wet at the foot where the sea works at it.
     weather(this.material, {
       rough: 0.05,
-      mottle: 0.3,
-      grain: 9000,
+      // Soft and broad: at 0.3 and a finer grain a stack read as camouflage print.
+      mottle: 0.14,
+      grain: 4000,
       top: { colour: [0.36, 0.42, 0.24], amount: 0.45 },
       foot: { dark: 0.4, height: 0.15 },
       own: 0.35,

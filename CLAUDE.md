@@ -1793,3 +1793,29 @@ every weathered model alike (backlog 8, item 7).
   carry that, not the ground's glow.
 - Seen: the village at dusk, night and dawn side by side, and the night
   side from orbit. Not seen: a town on a cold or a desert world at night.
+
+## From orbit, and the last models looked at
+
+- **The blobs over the night side were lighthouse beams.** Measured by
+  hiding each object in turn over the brightest blob: 98% of it was the
+  beams, sized and lit for the coast seen from low over it, so from orbit
+  each turning beam was a great soft patch over every harbour and the
+  bloom made it bigger. They fade out with distance now (gone a fifth of a
+  radius off); the night side reads as strings of town lights along the
+  coasts and roads.
+- **Herds never showed on land much above the sea.** Their fade measured
+  from each beast's direction on the unit sphere rather than where it
+  stands, so the ground's own height counted as distance; with the eye
+  0.016 off the beasts gone, anything standing much above radius one was
+  always too far. Measured from where the beast stands now; seen grazing.
+- **The moss went on the sides too.** `weathered.ts` read up-ness from the
+  models' smoothed normals, which lean upward towards a top edge, so a sea
+  stack's sides took the lichen in blotches — camouflage print. Up-ness is
+  the facet's own now, from its slope on screen (`dFdx`/`dFdy` of the view
+  position, scaled before crossing and turned to face the eye — three's
+  `vViewPosition` runs from the surface _to_ the eye, and the first build
+  had it backwards and found no tops at all). The stack's mottle is softer
+  and broader as well.
+- Seen: the night side from orbit, a herd grazing, a sea stack, the ruin's
+  moss after the change, and a bridge in a town on the coast. Ships were
+  not looked at again (colour mottle only).

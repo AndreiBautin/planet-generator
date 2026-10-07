@@ -216,8 +216,14 @@ function beamMaterial(): THREE.ShaderMaterial {
       void main() {
         vAlong = along;
         vAcross = across;
-        vNight = instanceColor.r;
-        gl_Position = projectionMatrix * modelViewMatrix * instanceMatrix * vec4(position, 1.0);
+        // A beam is for the coast seen from low over it; from orbit a turning
+        // beam was a great soft blob over every harbour, and the bloom made
+        // it bigger. Gone by the time the eye is a fifth of a radius off.
+        vec4 world = modelMatrix * instanceMatrix * vec4(position, 1.0);
+        float scale = length(modelMatrix[0].xyz);
+        float away = distance(world.xyz, cameraPosition) / max(scale, 1e-6);
+        vNight = instanceColor.r * (1.0 - smoothstep(0.06, 0.2, away));
+        gl_Position = projectionMatrix * viewMatrix * world;
       }
     `,
     fragmentShader: /* glsl */ `

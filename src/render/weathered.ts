@@ -124,7 +124,19 @@ export function weather(material: THREE.Material, w: Weathering): void {
           ${
             w.top === undefined
               ? ''
-              : `float weatherUpness = dot(normalize(vWeatherNormal), normalize(vWeatherWorld));
+              : `// Up-ness of the facet as drawn, from its own slope on screen: the
+          // models' smoothed normals lean upward towards a top edge, and a
+          // sea stack's sides took the moss in blotches, like camouflage.
+          // Scaled before crossing: a pixel's step across a small model is
+          // tiny, and its square underflowed to a face facing nowhere.
+          vec3 weatherDx = dFdx(vViewPosition);
+          vec3 weatherDy = dFdy(vViewPosition);
+          float weatherSpan = max(max(length(weatherDx), length(weatherDy)), 1e-20);
+          vec3 weatherFace = normalize(cross(weatherDx / weatherSpan, weatherDy / weatherSpan));
+          // Turned to face the eye, as any drawn face does: three's
+          // vViewPosition runs from the surface to the eye.
+          if (dot(weatherFace, vViewPosition) < 0.0) weatherFace = -weatherFace;
+          float weatherUpness = dot(weatherFace, vWeatherViewUp);
           float weatherTop = smoothstep(0.35, 0.75, weatherUpness) * smoothstep(0.38, 0.55, weatherN);
           diffuseColor.rgb = mix(diffuseColor.rgb, ${glslVec3(w.top.colour)}, weatherTop * ${glslFloat(w.top.amount)});`
           }
