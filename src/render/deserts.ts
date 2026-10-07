@@ -16,6 +16,16 @@ const MOST_CARAVANS = 16
 const MOST_PALMS = 16
 const MOST_CAMELS = 8
 /**
+ * The green ring round a pool, draped over the ground rather than laid
+ * flat: rings out from the middle and points round each. A flat disc across
+ * a dune was two fifths under the sand (measured: 41% of it drawn and
+ * hidden), and an oasis never moves, so the ground is measured under each
+ * point once, when it comes near.
+ */
+const GREEN_RINGS = 4
+const GREEN_ROUND = 16
+const GREEN_POINTS = 1 + GREEN_RINGS * GREEN_ROUND
+/**
  * Where things shrink away into the sand, in radians from the eye — from
  * the point each is placed by, which is always inside its own cell, so
  * inside the rings of cells `NearCells` holds (`HELD_REACH`, 0.026)
@@ -71,7 +81,10 @@ interface Way {
 export class Deserts {
   readonly group = new THREE.Group()
   private readonly pools: THREE.InstancedMesh
-  private readonly greens: THREE.InstancedMesh
+  private readonly greens: THREE.Mesh
+  /** Each oasis's green ring as measured, and its middle, to shrink it towards. */
+  private readonly greenRest = new Float32Array(MOST_OASES * GREEN_POINTS * 3)
+  private readonly greenMiddle = new Float32Array(MOST_OASES * 3)
   private readonly palms: THREE.InstancedMesh
   private readonly camels: THREE.InstancedMesh
   private readonly oases: Placed[] = []
@@ -122,13 +135,23 @@ export class Deserts {
       return material
     }
     const disc = new THREE.CircleGeometry(1, 20).rotateX(-Math.PI / 2)
-    this.greens = new THREE.InstancedMesh(
-      disc,
+    this.greens = new THREE.Mesh(
+      greenGeometry(),
       lit(
-        new THREE.MeshStandardMaterial({ color: new THREE.Color(0.18, 0.32, 0.1), roughness: 1 }),
+        new THREE.MeshStandardMaterial({
+          color: new THREE.Color(0.18, 0.32, 0.1),
+          roughness: 1,
+          side: THREE.DoubleSide,
+          // Drawn a touch nearer than it stands: between the points it was
+          // measured at, the drawn sand can rise above it.
+          polygonOffset: true,
+          polygonOffsetFactor: -2,
+          polygonOffsetUnits: -4,
+        }),
       ),
-      MOST_OASES,
     )
+    this.greens.frustumCulled = false
+    this.group.add(this.greens)
     this.pools = new THREE.InstancedMesh(disc, poolMaterial(this.daylight), MOST_OASES)
     this.palms = new THREE.InstancedMesh(
       palmGeometry(),
@@ -147,7 +170,7 @@ export class Deserts {
       lit(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9 })),
       MOST_CARAVANS * MOST_CAMELS,
     )
-    for (const mesh of [this.greens, this.pools, this.palms, this.camels]) {
+    for (const mesh of [this.pools, this.palms, this.camels]) {
       mesh.frustumCulled = false
       mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage)
       for (let k = 0; k < mesh.count; k += 1) mesh.setMatrixAt(k, this.gone)
@@ -191,8 +214,8 @@ export class Deserts {
       1 - smooth(SHRINK_FROM, GONE_AT, Math.acos(Math.min(1, dot(at, under))))
     this.oases.forEach((placed, s) => {
       const shown = placed.matrices.length === 0 ? 0 : shownAt(placed.at)
-      const [green, pool, ...palms] = placed.matrices
-      this.set(this.greens, s, green, shown, false)
+      const [pool, ...palms] = placed.matrices
+      this.drape(s, shown)
       this.set(this.pools, s, pool, shown, false)
       for (let k = 0; k < MOST_PALMS; k += 1)
         this.set(this.palms, s * MOST_PALMS + k, palms[k], shown, true)
@@ -236,8 +259,25 @@ export class Deserts {
         this.camels.setMatrixAt(at, this.matrix)
       }
     })
-    for (const mesh of [this.greens, this.pools, this.palms, this.camels])
-      mesh.instanceMatrix.needsUpdate = true
+    for (const mesh of [this.pools, this.palms, this.camels]) mesh.instanceMatrix.needsUpdate = true
+    this.greens.geometry.getAttribute('position').needsUpdate = true
+  }
+
+  /** Lay an oasis's green ring where it was measured, shrunk towards its middle by `shown`. */
+  private drape(slot: number, shown: number): void {
+    const position = this.greens.geometry.getAttribute('position')
+    const mx = this.greenMiddle[slot * 3] ?? 0
+    const my = this.greenMiddle[slot * 3 + 1] ?? 0
+    const mz = this.greenMiddle[slot * 3 + 2] ?? 0
+    for (let k = 0; k < GREEN_POINTS; k += 1) {
+      const at = slot * GREEN_POINTS + k
+      position.setXYZ(
+        at,
+        mx + ((this.greenRest[at * 3] ?? 0) - mx) * shown,
+        my + ((this.greenRest[at * 3 + 1] ?? 0) - my) * shown,
+        mz + ((this.greenRest[at * 3 + 2] ?? 0) - mz) * shown,
+      )
+    }
   }
 
   /** Put one instance at its resting matrix, shrunk towards its foot by `shown`; `upright` shrinks it all ways. */
@@ -265,17 +305,40 @@ export class Deserts {
     placed.matrices = []
     const up = new THREE.Vector3(...oasis.at)
     const turn = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), up)
-    const radius = groundRadiusAt(world, oasis.at)
-    // The green ring, then the pool, a hair over the ground so neither is
-    // lost in it; on a slope the ground's own rise covers their far edge.
+    // The green ring draped over the ground, a hair above it.
+    for (let ring = 0, k = 0; ring <= GREEN_RINGS; ring += 1) {
+      for (let round = 0; round < (ring === 0 ? 1 : GREEN_ROUND); round += 1, k += 1) {
+        const point =
+          ring === 0
+            ? oasis.at
+            : around(
+                oasis.at,
+                (oasis.pool * 2.4 * ring) / GREEN_RINGS,
+                (round / GREEN_ROUND) * Math.PI * 2,
+              )
+        const lift = groundRadiusAt(world, point) + 0.00006
+        this.greenRest.set(
+          [point[0] * lift, point[1] * lift, point[2] * lift],
+          (slot * GREEN_POINTS + k) * 3,
+        )
+        this.greens.geometry
+          .getAttribute('normal')
+          .setXYZ(slot * GREEN_POINTS + k, point[0], point[1], point[2])
+        if (ring === 0)
+          this.greenMiddle.set([point[0] * lift, point[1] * lift, point[2] * lift], slot * 3)
+      }
+    }
+    this.greens.geometry.getAttribute('normal').needsUpdate = true
+    // The pool a hair over the ground at its middle: where the sand rises
+    // across it, it covers the water's edge, and that reads as the shore.
+    // Both other levels were tried and were worse: at the highest ground
+    // under it the pool floated over its hollow like a plate on a stalk,
+    // and at the lowest on its rim — these pools stand on slopes, not in
+    // hollows — it was buried whole.
+    const level = groundRadiusAt(world, oasis.at)
     placed.matrices.push(
       new THREE.Matrix4().compose(
-        up.clone().multiplyScalar(radius + 0.00003),
-        turn,
-        new THREE.Vector3(oasis.pool * 2.4, 1, oasis.pool * 2.4),
-      ),
-      new THREE.Matrix4().compose(
-        up.clone().multiplyScalar(radius + 0.00005),
+        up.clone().multiplyScalar(level + 0.00005),
         turn,
         new THREE.Vector3(oasis.pool, 1, oasis.pool),
       ),
@@ -494,4 +557,32 @@ const unit = (v: Vec3): Vec3 => {
 const smooth = (low: number, high: number, value: number): number => {
   const t = Math.min(1, Math.max(0, (value - low) / (high - low)))
   return t * t * (3 - 2 * t)
+}
+
+/** The green rings of every oasis slot: a fan at the middle, then quads ring to ring. */
+function greenGeometry(): THREE.BufferGeometry {
+  const index: number[] = []
+  for (let slot = 0; slot < MOST_OASES; slot += 1) {
+    const base = slot * GREEN_POINTS
+    const at = (ring: number, round: number): number =>
+      ring === 0 ? base : base + 1 + (ring - 1) * GREEN_ROUND + (round % GREEN_ROUND)
+    for (let round = 0; round < GREEN_ROUND; round += 1) {
+      index.push(at(0, 0), at(1, round + 1), at(1, round))
+      for (let ring = 1; ring < GREEN_RINGS; ring += 1) {
+        index.push(at(ring, round), at(ring, round + 1), at(ring + 1, round))
+        index.push(at(ring, round + 1), at(ring + 1, round + 1), at(ring + 1, round))
+      }
+    }
+  }
+  const geometry = new THREE.BufferGeometry()
+  const position = new THREE.BufferAttribute(new Float32Array(MOST_OASES * GREEN_POINTS * 3), 3)
+  position.setUsage(THREE.DynamicDrawUsage)
+  geometry.setAttribute('position', position)
+  // Lit as the ground under it is: facing straight up wherever it lies.
+  geometry.setAttribute(
+    'normal',
+    new THREE.BufferAttribute(new Float32Array(MOST_OASES * GREEN_POINTS * 3), 3),
+  )
+  geometry.setIndex(index)
+  return geometry
 }

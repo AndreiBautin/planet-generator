@@ -1711,3 +1711,25 @@ at its corners and edges).
   says nothing about whether its cell is held.
 - Checked: the reach by test, every program linking, the caravan still
   drawn. Not measured: frame time with more schools and herds held.
+
+## Nothing buried in the ground it stands on
+
+The drawn ground is a mesh that runs straight between its vertices, and
+`groundRadiusAt` is the true height between them: on rough ground the two
+part by more than a small model's height (the camels were buried whole,
+see Deserts). Each model was measured by drawing it with the depth test
+on and off and counting what the ground hid.
+
+- **The oasis's green ring was a flat disc** across dunes, 41% under the
+  sand. Oases never move, so it is draped now: rings out from the middle,
+  the ground measured under each point once when the oasis comes near, a
+  hair over it, drawn a touch nearer than it stands (polygon offset).
+  27% hidden after, the rest behind dune crests in front of it.
+- **The pool stays at the ground under its middle.** Both other levels
+  were tried and were worse: at the highest ground under it the pool
+  floated over its hollow like a plate on a stalk, and at the lowest on
+  its rim it was buried whole — these pools stand on slopes, not in
+  hollows. Its uphill edge in the sand reads as a shore.
+- **Palms** were 2–9% hidden, by dunes in front; ruins and houses, seen
+  close, stand clear. Herds were not measured (they draw only with the
+  eye low, and the views tried were in woods).
