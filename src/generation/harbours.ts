@@ -20,6 +20,12 @@ export interface Harbour {
   readonly mouth: Vec3
   /** The town's size, 0 to 1. */
   readonly size: number
+  /**
+   * Where its lighthouse stands, a unit direction on land at the water's
+   * edge, along the coast from the pier; none where the coast beside it
+   * gives no place for one.
+   */
+  readonly light: Vec3 | undefined
 }
 
 export interface Harbours {
@@ -97,8 +103,50 @@ function harbourFor(town: Town, sea: (d: Vec3) => boolean): Harbour | undefined 
   const mouth = along(best.shore, best.out, MOUTH)
   // A shore on a lake or a narrow inlet is no harbour: the mouth must be open sea.
   if (!sea(mouth) || !sea(along(best.shore, best.out, MOUTH * 2))) return undefined
-  return { shore: best.shore, out: best.out, mouth, size: town.size }
+  return {
+    shore: best.shore,
+    out: best.out,
+    mouth,
+    size: town.size,
+    light: lightBeside(best.shore, best.out, sea),
+  }
 }
+
+/**
+ * A lighthouse along the coast from the pier, on whichever side has one:
+ * a little way along the shore, then out towards the sea to the last land
+ * before the water — the point of the shore there, where a light is seen
+ * from the sea on both sides.
+ */
+function lightBeside(shore: Vec3, out: Vec3, sea: (d: Vec3) => boolean): Vec3 | undefined {
+  const side: Vec3 = unit([
+    shore[1] * out[2] - shore[2] * out[1],
+    shore[2] * out[0] - shore[0] * out[2],
+    shore[0] * out[1] - shore[1] * out[0],
+  ])
+  for (const way of [1, -1]) {
+    const along: Vec3 = [side[0] * way, side[1] * way, side[2] * way]
+    let at = goAlong(shore, along, LIGHT_ALONG)
+    // Back to land first, if the coast bends in there.
+    for (let k = 0; k < 8 && sea(at); k += 1) at = goAlong(at, tangent(at, shore), 0.0003)
+    if (sea(at)) continue
+    const outward = tangent(at, goAlong(at, out, 0.001))
+    // Two steps back from the water: the drawn shore is not quite where the
+    // surface turns to sea, and the last step of land stood the tower in
+    // the shallows.
+    const steps: Vec3[] = [at]
+    for (let r = 0.00025; r <= LIGHT_REACH; r += 0.00025) {
+      const here = goAlong(at, outward, r)
+      if (sea(here)) return steps[Math.max(0, steps.length - 3)]
+      steps.push(here)
+    }
+  }
+  return undefined
+}
+
+/** How far along the coast from the pier a lighthouse stands, and how far it looks for the water's edge, in radians. */
+const LIGHT_ALONG = 0.0018
+const LIGHT_REACH = 0.004
 
 const dot = (a: Vec3, b: Vec3): number => a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
 const unit = (v: Vec3): Vec3 => {
@@ -114,6 +162,14 @@ function tangent(from: Vec3, to: Vec3): Vec3 {
 }
 
 /** Go `distance` radians from `from` along the ground in direction `heading`. */
+const goAlong = (from: Vec3, heading: Vec3, distance: number): Vec3 =>
+  along(
+    from,
+    tangent(from, unit([from[0] + heading[0], from[1] + heading[1], from[2] + heading[2]])),
+    distance,
+  )
+
+/** Go `distance` radians from `from` along the ground in direction `heading` (a tangent there). */
 function along(from: Vec3, heading: Vec3, distance: number): Vec3 {
   const c = Math.cos(distance)
   const s = Math.sin(distance)

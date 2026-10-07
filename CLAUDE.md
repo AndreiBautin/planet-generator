@@ -1301,3 +1301,39 @@ screen** — its matrices were checked numerically (on the shore, along
   shader now shows from above only the coral down to 0.006 and all of it
   under the sea (`detailUnder`).
 - Not seen: a rainbow over land, sea fog from orbit, a phone.
+
+## Lighthouses and ruins
+
+- **A lighthouse beside each harbour** (`Harbour.light` in
+  generation/harbours.ts, tested): a little way along the coast from the
+  pier, back to land if the coast bends in there, then out to the water's
+  edge — and two steps back from it, since the drawn shore is not quite
+  where the surface turns to sea and the last step of land stood the tower
+  in the shallows. Most harbours get one (93 of 93 on `83tzj46`).
+- **Drawn** (`render/lighthouses.ts`) as a tapering white tower with red
+  bands, a dark gallery, a lantern and a red cap, built once as instanced
+  meshes, each on the ground measured for it. **At each tower's own dusk**
+  (its up against the sun, in the planet's frame) the lantern lights and
+  two beams turn round it, back to back, each two crossed additive quads
+  bright at the lamp and along its middle. Hard-edged, the quads read as
+  planks; they fade to their edges now.
+- **Ruins on the hilltops** (`generation/ruins.ts`, tested): a drainage
+  cell higher than every cell round it, on a lived-on world only, under no
+  snow, and at least 0.03 from a living town — whose builders would have
+  carted the stones off. About fifty on `83tzj46`. **Found in the build
+  worker** with the lights and harbours (`ruinsOf`, on the `lights` job),
+  since it reads the drainage map, which the main thread does not hold.
+- **Drawn** (`render/ruins.ts`) as stone boxes and columns: a ring of
+  twelve columns at broken heights on a two-step platform, now and then a
+  lintel, drums fallen among them; or a fort's four walls in gapped
+  stretches with tower stumps at the corners and tumbled blocks. Built only
+  for those near the eye, a stone at a time where the ground was measured
+  for it, shrinking into the ground at the edge of their reach. Pale stone
+  with a little light of its own, as the herds have.
+- **A sized array has holes, and `indexOf(undefined)` skips them**: the
+  ruins' slots were `new Array(n)`, so no ruin ever found a free slot and
+  none was drawn — with every test green. Filled with `undefined` now.
+  `NearCells` gets away with the same construction only because `reset`
+  fills it.
+- Seen: a lighthouse by day and turning at night beside a lit town, a
+  temple and a fort by day. Not seen: a phone, a ruin at night.

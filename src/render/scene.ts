@@ -36,6 +36,8 @@ import { Kelp } from './kelp'
 import { SeaLight } from './sea-light'
 import { Rainbow, rainbowStrength } from './rainbow'
 import { Ships } from './ships'
+import { Lighthouses } from './lighthouses'
+import { Ruins } from './ruins'
 import { Towns, townSites } from './towns'
 import { SisterWorlds } from './sisters'
 import type { StarSystem } from '@/generation/system'
@@ -468,6 +470,9 @@ export function startScene(
   const seaFrame = new THREE.Matrix4()
   let towns: Towns | undefined
   let ships: Ships | undefined
+  let lighthouses: Lighthouses | undefined
+  let ruins: Ruins | undefined
+  const sunInGround = new THREE.Vector3()
   const sisters = new SisterWorlds(pixelRatio)
   scene.add(sisters.object)
   const waterColour = new THREE.Color()
@@ -624,11 +629,13 @@ export function startScene(
     DETAIL_CITY_LIGHT.value = 0
     towns = undefined
     ships = undefined
+    lighthouses = undefined
+    ruins = undefined
     if (next.world.kind === 'temperate' || next.world.kind === 'oceanic') {
       const ground = next.terrain
       void options.builder
         .lights(next.world.seed, next.world.dials)
-        .then(({ lights, glow, harbours }) => {
+        .then(({ lights, glow, harbours, ruins: found }) => {
           if (shown?.terrain !== ground) return
           const points = cityLights(lights)
           if (points === undefined) return
@@ -642,6 +649,14 @@ export function startScene(
           ships = new Ships(harbours)
           ships.group.userData.withGround = true
           ground.group.add(ships.group)
+          // A lighthouse on the shore beside each harbour (lighthouses.ts),
+          // and the ruins on the hilltops (ruins.ts).
+          lighthouses = new Lighthouses(harbours, next.world)
+          lighthouses.group.userData.withGround = true
+          ground.group.add(lighthouses.group)
+          ruins = new Ruins(found, next.world)
+          ruins.group.userData.withGround = true
+          ground.group.add(ruins.group)
           const map = new THREE.DataTexture(glow, CITY_GLOW_WIDTH, CITY_GLOW_WIDTH / 2)
           map.magFilter = THREE.LinearFilter
           // Mipmapped, as the clouds are: from orbit it sparkled as the planet turned.
@@ -1065,6 +1080,11 @@ export function startScene(
       )
       towns?.update(inPlanetFrame(camera.position, turn, stage.scale), stage.scale)
       ships?.update(DETAIL_TIME.value, inPlanetFrame(camera.position, turn, stage.scale))
+      lighthouses?.update(
+        sunInGround.set(...inPlanetFrame(sunDirection, turn, 1)),
+        DETAIL_TIME.value,
+      )
+      ruins?.update(inPlanetFrame(camera.position, turn, stage.scale))
       fish.update(
         inPlanetFrame(camera.position, turn, stage.scale),
         shown.terrain.group.matrixWorld,

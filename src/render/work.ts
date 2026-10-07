@@ -4,6 +4,7 @@ import type { WorkRequest, WorkResult } from './build-protocol'
 import { settlementsOf, townGlow } from '@/generation/settlements'
 import { waterfallsOf } from '@/generation/waterfalls'
 import { harboursOf } from '@/generation/harbours'
+import { ruinsOf } from '@/generation/ruins'
 
 import { groundRadiusAt, samplePatch } from './patches/patch-data'
 import { bakeClouds } from './surface-data'
@@ -53,6 +54,7 @@ export function answer(request: WorkRequest): WorkResult {
         lights: placedLights(planet),
         glow: townGlow(settlementsOf(planet).towns, CITY_GLOW_WIDTH),
         harbours: harboursOf(planet),
+        ruins: ruinsOf(planet),
       }
     case 'falls':
       return { id: request.id, kind: 'falls', falls: placedFalls(planet) }

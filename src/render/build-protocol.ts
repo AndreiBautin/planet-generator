@@ -1,6 +1,7 @@
 import type { Dials } from '@/generation/planet'
 import type { Seed } from '@/generation/seed'
 import type { Harbours } from '@/generation/harbours'
+import type { Ruin } from '@/generation/ruins'
 
 import type { PatchKey } from './patches/cube'
 import type { PatchData } from './patches/patch-data'
@@ -37,4 +38,6 @@ export type WorkResult =
       readonly glow: Uint8Array
       /** The coastal towns' harbours and the sea lanes between them (harbours.ts). */
       readonly harbours: Harbours
+      /** The ruins on its hilltops (ruins.ts). */
+      readonly ruins: readonly Ruin[]
     }
