@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest'
 
-import { floorHeightAt, hydrologyOf, LAKE_DEPTH, neighboursOf, RIVER_FLOW } from './hydrology'
+import {
+  floorHeightAt,
+  hydrologyOf,
+  LAKE_DEPTH,
+  neighboursOf,
+  RIVER_FLOW,
+  waterAt,
+} from './hydrology'
 import { createPlanet } from './planet'
 import { parseSeed } from './seed'
 
@@ -10,6 +17,39 @@ const planet = createPlanet(seed)
 const water = hydrologyOf(planet)
 
 describe('hydrology', () => {
+  it('runs a river downstream, towards the cell it drains into, and along the ground', () => {
+    // A current drawn the wrong way would carry the foam uphill.
+    const near = new Map<number, readonly number[]>()
+    const c = water.centres
+    let checked = 0
+    for (let k = 0; k < water.flow.length && checked < 40; k += 1) {
+      const down = water.receiver[k] ?? -1
+      if (down < 0 || (water.flow[k] ?? 0) < RIVER_FLOW * 4 || (water.height[k] ?? 0) <= 0) continue
+      const a: [number, number, number] = [c[k * 3] ?? 0, c[k * 3 + 1] ?? 0, c[k * 3 + 2] ?? 0]
+      const b: [number, number, number] = [
+        c[down * 3] ?? 0,
+        c[down * 3 + 1] ?? 0,
+        c[down * 3 + 2] ?? 0,
+      ]
+      const mid: [number, number, number] = [
+        (a[0] + b[0]) / 2,
+        (a[1] + b[1]) / 2,
+        (a[2] + b[2]) / 2,
+      ]
+      const l = Math.hypot(...mid)
+      const at: [number, number, number] = [mid[0] / l, mid[1] / l, mid[2] / l]
+      const here = waterAt(planet, water, at, near)
+      if (here.river < 0.5) continue
+      const towards: [number, number, number] = [b[0] - a[0], b[1] - a[1], b[2] - a[2]]
+      const tl = Math.hypot(...towards)
+      const [fx, fy, fz] = here.flow
+      expect((fx * towards[0] + fy * towards[1] + fz * towards[2]) / tl).toBeGreaterThan(0.5)
+      expect(Math.abs(fx * at[0] + fy * at[1] + fz * at[2])).toBeLessThan(1e-6)
+      checked += 1
+    }
+    expect(checked).toBeGreaterThan(10)
+  })
+
   it('reads the floor of the ground round a point smoothly as the point moves', () => {
     // The dawn mist fills up from this floor: a jump in it where the cells
     // round a point change would draw the mist's edge as a staircase.

@@ -294,9 +294,17 @@ export interface WaterHere {
   readonly river: number
   /** The level a lake nearby holds, or minus infinity. */
   readonly lake: number
+  /**
+   * Which way a river runs here, a unit vector along the ground; nought
+   * where there is none. Blended over the nearby stretches by how near
+   * each is, so it turns smoothly round a bend and through a confluence
+   * rather than switching where one stretch's reach gives way to the next.
+   */
+  readonly flow: readonly [number, number, number]
 }
 
-const DRY: WaterHere = { carve: 0, river: 0, lake: NONE }
+const STILL: readonly [number, number, number] = [0, 0, 0]
+const DRY: WaterHere = { carve: 0, river: 0, lake: NONE, flow: STILL }
 
 /**
  * The water at a point: the nearest river channel among the cells round it,
@@ -330,7 +338,8 @@ export function waterAt(
     if (down >= 0 && (water.flow[k] ?? 0) >= RIVER_FLOW && (water.height[k] ?? 0) > 0)
       rivers.push(k)
   }
-  if (rivers.length === 0) return Number.isFinite(lake) ? { carve: 0, river: 0, lake } : DRY
+  if (rivers.length === 0)
+    return Number.isFinite(lake) ? { carve: 0, river: 0, lake, flow: STILL } : DRY
   const [ox, oy, oz] = planet.offset
   const wander = CELL_ANGLE * 0.35
   const px = x + fbm(planet.fine, (x + oy) * 260, (y + oz) * 260, (z + ox) * 260, 3) * wander
@@ -338,6 +347,9 @@ export function waterAt(
   const pz = z + fbm(planet.fine, (z + oz) * 260, (x - ox) * 260, (y + oy) * 260, 3) * wander
   let nearest = Number.POSITIVE_INFINITY
   let strength = 0
+  let fx = 0
+  let fy = 0
+  let fz = 0
   const c = water.centres
   for (const k of rivers) {
     const down = water.receiver[k] ?? 0
@@ -362,13 +374,26 @@ export function waterAt(
     // Wider downstream, as the water gathered grows.
     const width = CELL_ANGLE * Math.min(0.4, 0.05 + 0.07 * Math.sqrt(flow / RIVER_FLOW))
     const reach = gap / width
+    const along = Math.hypot(ux, uy, uz) || 1
+    const pull = Math.exp(-reach * reach * 2)
+    fx += (ux / along) * pull
+    fy += (uy / along) * pull
+    fz += (uz / along) * pull
     if (reach < nearest) {
       nearest = reach
       strength = Math.min(1, Math.log2(flow / RIVER_FLOW) / 4 + 0.25)
     }
   }
   const river = 1 - smooth(0.6, 1.4, nearest)
-  return { carve: river * (0.012 + 0.018 * strength), river, lake }
+  // Along the ground: the part pointing up or down out of it taken off.
+  const out = fx * x + fy * y + fz * z
+  fx -= x * out
+  fy -= y * out
+  fz -= z * out
+  const length = Math.hypot(fx, fy, fz)
+  const flow: readonly [number, number, number] =
+    length > 1e-6 ? [fx / length, fy / length, fz / length] : STILL
+  return { carve: river * (0.012 + 0.018 * strength), river, lake, flow }
 }
 
 const smooth = (from: number, to: number, value: number): number => {

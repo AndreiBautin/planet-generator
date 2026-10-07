@@ -718,12 +718,12 @@ export function withWaterDetail(material: THREE.Material): THREE.Material {
     shader.uniforms.terrainMorphLod = TERRAIN_MORPH
     shader.vertexShader = (
       MORPH_DECLARE +
-      'attribute float coarseDepth;\nattribute vec2 ice;\nattribute float inland;\nattribute float rapids;\nvarying float v_ice;\nvarying float v_inland;\nvarying float v_rapids;\nvarying vec3 v_up;\n' +
+      'attribute float coarseDepth;\nattribute vec2 ice;\nattribute float inland;\nattribute float rapids;\nattribute vec3 current;\nvarying float v_ice;\nvarying float v_inland;\nvarying float v_rapids;\nvarying vec3 v_current;\nvarying vec3 v_up;\n' +
       shader.vertexShader
     )
       .replace(
         'void main() {',
-        'void main() {\n  float seaMorph = terrainMorphAt(position);\n  float seaDepth = mix(depth, coarseDepth, seaMorph);\n  v_ice = mix(ice.x, ice.y, seaMorph);\n  v_inland = inland;\n  v_rapids = rapids;\n  v_up = normalize(normalMatrix * normalize(position));',
+        'void main() {\n  float seaMorph = terrainMorphAt(position);\n  float seaDepth = mix(depth, coarseDepth, seaMorph);\n  v_ice = mix(ice.x, ice.y, seaMorph);\n  v_inland = inland;\n  v_rapids = rapids;\n  v_current = current;\n  v_up = normalize(normalMatrix * normalize(position));',
       )
       .replace('v_depth = depth;', 'v_depth = seaDepth;')
       .replace('smoothstep(0.0, 0.0004, depth)', 'smoothstep(0.0, 0.0004, seaDepth)')
@@ -803,7 +803,7 @@ export function withWaterDetail(material: THREE.Material): THREE.Material {
       value: seaIce instanceof THREE.Color ? seaIce : new THREE.Color(0.9, 0.94, 0.97),
     }
     shader.fragmentShader =
-      'uniform vec3 seaSky;\nuniform vec3 seaZenith;\nuniform vec3 seaIce;\nvarying vec3 v_up;\nvarying float v_ice;\nvarying float v_inland;\nvarying float v_rapids;\nvarying float v_jac;\nvarying float v_heave;\n' +
+      'uniform vec3 seaSky;\nuniform vec3 seaZenith;\nuniform vec3 seaIce;\nvarying vec3 v_up;\nvarying float v_ice;\nvarying float v_inland;\nvarying float v_rapids;\nvarying vec3 v_current;\nvarying float v_jac;\nvarying float v_heave;\n' +
       shader.fragmentShader
     shader.fragmentShader = shader.fragmentShader
       .replace(
@@ -859,7 +859,25 @@ export function withWaterDetail(material: THREE.Material): THREE.Material {
         // churned foam tearing past, broken near to, and solid white where
         // the drop is a waterfall. Kept from afar, as a thread of white down
         // a cliff, because that is what tells a fall from a glide.
-        float tumble = detailNoise(vDetailPosition * 2600.0 + drift * 9000.0);
+        // The current (patch-data.ts, current): ripples and foam carried
+        // downstream, streaked along the flow. Read twice, half a cycle
+        // apart, each carried for a cycle and then begun again elsewhere,
+        // and blended so neither is seen to jump: carried for ever, a bend
+        // would stretch the pattern without end (a flow map).
+        float run = length(v_current);
+        vec3 runDir = run > 1e-4 ? v_current / run : vec3(0.0);
+        vec3 flowP = (vDetailPosition - runDir * dot(vDetailPosition, runDir) * 0.7) * 2600.0;
+        float cycle = detailTime * 0.3;
+        float phaseA = fract(cycle);
+        float phaseB = fract(cycle + 0.5);
+        float toB = abs(2.0 * phaseA - 1.0);
+        vec3 carry = v_current * 2.6;
+        float rippleA = detailNoise(flowP - carry * phaseA + 3.1 * floor(cycle));
+        float rippleB = detailNoise(flowP - carry * phaseB + 7.3 * floor(cycle + 0.5));
+        float ripple = mix(rippleA, rippleB, toB);
+        // Bright streaks running down a river, near to.
+        diffuseColor.rgb += vec3(0.07, 0.08, 0.08) * smoothstep(0.55, 0.85, ripple) * min(run, 1.0) * v_inland * seaNear;
+        float tumble = run > 1e-4 ? ripple : detailNoise(vDetailPosition * 2600.0 + drift * 9000.0);
         float tear = detailNoise(vDetailPosition * 900.0 - drift * 5000.0);
         float rapid = v_rapids * (1.0 - smoothstep(0.4, 0.9, v_ice));
         // Aerated water between the streaks, paler and greener than a pool.

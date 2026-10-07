@@ -83,6 +83,13 @@ export interface PatchData {
    */
   readonly rapids: Float32Array
   /**
+   * Which way and how fast a river runs at each vertex, three to a
+   * vertex, in the planet's frame: its direction along the ground, as long
+   * as it is fast — a slow stretch half, white water two. Nought on still
+   * water and the sea.
+   */
+  readonly current: Float32Array
+  /**
    * Each biome's own ground, four weights a vertex — forest needles,
    * savanna, tundra, and salt flat (ash on a molten world) — then the same
    * four as the parent patch has them: eight a vertex. See `groundOf`.
@@ -184,6 +191,7 @@ export function samplePatch(planet: Planet, key: PatchKey, segments: number): Pa
   const ice = new Float32Array(vertexCount(segments) * 2)
   const mist = new Float32Array(vertexCount(segments))
   const rapids = new Float32Array(vertexCount(segments))
+  const current = new Float32Array(vertexCount(segments) * 3)
   const ground = new Float32Array(vertexCount(segments) * 8)
   const water = new Float32Array(vertexCount(segments))
   const wetted = new Float32Array(side * side)
@@ -208,6 +216,7 @@ export function samplePatch(planet: Planet, key: PatchKey, segments: number): Pa
       let bed = drawn
       let level = Number.NEGATIVE_INFINITY
       let river = 0
+      let flow: readonly [number, number, number] = [0, 0, 0]
       if (surface.height < 0) level = 0
       else if (hydrology !== undefined) {
         // Carved wherever the river runs, snow or not; only the water is
@@ -216,6 +225,7 @@ export function samplePatch(planet: Planet, key: PatchKey, segments: number): Pa
         // snow stood over the cut channel as a white lid on a wall.
         const here = waterAt(planet, hydrology, [x, y, z], near)
         river = here.river
+        flow = here.flow
         bed = drawn - here.carve
         if (surface.biome !== 'snow') {
           if (here.river > 0.35) level = drawn - here.carve * 0.45
@@ -256,6 +266,10 @@ export function samplePatch(planet: Planet, key: PatchKey, segments: number): Pa
           surface.height < 0 ? SEA_RADIUS : Math.max(SEA_RADIUS, 1 + liftOf(level, planet.relief))
       }
       wetted[j * side + i] = river
+      if (river > 0.2 && Number.isFinite(level) && surface.height >= 0) {
+        const w = Math.min(1, river)
+        current.set([flow[0] * w, flow[1] * w, flow[2] * w], (j * side + i) * 3)
+      }
       const out = (j * side + i) * 3
       positions[out] = x * radius
       positions[out + 1] = y * radius
@@ -319,6 +333,9 @@ export function samplePatch(planet: Planet, key: PatchKey, segments: number): Pa
         across(here, wet[at + ring] ?? 0, wet[at - ring] ?? 0),
       )
       rapids[v] = Math.min(1, river) * smoothRange(RAPIDS_FROM, RAPIDS_FULL, slope)
+      // White water runs fast.
+      const fast = 0.5 + 1.5 * (rapids[v] ?? 0)
+      for (let c = 0; c < 3; c += 1) current[v * 3 + c] = (current[v * 3 + c] ?? 0) * fast
     }
   }
 
@@ -576,6 +593,9 @@ export function samplePatch(planet: Planet, key: PatchKey, segments: number): Pa
       water[skirt] = water[vertex] ?? 0
       mist[skirt] = mist[vertex] ?? 0
       rapids[skirt] = rapids[vertex] ?? 0
+      current[skirt * 3] = current[vertex * 3] ?? 0
+      current[skirt * 3 + 1] = current[vertex * 3 + 1] ?? 0
+      current[skirt * 3 + 2] = current[vertex * 3 + 2] ?? 0
       ice[skirt * 2] = ice[vertex * 2] ?? 0
       ice[skirt * 2 + 1] = ice[vertex * 2 + 1] ?? 0
       for (let k = 0; k < 8; k += 1) ground[skirt * 8 + k] = ground[vertex * 8 + k] ?? 0
@@ -596,6 +616,7 @@ export function samplePatch(planet: Planet, key: PatchKey, segments: number): Pa
     ice,
     mist,
     rapids,
+    current,
     ground,
     water,
   }

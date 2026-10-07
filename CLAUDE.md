@@ -983,3 +983,21 @@ beams fall exactly where the picture shows a gap.
   without washing out the land.
 - **Only with the post pass**, so not on a modest phone, which draws
   straight to the screen.
+
+## Rivers that flow
+
+- **The current** comes from the drainage map (`waterAt` → `flow`, tested
+  to run towards the cell a river drains into and along the ground): each
+  nearby stretch's direction, weighted by how near it is, so it turns
+  smoothly round a bend and through a confluence rather than switching
+  where one stretch's reach ends. Per water vertex as `current`
+  (patch-data.ts), as long as it is fast: a slow stretch half, white water
+  two.
+- **The shader carries ripples and foam down it**, streaked along the flow,
+  as a flow map: two readings half a cycle apart, each carried for a cycle
+  (about three seconds) then begun again elsewhere, blended so neither
+  jumps. Carried for ever, a bend would stretch the pattern without end.
+  The rapids' white water rides the same current.
+- Checked in the preview by frame difference over a second: the river
+  changes, the land beside it does not. **The direction was checked by
+  the test, not by eye.**
