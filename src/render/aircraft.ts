@@ -13,6 +13,7 @@ import { around } from '@/generation/oases'
 import type { Planet } from '@/generation/planet'
 
 import { NearCells } from './near-cells'
+import { drawOnlyLive } from './instances'
 import { groundRadiusAt } from './patches/patch-data'
 
 /** The most balloon meets and airships drawn at once. */
@@ -326,6 +327,7 @@ export class Aircraft {
       this.windows,
     ]) {
       mesh.instanceMatrix.needsUpdate = true
+      drawOnlyLive(mesh)
     }
     for (const mesh of [this.goresA, this.goresB, this.baskets, this.ships]) {
       mesh.geometry.getAttribute('craftLight').needsUpdate = true

@@ -1,6 +1,7 @@
 import * as THREE from 'three'
 
 import type { Vec3 } from '@/generation/cube'
+import { drawOnlyLive } from './instances'
 import { weather } from './weathered'
 
 /** How fast a cart goes, radians a second. */
@@ -171,6 +172,7 @@ export class Traffic {
       this.lanternGlow[k] = night * shown * (0.75 + 0.25 * Math.sin(seconds * 3 + cart.seed * 40))
     })
     this.bodies.instanceMatrix.needsUpdate = true
+    drawOnlyLive(this.bodies)
     const geometry = this.lanterns.geometry
     const position = geometry.getAttribute('position')
     const glow = geometry.getAttribute('glow')

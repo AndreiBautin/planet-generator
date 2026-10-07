@@ -1746,3 +1746,29 @@ on and off and counting what the ground hid.
 - **Palms** were 2–9% hidden, by dunes in front; ruins and houses, seen
   close, stand clear. Herds were not measured (they draw only with the
   eye low, and the views tried were in woods).
+
+## Empty slots are not drawn
+
+`render/instances.ts` (`drawOnlyLive`, tested): the near-the-eye models
+keep a slot for everything they might hold and park the empty ones at a
+scale of nought — and the GPU drew every triangle of them. Counted in a
+village: 640 herd instances drawn with none alive, 425 wagons with 3, and
+sea stacks, camels, ruins, palms and balloons all with none — about
+200,000 triangles of nothing, most of what the models on the ground cost.
+Each update now sets the mesh's `count` to one past its last live slot
+(slots before it still draw, since they are not packed — packing would
+move things between slots, which is what pops). Measured after: 35,000
+instanced triangles drawn, 197,000 skipped; the caravan drawn as before.
+
+- **Not done**: fish, kelp and birds hide their empty instances in the
+  vertex shader rather than by scale, so they still submit them — cheap
+  (a few triangles each), and they would need the same trim keyed on
+  their own attributes.
+- **Scene totals are not comparable run to run**: `recorder.stats()`
+  counts every pass of the last frame, shadows included, and the terrain
+  streams in at its own pace, so the same view read 1.18M then 1.52M
+  triangles minutes apart. Measure a change by what the changed thing
+  draws, not by the frame's total.
+- **Shot links past the glide's pitch** (backlog 8, item 6): a link's
+  tilt beyond about −12.6° is clamped, but the app only writes links from
+  the glide's own pitch, so only a hand-written link meets it. Left as is.

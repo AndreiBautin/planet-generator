@@ -8,6 +8,7 @@ import type { Planet } from '@/generation/planet'
 import { DETAIL_TIME } from './detail'
 import { NearCells } from './near-cells'
 import { groundRadiusAt } from './patches/patch-data'
+import { drawOnlyLive } from './instances'
 import { weather } from './weathered'
 
 /** The most oases and caravans drawn at once. */
@@ -259,7 +260,10 @@ export class Deserts {
         this.camels.setMatrixAt(at, this.matrix)
       }
     })
-    for (const mesh of [this.pools, this.palms, this.camels]) mesh.instanceMatrix.needsUpdate = true
+    for (const mesh of [this.pools, this.palms, this.camels]) {
+      mesh.instanceMatrix.needsUpdate = true
+      drawOnlyLive(mesh)
+    }
     this.greens.geometry.getAttribute('position').needsUpdate = true
   }
 

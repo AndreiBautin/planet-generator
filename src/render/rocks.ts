@@ -10,6 +10,7 @@ import { DETAIL_TIME } from './detail'
 import { NearCells } from './near-cells'
 import { floorRadiusAt } from './patches/patch-data'
 import { SEA_RADIUS } from './water'
+import { drawOnlyLive } from './instances'
 import { weather } from './weathered'
 
 /** The most groups of rocks drawn at once. */
@@ -195,6 +196,7 @@ export class CoastRocks {
       }
     })
     this.pillars.instanceMatrix.needsUpdate = true
+    drawOnlyLive(this.pillars)
     const sprayOf = this.spray.geometry.getAttribute('sprayOf')
     sprayOf.needsUpdate = true
   }

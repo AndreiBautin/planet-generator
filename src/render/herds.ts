@@ -8,6 +8,7 @@ import type { Planet } from '@/generation/planet'
 import { NearCells } from './near-cells'
 import { groundRadiusAt } from './patches/patch-data'
 import { SEA_RADIUS } from './water'
+import { drawOnlyLive } from './instances'
 import { weather } from './weathered'
 
 /** The most herds drawn at once: the rings of cells round the eye hold up to 33 (measured). */
@@ -164,6 +165,8 @@ export class Herds {
     }
     this.bodies.instanceMatrix.needsUpdate = true
     this.heads.instanceMatrix.needsUpdate = true
+    drawOnlyLive(this.bodies)
+    drawOnlyLive(this.heads)
   }
 
   private fill(slot: number, cell: number, herd: Herd): void {

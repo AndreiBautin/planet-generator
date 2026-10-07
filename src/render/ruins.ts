@@ -5,6 +5,7 @@ import type { Planet } from '@/generation/planet'
 import type { Ruin } from '@/generation/ruins'
 
 import { groundRadiusAt } from './patches/patch-data'
+import { drawOnlyLive } from './instances'
 import { weather } from './weathered'
 
 /** Ruins built at once: those within reach of the eye. */
@@ -137,6 +138,8 @@ export class Ruins {
     })
     this.blocks.instanceMatrix.needsUpdate = true
     this.columns.instanceMatrix.needsUpdate = true
+    drawOnlyLive(this.blocks)
+    drawOnlyLive(this.columns)
   }
 
   /** Hold the ruins within reach in slots, keeping each where it was. */
