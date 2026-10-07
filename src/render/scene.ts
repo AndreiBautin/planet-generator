@@ -31,6 +31,7 @@ import { spray } from './waterfalls'
 import { Birds } from './birds'
 import { Meteors } from './meteors'
 import { Fish } from './fish'
+import { Ships } from './ships'
 import { Towns, townSites } from './towns'
 import { SisterWorlds } from './sisters'
 import type { StarSystem } from '@/generation/system'
@@ -450,6 +451,7 @@ export function startScene(
   const fish = new Fish()
   scene.add(fish.object)
   let towns: Towns | undefined
+  let ships: Ships | undefined
   const sisters = new SisterWorlds(pixelRatio)
   scene.add(sisters.object)
   const waterColour = new THREE.Color()
@@ -603,28 +605,35 @@ export function startScene(
     // added if this ground is still the one on screen when they come.
     DETAIL_CITY_LIGHT.value = 0
     towns = undefined
+    ships = undefined
     if (next.world.kind === 'temperate' || next.world.kind === 'oceanic') {
       const ground = next.terrain
-      void options.builder.lights(next.world.seed, next.world.dials).then(({ lights, glow }) => {
-        if (shown?.terrain !== ground) return
-        const points = cityLights(lights)
-        if (points === undefined) return
-        points.userData.withGround = true
-        ground.group.add(points)
-        // The buildings and roads those lights belong to, seen close to (towns.ts).
-        towns = new Towns(townSites(lights))
-        towns.group.userData.withGround = true
-        ground.group.add(towns.group)
-        const map = new THREE.DataTexture(glow, CITY_GLOW_WIDTH, CITY_GLOW_WIDTH / 2)
-        map.magFilter = THREE.LinearFilter
-        // Mipmapped, as the clouds are: from orbit it sparkled as the planet turned.
-        map.minFilter = THREE.LinearMipmapLinearFilter
-        map.generateMipmaps = true
-        map.needsUpdate = true
-        DETAIL_CITIES.value?.dispose()
-        DETAIL_CITIES.value = map
-        DETAIL_CITY_LIGHT.value = 0.5
-      })
+      void options.builder
+        .lights(next.world.seed, next.world.dials)
+        .then(({ lights, glow, harbours }) => {
+          if (shown?.terrain !== ground) return
+          const points = cityLights(lights)
+          if (points === undefined) return
+          points.userData.withGround = true
+          ground.group.add(points)
+          // The buildings and roads those lights belong to, seen close to (towns.ts).
+          towns = new Towns(townSites(lights))
+          towns.group.userData.withGround = true
+          ground.group.add(towns.group)
+          // Piers at the coastal towns, and ships sailing between them (ships.ts).
+          ships = new Ships(harbours)
+          ships.group.userData.withGround = true
+          ground.group.add(ships.group)
+          const map = new THREE.DataTexture(glow, CITY_GLOW_WIDTH, CITY_GLOW_WIDTH / 2)
+          map.magFilter = THREE.LinearFilter
+          // Mipmapped, as the clouds are: from orbit it sparkled as the planet turned.
+          map.minFilter = THREE.LinearMipmapLinearFilter
+          map.generateMipmaps = true
+          map.needsUpdate = true
+          DETAIL_CITIES.value?.dispose()
+          DETAIL_CITIES.value = map
+          DETAIL_CITY_LIGHT.value = 0.5
+        })
     }
     if (!keep) scene.add(clouds, air, sky, heavens.group)
     const animate = next.born && !options.reducedMotion
@@ -1030,6 +1039,7 @@ export function startScene(
         stage.scale,
       )
       towns?.update(inPlanetFrame(camera.position, turn, stage.scale), stage.scale)
+      ships?.update(DETAIL_TIME.value, inPlanetFrame(camera.position, turn, stage.scale))
       fish.update(
         inPlanetFrame(camera.position, turn, stage.scale),
         shown.terrain.group.matrixWorld,

@@ -1138,3 +1138,41 @@ again: a screenshot shows nothing.
   lights are houses.
 - Seen: the town in open grass with fields round it by day, and windows
   lit against the town's glow at night.
+
+## Harbours and ships
+
+A coastal town has a harbour (`generation/harbours.ts`, tested): the
+nearest shore to its heart within its reach, a pier out from there, and a
+**mouth** a little offshore that must be open sea — twice over, so a lake
+or a narrow inlet is no harbour. **Lanes join two mouths when the great
+circle between them is sea at every sample**; a ship goes out along it and
+back, so a lane is a closed loop. A harbour with no lane keeps a loop of
+its own offshore if the water there is open, so no harbour sits empty.
+Computed in the worker with the lights (the `lights` job carries
+`harbours`), because it walks the surface thousands of times.
+
+`render/ships.ts` draws them: piers as instanced boxes on posts, ships as
+an instanced hull with a **square sail across the ship** — a fore-and-aft
+sail was drawn first and read as a sliver from astern, which is where a
+glide nearly always sees a ship from — and a **V-wake**, two foam arms
+spreading from the stern with churned water between that fades first.
+**Ships move by `DETAIL_TIME`**, along the lane by arc length, so every
+device puts a ship in the same place at the same moment, and are drawn
+only within 0.06 rad of the eye: from orbit a ship is a speck that
+sparkles as it moves.
+
+**Checking it was the hard part, and the method is worth keeping.** Record
+time is deterministic (`DETAIL_TIME` is 5.95 s after 150 steps of 33 ms),
+so a `Ships` built in the page from `harboursOf` and updated to that time
+says where a ship will be; `shotOf` aims a held-still glide link at it,
+and a canvas readback diffed with the group shown and hidden finds it on
+screen. A glide link's altitude must be at least 4‰ or the link is
+refused and the app opens in orbit — the first two attempts did exactly
+that, silently. The ship came out under the HUD at the bottom of the
+frame; screenshots in record mode can be stale, so the crop was drawn into
+an overlay image and that was screenshotted.
+
+**Ships are lit like houses**, so in the blue daytime haze both read cool;
+the hull colours were lifted once for that. **Not seen: a pier on
+screen** — its matrices were checked numerically (on the shore, along
+`out`, tiny) but no view in the session put one in frame.

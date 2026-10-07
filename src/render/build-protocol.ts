@@ -1,5 +1,6 @@
 import type { Dials } from '@/generation/planet'
 import type { Seed } from '@/generation/seed'
+import type { Harbours } from '@/generation/harbours'
 
 import type { PatchKey } from './patches/cube'
 import type { PatchData } from './patches/patch-data'
@@ -34,4 +35,6 @@ export type WorkResult =
       readonly lights: Float32Array
       /** The towns' glow on the ground, `CITY_GLOW_WIDTH` wide (settlements.ts, `townGlow`). */
       readonly glow: Uint8Array
+      /** The coastal towns' harbours and the sea lanes between them (harbours.ts). */
+      readonly harbours: Harbours
     }

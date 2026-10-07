@@ -1,6 +1,7 @@
 import type { Dials } from '@/generation/planet'
 import type { Seed } from '@/generation/seed'
 import { logger } from '@/shared/logger'
+import type { Harbours } from '@/generation/harbours'
 
 import type { WorkRequest, WorkResult } from './build-protocol'
 import type { PatchKey } from './patches/cube'
@@ -28,7 +29,11 @@ export interface Builder {
   readonly lights: (
     seed: Seed,
     dials: Dials,
-  ) => Promise<{ readonly lights: Float32Array; readonly glow: Uint8Array }>
+  ) => Promise<{
+    readonly lights: Float32Array
+    readonly glow: Uint8Array
+    readonly harbours: Harbours
+  }>
   /** `urgency`: lower is sooner; about how far the patch is from the eye. */
   readonly patch: (
     seed: Seed,
@@ -136,7 +141,7 @@ export function createBuilder(cores: number): Builder {
       // After the ground near the eye: lights are for later, not for now.
       const result = await run({ id: next, kind: 'lights', seed, dials }, -2)
       if (result.kind !== 'lights') throw new Error('builder answered lights with something else')
-      return { lights: result.lights, glow: result.glow }
+      return { lights: result.lights, glow: result.glow, harbours: result.harbours }
     },
     falls: async (seed, dials) => {
       next += 1
