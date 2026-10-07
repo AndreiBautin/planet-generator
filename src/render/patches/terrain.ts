@@ -485,6 +485,7 @@ export class Terrain {
     ground.setAttribute('pattern', new THREE.BufferAttribute(patch.pattern, 4))
     ground.setAttribute('mistTop', new THREE.BufferAttribute(patch.mist, 1))
     ground.setAttribute('reef', new THREE.BufferAttribute(patch.reef, 1))
+    ground.setAttribute('farm', new THREE.BufferAttribute(patch.farm, 1))
     ground.setAttribute('coarsePosition', new THREE.BufferAttribute(patch.coarsePositions, 4))
     ground.setAttribute('coarseNormal', new THREE.BufferAttribute(patch.coarseNormals, 3))
     ground.setAttribute('coarseColour', new THREE.BufferAttribute(patch.coarseColours, 3))

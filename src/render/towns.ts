@@ -2,6 +2,9 @@ import * as THREE from 'three'
 
 import type { Vec3 } from '@/generation/cube'
 import { cellOf, cellCentre } from '@/generation/hydrology'
+import { TOWN_LIGHT } from '@/generation/settlements'
+
+import { VALLEY_FOG } from './valley-fog'
 
 /**
  * Towns you can see: the lit world's buildings and roads, close to.
@@ -20,7 +23,7 @@ import { cellOf, cellCentre } from '@/generation/hydrology'
  */
 
 /** Lights at least this bright are a town's (0.45 up, settlements.ts); roads are 0.42 at most. Below 0.45 itself, since a light stored as a float32 can come back a hair under it. */
-export const TOWN_LIGHT = 0.44
+export { TOWN_LIGHT } from '@/generation/settlements'
 /** How near, in radii, houses start to grow up, and how near they are whole. */
 const HOUSES_FROM = 0.05
 const HOUSES_WHOLE = 0.032
@@ -166,12 +169,20 @@ function houseGeometry(): THREE.BufferGeometry {
   return merged
 }
 
-/** Grow a material's instances up out of the ground as the eye comes near. */
+/**
+ * Grow a material's instances up out of the ground as the eye comes near,
+ * and light their windows at night: two rows of small panes along each
+ * wall, some houses lit and some dark, warm against the dusk.
+ */
 function growNear(material: THREE.MeshStandardMaterial, scale: { value: number }): void {
   material.onBeforeCompile = (shader) => {
     shader.uniforms.townScale = scale
+    shader.uniforms.townSun = VALLEY_FOG.sun
     shader.vertexShader = shader.vertexShader
-      .replace('void main() {', 'uniform float townScale;\nvoid main() {')
+      .replace(
+        'void main() {',
+        'uniform float townScale;\nuniform vec3 townSun;\nvarying vec3 vHouseLocal;\nvarying float vHouseDark;\nvarying float vHouseSeed;\nvoid main() {',
+      )
       .replace(
         '#include <begin_vertex>',
         /* glsl */ `#include <begin_vertex>
@@ -179,6 +190,28 @@ function growNear(material: THREE.MeshStandardMaterial, scale: { value: number }
           vec4 townAt = modelMatrix * instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0);
           float townAway = distance(townAt.xyz, cameraPosition) / max(townScale, 1e-6);
           transformed.y *= 1.0 - smoothstep(${HOUSES_WHOLE.toFixed(4)}, ${HOUSES_FROM.toFixed(4)}, townAway);
+          vHouseLocal = position;
+          vec3 townUp = normalize(townAt.xyz);
+          vHouseDark = 1.0 - smoothstep(-0.12, 0.04, dot(townUp, normalize(townSun)));
+          vHouseSeed = fract(sin(dot(townAt.xyz, vec3(12.9898, 78.233, 37.719)) * 4375.85) * 43.7585);
+        }`,
+      )
+    shader.fragmentShader = shader.fragmentShader
+      .replace(
+        'void main() {',
+        'varying vec3 vHouseLocal;\nvarying float vHouseDark;\nvarying float vHouseSeed;\nvoid main() {',
+      )
+      .replace(
+        '#include <emissivemap_fragment>',
+        /* glsl */ `#include <emissivemap_fragment>
+        // Windows: on the walls only (below the eaves), in two rows of
+        // panes along each face, on most houses after dark.
+        if (vHouseDark > 0.01 && vHouseLocal.y < 0.95) {
+          float along = abs(vHouseLocal.x) > 0.499 ? vHouseLocal.z : vHouseLocal.x;
+          float pane = step(0.3, fract(along * 3.0 + 0.5)) * step(fract(along * 3.0 + 0.5), 0.7);
+          float row = step(0.2, fract(vHouseLocal.y * 2.0)) * step(fract(vHouseLocal.y * 2.0), 0.55);
+          float lit = step(0.25, vHouseSeed);
+          totalEmissiveRadiance += vec3(1.0, 0.7, 0.35) * pane * row * lit * vHouseDark * 1.6;
         }`,
       )
   }

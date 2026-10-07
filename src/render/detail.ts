@@ -333,7 +333,7 @@ export function withGroundDetail(
     // shape: a vertex drawn where the parent puts it, painted as the parent
     // paints it.
     shader.vertexShader =
-      'attribute vec3 coarseColour;\nattribute vec4 coarsePattern;\nattribute vec4 ground;\nattribute vec4 coarseGround;\nattribute float reef;\nvarying vec4 v_ground;\nvarying float v_reef;\n' +
+      'attribute vec3 coarseColour;\nattribute vec4 coarsePattern;\nattribute vec4 ground;\nattribute vec4 coarseGround;\nattribute float reef;\nattribute float farm;\nvarying vec4 v_ground;\nvarying float v_reef;\nvarying float v_farm;\n' +
       shader.vertexShader
         .replace(
           '#include <color_vertex>',
@@ -349,6 +349,7 @@ export function withGroundDetail(
   v_pattern = mix(pattern, coarsePattern, terrainMorph);
   v_ground = mix(ground, coarseGround, terrainMorph);
   v_reef = reef;
+  v_farm = farm;
 #include <project_vertex>`,
         )
     // Only the photographs this kind of world uses: a phone allows about
@@ -359,7 +360,7 @@ export function withGroundDetail(
       ? ['basalt', 'ash']
       : ['grass', 'sand', 'stone', 'snow', 'needles', 'savanna', 'tundra', 'salt']
     const flat: ReadonlySet<GroundKind> = new Set(['needles', 'savanna', 'tundra', 'salt'])
-    let declare = 'varying vec4 v_ground;\nvarying float v_reef;\n'
+    let declare = 'varying vec4 v_ground;\nvarying float v_reef;\nvarying float v_farm;\n'
     for (const kind of layers) {
       const name = kind.charAt(0).toUpperCase() + kind.slice(1)
       // The same uniform objects for every material, so a photograph that
@@ -621,6 +622,32 @@ export function withGroundDetail(
         // mostly stone, read as a honeycomb over the whole ground. The
         // photographs above carry the grain, and the GPU filters them
         // smoothly at every distance, so nothing of theirs pops.
+
+        // A town's fields (patch-data.ts, farm): plots on a grid laid along
+        // the ground, each its own crop — ripe wheat, green, ploughed earth —
+        // with a darker hedge round it. Faded to the crops' average colour
+        // once a pixel spans a plot, so from orbit a town sits in a soft
+        // ring of farmland rather than a sparkle.
+        if (v_farm > 0.01) {
+          // Laid on the two axes the ground faces least along, as a cube's
+          // face would be: a frame of the point's own is square to the
+          // point, and every point read the same plot.
+          vec3 fieldFacing = abs(normalize(vDetailPosition));
+          vec2 fieldAt = (fieldFacing.x > fieldFacing.y && fieldFacing.x > fieldFacing.z
+            ? vDetailPosition.yz
+            : (fieldFacing.y > fieldFacing.z ? vDetailPosition.xz : vDetailPosition.xy)) * 650.0;
+          // Not turned by a noise: turning varied across a single plot and
+          // drew the hedges as wavy streaks.
+          vec2 plot = floor(fieldAt * vec2(1.0, 1.6));
+          vec2 inPlot = fract(fieldAt * vec2(1.0, 1.6));
+          float pick = fract(sin(dot(plot, vec2(12.9898, 78.233))) * 43758.5453);
+          vec3 crop = pick < 0.35 ? vec3(0.78, 0.66, 0.3) : (pick < 0.7 ? vec3(0.42, 0.58, 0.22) : vec3(0.42, 0.31, 0.2));
+          float hedge = smoothstep(0.0, 0.07, min(min(inPlot.x, 1.0 - inPlot.x), min(inPlot.y, 1.0 - inPlot.y)));
+          vec3 fields = crop * (0.62 + 0.38 * hedge);
+          float plotSeen = 1.0 - smoothstep(0.15, 0.5, pixelSpan * 1040.0);
+          fields = mix(vec3(0.5, 0.5, 0.25), fields, plotSeen);
+          diffuseColor.rgb = mix(diffuseColor.rgb, fields, v_farm * 0.85);
+        }
 
         // Coral on a warm, shallow sea bed (patch-data.ts, reef): clumps
         // of it in a few colours, lumpy, with the plain bed between —

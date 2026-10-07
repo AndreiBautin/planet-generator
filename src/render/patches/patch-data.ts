@@ -4,6 +4,7 @@ import { groupingsAt } from '@/generation/grouping'
 import { fbm } from '@/generation/noise'
 import { fineReliefAt, reliefWeightAt } from '@/generation/relief'
 import { featuresAt, floorAt, FREEZES, patternAt } from '@/generation/features'
+import { townCoverOf } from '@/generation/settlements'
 
 import { fromPalette } from '../colour'
 import { liftOf } from '../surface-data'
@@ -95,6 +96,8 @@ export interface PatchData {
    * ground's shader (detail.ts) from this.
    */
   readonly reef: Float32Array
+  /** How much of each vertex is a town's fields, 0 to 1 (settlements.ts, `townCoverOf`): drawn as a patchwork in the ground's shader. */
+  readonly farm: Float32Array
   /**
    * Each biome's own ground, four weights a vertex — forest needles,
    * savanna, tundra, and salt flat (ash on a molten world) — then the same
@@ -199,6 +202,8 @@ export function samplePatch(planet: Planet, key: PatchKey, segments: number): Pa
   const rapids = new Float32Array(vertexCount(segments))
   const current = new Float32Array(vertexCount(segments) * 3)
   const reef = new Float32Array(vertexCount(segments))
+  const farm = new Float32Array(vertexCount(segments))
+  const towns = townCoverOf(planet)
   const ground = new Float32Array(vertexCount(segments) * 8)
   const water = new Float32Array(vertexCount(segments))
   const wetted = new Float32Array(side * side)
@@ -430,7 +435,24 @@ export function samplePatch(planet: Planet, key: PatchKey, segments: number): Pa
         // No wood under water: a lake fills its hollow over whatever grew
         // there, and the trees stood up through it.
         const drowned = (water[j * side + i] ?? 0) > radial
-        pattern[at] = drowned ? 0 : look.canopy * Math.min(1, grouping.grove * 1.4)
+        // Cleared where a house stands and where a town's fields run
+        // (settlements.ts): a wood stood up through the roofs before.
+        const town =
+          height > 0 && towns !== undefined
+            ? towns([px / radial, py / radial, pz / radial])
+            : undefined
+        const cleared = town === undefined ? 0 : Math.max(town.house, town.farm * 0.9)
+        // Fields on open ground: not on snow, thinning on a beach and on a
+        // steep slope. Ruled out wholly on any sand or slope at all, the
+        // fields of a coastal town on rolling ground came to nothing.
+        if (town !== undefined)
+          farm[j * side + i] =
+            town.farm *
+            (1 - town.house) *
+            (1 - smoothRange(0.12, 0.35, steep)) *
+            (1 - look.snow) *
+            (1 - look.sand * 0.6)
+        pattern[at] = drowned ? 0 : look.canopy * Math.min(1, grouping.grove * 1.4) * (1 - cleared)
         pattern[at + 1] = look.sand * (1 - stony * 0.7)
         pattern[at + 2] = look.snow
         pattern[at + 3] = Math.min(1, look.stone + stony * 0.8)
@@ -608,6 +630,7 @@ export function samplePatch(planet: Planet, key: PatchKey, segments: number): Pa
       mist[skirt] = mist[vertex] ?? 0
       rapids[skirt] = rapids[vertex] ?? 0
       reef[skirt] = reef[vertex] ?? 0
+      farm[skirt] = farm[vertex] ?? 0
       current[skirt * 3] = current[vertex * 3] ?? 0
       current[skirt * 3 + 1] = current[vertex * 3 + 1] ?? 0
       current[skirt * 3 + 2] = current[vertex * 3 + 2] ?? 0
@@ -633,6 +656,7 @@ export function samplePatch(planet: Planet, key: PatchKey, segments: number): Pa
     rapids,
     current,
     reef,
+    farm,
     ground,
     water,
   }

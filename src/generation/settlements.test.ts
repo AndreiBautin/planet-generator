@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { hydrologyOf, waterAt } from './hydrology'
 import { createPlanet, surfaceAt } from './planet'
 import { parseSeed } from './seed'
-import { settlementsOf } from './settlements'
+import { settlementsOf, TOWN_LIGHT, townCoverOf } from './settlements'
 
 const planetOf = (raw: string): ReturnType<typeof createPlanet> => {
   const seed = parseSeed(raw)
@@ -25,6 +25,27 @@ describe('settlements', () => {
       expect(here.river).toBeLessThan(0.2)
       expect(Number.isFinite(here.lake)).toBe(false)
     }
+  })
+
+  it('clears the ground under a house and lays fields round a town, and nothing far off', () => {
+    const cover = townCoverOf(temperate)
+    expect(cover).toBeDefined()
+    if (cover === undefined) return
+    const { lights, towns } = settled
+    // The first town light: a house stands there.
+    let k = 0
+    while ((lights[k + 3] ?? 0) < TOWN_LIGHT) k += 5
+    const house: [number, number, number] = [lights[k] ?? 0, lights[k + 1] ?? 0, lights[k + 2] ?? 1]
+    // Stored as float32, a light comes back a hair off its own point.
+    expect(cover(house).house).toBeGreaterThan(0.9)
+    // A town's heart is in its fields' reach.
+    const heart = towns[0]?.at ?? [0, 0, 1]
+    expect(cover(heart).farm).toBeGreaterThan(0.99)
+    // The far side of the world from that town, if no other is there, is open.
+    const away: [number, number, number] = [-heart[0], -heart[1], -heart[2]]
+    const far = cover(away)
+    expect(far.house).toBeLessThan(0.01)
+    expect(townCoverOf(planetOf('h999999'))).toBeUndefined()
   })
 
   it('lives on temperate worlds and not on molten or frozen ones', () => {

@@ -1111,3 +1111,30 @@ again: a screenshot shows nothing.
 - **A new noise in a shader fades by its own pixel span**, or it will
   sparkle from orbit. `pixelSpan` in the ground shader, `cloudSpan` in the
   clouds'.
+
+## Towns, finished
+
+- **Trees cleared under the houses and across the fields**
+  (`townCoverOf` in settlements.ts, tested; read in patch-data.ts as the
+  canopy is decided): `house` near a town light, `farm` in a ring round
+  each town out past its houses, both bucketed by drainage-map cell so a
+  point asks only about what is near. A wood used to stand through the
+  roofs.
+- **Fields** (`farm`, a ground attribute; drawn in the ground's shader):
+  plots of ripe wheat, green and ploughed earth with darker hedges, on open
+  ground — thinning on a beach or a steep slope rather than ruled out by
+  any at all, which left a coastal town's fields at nothing. Faded to their
+  average colour once a pixel spans a plot.
+  - **The plots are laid on the two axes the ground faces least along**,
+    as a cube's face would be. A frame of the point's own (east and north
+    at that point) is square to the point, so `dot(p, east)` was nought
+    everywhere and every point read the same plot. A grid turned by a noise
+    was tried and drew the hedges as wavy streaks.
+- **Lit windows at night** (`growNear` in towns.ts): two rows of small
+  warm panes along each wall, three houses in four lit, coming on through
+  the dusk.
+- **`TOWN_LIGHT` lives in settlements.ts now**, shared with towns.ts, so
+  the house and the cleared ground under it cannot disagree about which
+  lights are houses.
+- Seen: the town in open grass with fields round it by day, and windows
+  lit against the town's glow at night.

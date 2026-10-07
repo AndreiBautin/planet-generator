@@ -1,5 +1,13 @@
 import type { Vec3 } from './cube'
-import { cellCentre, hydrologyOf, neighboursOf, RIVER_FLOW, waterAt } from './hydrology'
+import {
+  CELL_ANGLE,
+  cellCentre,
+  cellOf,
+  hydrologyOf,
+  neighboursOf,
+  RIVER_FLOW,
+  waterAt,
+} from './hydrology'
 import { surfaceAt, type Planet } from './planet'
 import { createRng } from './rng'
 
@@ -222,4 +230,107 @@ function settle(planet: Planet): Settlements {
   })
 
   return { towns, lights: Float32Array.from(lights) }
+}
+
+/** How a point stands to a world's towns: under a house (0 to 1), and in a town's fields (0 to 1). */
+export interface TownCover {
+  readonly house: number
+  readonly farm: number
+}
+
+/** How near a house must be, in radians, to clear the trees over a point: a garden's width. */
+const HOUSE_REACH = 0.0007
+const OPEN: TownCover = { house: 0, farm: 0 }
+const covers = new WeakMap<Planet, ((d: Vec3) => TownCover) | undefined>()
+
+/**
+ * A world's towns as the ground sees them, for the worker that builds the
+ * ground (render/patches/patch-data.ts): `house` near a town's light, which
+ * is a house (render/towns.ts) — clear the trees there — and `farm` in the
+ * ring of fields round each town, out past its houses. Bucketed by the
+ * cells of the drainage map so a point asks only about the towns and
+ * houses near it. Nothing on an unsettled world.
+ */
+export function townCoverOf(planet: Planet): ((d: Vec3) => TownCover) | undefined {
+  if (covers.has(planet)) return covers.get(planet)
+  const { towns, lights } = settlementsOf(planet)
+  if (towns.length === 0) {
+    covers.set(planet, undefined)
+    return undefined
+  }
+  const neighbours = new Map<number, readonly number[]>()
+  const around = (cell: number): readonly number[] => {
+    let near = neighbours.get(cell)
+    if (near === undefined) {
+      near = [cell, ...neighboursOf(cell)]
+      neighbours.set(cell, near)
+    }
+    return near
+  }
+  const houses = new Map<number, number[]>()
+  for (let k = 0; k + 4 < lights.length; k += 5) {
+    if ((lights[k + 3] ?? 0) < TOWN_LIGHT) continue
+    const d: Vec3 = [lights[k] ?? 0, lights[k + 1] ?? 0, lights[k + 2] ?? 1]
+    const cell = cellOf(d)
+    const list = houses.get(cell) ?? []
+    list.push(d[0], d[1], d[2])
+    houses.set(cell, list)
+  }
+  // Each town listed in every cell its fields can reach.
+  const fields = new Map<number, number[]>()
+  towns.forEach((town, index) => {
+    const reach = farmReach(town)
+    const seen = new Set<number>()
+    let ring = [cellOf(town.at)]
+    for (let step = 0; step <= Math.ceil(reach / CELL_ANGLE) + 1; step += 1) {
+      const next: number[] = []
+      for (const cell of ring) {
+        if (seen.has(cell)) continue
+        seen.add(cell)
+        const list = fields.get(cell) ?? []
+        list.push(index)
+        fields.set(cell, list)
+        next.push(...around(cell))
+      }
+      ring = next
+    }
+  })
+  const cover = (d: Vec3): TownCover => {
+    const cell = cellOf(d)
+    let house = 0
+    for (const near of around(cell)) {
+      const list = houses.get(near)
+      if (list === undefined) continue
+      for (let k = 0; k < list.length; k += 3) {
+        const dot = d[0] * (list[k] ?? 0) + d[1] * (list[k + 1] ?? 0) + d[2] * (list[k + 2] ?? 0)
+        if (dot < 0.9999) continue
+        const apart = Math.acos(Math.min(1, dot))
+        house = Math.max(house, Math.exp(-((apart / HOUSE_REACH) ** 2)))
+      }
+    }
+    let farm = 0
+    for (const index of fields.get(cell) ?? []) {
+      const town = towns[index]
+      if (town === undefined) continue
+      const apart = Math.acos(
+        Math.min(1, d[0] * town.at[0] + d[1] * town.at[1] + d[2] * town.at[2]),
+      )
+      const reach = farmReach(town)
+      farm = Math.max(farm, 1 - smoothRange(reach * 0.6, reach, apart))
+    }
+    return house === 0 && farm === 0 ? OPEN : { house, farm }
+  }
+  covers.set(planet, cover)
+  return cover
+}
+
+/** How far out a town's fields run, in radians: a little past its houses. */
+const farmReach = (town: Town): number => (0.0025 + town.size * 0.009) * 2.4
+
+/** The brightness that tells a town's light from a road's (roads stop at 0.42). */
+export const TOWN_LIGHT = 0.44
+
+function smoothRange(from: number, to: number, value: number): number {
+  const t = Math.min(1, Math.max(0, (value - from) / (to - from)))
+  return t * t * (3 - 2 * t)
 }
