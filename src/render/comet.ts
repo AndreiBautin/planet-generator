@@ -75,7 +75,11 @@ export class CometSky {
             float ion = vStrip.z;
             // Brightest by the head, fading to nothing at the tip; soft at
             // the edges, the ion tail a narrow core.
-            float length = pow(1.0 - along, mix(1.3, 0.9, ion)) * smoothstep(0.0, 0.04, along);
+            // Clamped: interpolated across a triangle, \`along\` runs a hair
+            // past 1 at the tip, and pow of a negative is NaN. The tail is
+            // drawn first, and blending carried that NaN through everything
+            // drawn over it — the whole frame went black under a comet.
+            float length = pow(max(1.0 - along, 0.0), mix(1.3, 0.9, ion)) * smoothstep(0.0, 0.04, along);
             float width = exp(-across * across * mix(2.6, 6.0, ion));
             // Streamers in the ion tail, drifting outwards; the dust tail
             // brighter along its leading edge, as a curved dust tail is.

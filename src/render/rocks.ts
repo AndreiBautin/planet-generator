@@ -89,6 +89,7 @@ export class CoastRocks {
       own: 0.35,
     })
     this.pillars = new THREE.InstancedMesh(pillarGeometry(), this.material, MOST_GROUPS * PIECES)
+    this.pillars.name = 'sea stacks'
     this.pillars.frustumCulled = false
     this.pillars.instanceMatrix.setUsage(THREE.DynamicDrawUsage)
     for (let k = 0; k < MOST_GROUPS * PIECES; k += 1) this.pillars.setMatrixAt(k, this.gone)
@@ -153,7 +154,14 @@ export class CoastRocks {
     this.world = world
     this.near.reset()
     for (let s = 0; s < MOST_GROUPS; s += 1) this.clear(s)
-    this.material.color.copy(fromPalette(world.palette.highland)).multiplyScalar(0.8)
+    // The ground's own rock (patch-data.ts) weathered towards the shore it
+    // stands off, so a stack is the stone of the cliff it broke from. The
+    // highland's colour alone, darkened, stood a row of black posts off a
+    // pale shore.
+    this.material.color
+      .copy(fromPalette(world.palette.highland))
+      .lerp(fromPalette(world.palette.peak), 0.25)
+      .lerp(fromPalette(world.palette.shore), 0.4)
   }
 
   /** Follow the eye: `eye` in the planet's frame, in radii; `ground` the planet's matrix. */
@@ -236,7 +244,7 @@ export class CoastRocks {
         new THREE.Matrix4().compose(
           up.clone().multiplyScalar(floor),
           turn,
-          new THREE.Vector3(radius, tall, radius),
+          new THREE.Vector3(radius * STOUT, tall, radius * STOUT),
         ),
       )
       placed.sprays.push(spray)
@@ -248,7 +256,7 @@ export class CoastRocks {
         this.sprayAt[v + 1] = at[1] * SEA_RADIUS
         this.sprayAt[v + 2] = at[2] * SEA_RADIUS
         const o = (k * SPRAY + j) * 4
-        this.sprayOf[o] = radius
+        this.sprayOf[o] = radius * STOUT
         this.sprayOf[o + 1] = fract(lean * 31.7 + j * 0.137)
         this.sprayOf[o + 2] = (j / SPRAY) * Math.PI * 2 + lean * 6
       }
@@ -304,7 +312,9 @@ export class CoastRocks {
  * the others so it is not a turned post.
  */
 function pillarGeometry(): THREE.BufferGeometry {
-  const geometry = new THREE.CylinderGeometry(0.3, 0.62, 1, 7, 5).translate(0, 0.5, 0)
+  // Stout: a stack is a lump of the cliff left standing, and at 0.3 over
+  // 0.62 it read as a piling driven into the sea.
+  const geometry = new THREE.CylinderGeometry(0.5, 0.8, 1, 7, 5).translate(0, 0.5, 0)
   const p = geometry.getAttribute('position')
   for (let k = 0; k < p.count; k += 1) {
     const x = p.getX(k)
@@ -321,6 +331,9 @@ function pillarGeometry(): THREE.BufferGeometry {
   geometry.computeVertexNormals()
   return geometry
 }
+
+/** How much wider a stack is drawn than it is placed: thinner, they read as pilings. */
+const STOUT = 1.4
 
 const fract = (x: number): number => x - Math.floor(x)
 

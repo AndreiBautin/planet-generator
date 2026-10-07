@@ -86,6 +86,7 @@ export class Herds {
     const count = MOST_HERDS * MOST_BEASTS
     this.bodies = new THREE.InstancedMesh(bodyGeometry(), material, count)
     this.heads = new THREE.InstancedMesh(headGeometry(), material, count)
+    this.bodies.name = 'herd bodies'
     for (const mesh of [this.bodies, this.heads]) {
       mesh.frustumCulled = false
       mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage)

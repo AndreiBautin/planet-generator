@@ -1854,3 +1854,42 @@ from it (`SWELL_TRAINS_GLSL`) and `swellHeaveAt` lifts hulls and wakes by
 the same heave, faded with distance as the shader fades it. It reads the
 open-sea swell only — no shoaling, ice or inland damping — which is right
 on the lanes and slightly low in the shallows by a harbour.
+
+## A comet blacked out the frame; cliffs, and the stacks off them
+
+**One NaN pixel is a black screen, and a comet made one everywhere.** The
+comet's tail took `pow(1.0 - along, …)`, and interpolated across a
+triangle `along` runs a hair past 1 at the tip: pow of a negative is NaN.
+The tail draws first (`renderOrder = -1`), and ordinary blending carries
+NaN through everything drawn over it — NaN times nought is still NaN — so
+any view with the tail across it came out pure black, with no error
+anywhere. Found by reading the scene's half-float target back
+(`readRenderTargetPixels`, decoded by hand): every pixel's alpha was NaN,
+and hiding materials one at a time named the tail. **Any `pow`, `sqrt`,
+`log` or `normalize` that can see a negative or a zero is a candidate
+for the same blackout**; the cliff code below guards its `normalize` for
+that reason.
+
+**Cliffs are read per pixel (`detail.ts`, `cliff`).** A vertex's
+steepness is averaged with the flat ground round it, so a gorge one grid
+step wide read as a gentle bank at both ends and its wall was painted
+grass — and the triplanar texture, projected along the radial direction
+rather than the face, smeared it down the wall in green streaks. The
+ground shader now takes each face's own slope from its screen
+derivatives: past about 50° from level it is stone in the ground's rock
+colour, textured along the face. Excusing a river's banks from the rock
+rule (`patch-data.ts`) was the first suspect and changed nothing here.
+Checked against islands from orbit with the rule switched off: their
+pale patches were there before it.
+
+**Sea stacks are stout and the colour of the cliff.** They were cylinders
+0.3 over 0.62 at about one to four, in the highland colour darkened — on
+a world with brown highlands, a row of near-black pilings off a pale
+shore. They are 0.5 over 0.8, drawn `STOUT` (1.4×) wider than placed, in
+the ground's rock weathered towards the shore's colour. The spray rings
+the wider foot.
+
+**Not changed, and looked at:** herds (stand on the grass, weathered,
+none buried), bridges, and the towns' night glow from orbit and the top
+of the glide range — sparks with a faint halo on the larger towns, not
+the blooms an earlier note feared.

@@ -485,10 +485,32 @@ export function withGroundDetail(
         // The ground's texture: which kinds of ground are here, blended,
         // laid on triplanar at two scales so neither the repeat nor the
         // texel shows, and faded where it would only shimmer.
+        // How sheer the face drawn here is, from its own slope on screen. A
+        // vertex's steepness is averaged with the flat ground round it, so
+        // a gorge one grid step wide read as a gentle bank at both ends and
+        // its wall between was painted grass, the texture projected straight
+        // down the face in green streaks. Scaled before crossing: a pixel's
+        // step is tiny, and its square underflowed.
+        vec3 cliffDx = dFdx(vDetailPosition);
+        vec3 cliffDy = dFdy(vDetailPosition);
+        float cliffSpan = max(max(length(cliffDx), length(cliffDy)), 1e-20);
+        vec3 cliffCross = cross(cliffDx / cliffSpan, cliffDy / cliffSpan);
+        float cliffLength = length(cliffCross);
+        // A pixel whose neighbours are not its face has no slope to read:
+        // normalised, the nothing came back as NaN, and the bloom spread
+        // one bad pixel over the whole frame.
+        vec3 cliffFace = cliffLength > 1e-6 ? cliffCross / cliffLength : normalize(vDetailPosition);
+        float cliff = ${molten ? '0.0' : 'smoothstep(0.4, 0.65, 1.0 - abs(dot(cliffFace, normalize(vDetailPosition))))'};
+        // And bare rock's colour, whatever the vertices either side were painted.
+        diffuseColor.rgb = mix(
+          diffuseColor.rgb,
+          vec3(dot(diffuseColor.rgb, vec3(0.3, 0.55, 0.15))) * vec3(1.04, 0.97, 0.88),
+          cliff * 0.85);
         {
           float texFade = 1.0 - smoothstep(0.12, 0.8, detailDistance);
           if (texFade > 0.01) {
-            vec3 n = normalize(vDetailPosition);
+            // Laid along the face where it is sheer, not down it.
+            vec3 n = normalize(mix(normalize(vDetailPosition), cliffFace, cliff));
             vec3 w = pow(abs(n), vec3(6.0));
             w /= w.x + w.y + w.z;
             vec3 p = vDetailPosition * 1500.0;
@@ -505,7 +527,7 @@ export function withGroundDetail(
                 : /* glsl */ `
             float wSand = v_pattern.y;
             float wSnow = v_pattern.z;
-            float wStone = v_pattern.w;
+            float wStone = max(v_pattern.w, cliff);
             // The biome grounds take their share from the grass and sand
             // they stand in for: savanna and tundra are grassland of a kind,
             // a salt flat is a desert floor, needles lie under conifers.
@@ -513,6 +535,13 @@ export function withGroundDetail(
             float wSavanna = v_ground.y;
             float wTundra = v_ground.z;
             float wSalt = v_ground.w * (1.0 - wSnow);
+            // A cliff holds no grass, needles, sand or snow.
+            wSand *= 1.0 - cliff;
+            wSnow *= 1.0 - cliff;
+            wNeedles *= 1.0 - cliff;
+            wSavanna *= 1.0 - cliff;
+            wTundra *= 1.0 - cliff;
+            wSalt *= 1.0 - cliff;
             float wGrass = max(0.0, 1.0 - (wSand + wSnow + wStone + wNeedles + wSavanna + wTundra));
             wSand *= 1.0 - wSalt;
             float total = max(0.001, wSand + wSnow + wStone + wGrass + wNeedles + wSavanna + wTundra + wSalt);
