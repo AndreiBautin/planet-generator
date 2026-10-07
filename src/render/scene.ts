@@ -27,6 +27,7 @@ import { Soundscape } from './sound'
 import { auroraFor, auroraStrength } from './aurora'
 import { VALLEY_FOG } from './valley-fog'
 import { Embers, plumes, PLUME_SUN } from './volcanic'
+import { Eruptions } from './eruptions'
 import { spray } from './waterfalls'
 import { Birds } from './birds'
 import { Meteors } from './meteors'
@@ -620,10 +621,15 @@ export function startScene(
     kelp.setWorld(next.world)
     meteors.setWorld(next.world.seed)
     // Smoke from a molten world's peaks, turning with its ground.
-    const smoke = plumes(next.world, volcanoesOf(next.world))
+    const volcanoes = volcanoesOf(next.world)
+    const smoke = plumes(next.world, volcanoes)
     if (smoke !== undefined) {
       smoke.userData.withGround = true
       next.terrain.group.add(smoke)
+      // Their eruptions: fountains at the vents and lava down the flanks (eruptions.ts).
+      const fire = new Eruptions(next.world, volcanoes)
+      fire.group.userData.withGround = true
+      next.terrain.group.add(fire.group)
     }
     // Spray off the waterfalls: found in a worker, since they need the
     // drainage map, and added if this ground is still the one on screen.

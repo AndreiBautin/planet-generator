@@ -4,6 +4,7 @@ import type { Planet } from '@/generation/planet'
 import type { Volcano } from '@/generation/volcanoes'
 
 import { DETAIL_TIME, NOISE } from './detail'
+import { ERUPTION_GLSL, eruptionSeed } from './eruptions'
 import { groundRadiusAt } from './patches/patch-data'
 
 /**
@@ -34,10 +35,11 @@ export function plumes(planet: Planet, volcanoes: readonly Volcano[]): THREE.Mes
   const sites: number[] = []
   volcanoes.forEach((volcano, k) => {
     const base = groundRadiusAt(planet, volcano.at)
+    const cycle = eruptionSeed(volcano.at)
     for (let puff = 0; puff < PUFFS; puff += 1) {
       const phase = (puff + 0.5) / PUFFS
       const jitter = Math.sin((k * 31 + puff) * 12.9898) * 43758.5453
-      sites.push(...volcano.at, base, volcano.heat, phase, jitter - Math.floor(jitter))
+      sites.push(...volcano.at, base, volcano.heat, phase, jitter - Math.floor(jitter), cycle)
     }
   })
   const quad = new THREE.InstancedBufferGeometry()
@@ -46,12 +48,13 @@ export function plumes(planet: Planet, volcanoes: readonly Volcano[]): THREE.Mes
     new THREE.BufferAttribute(new Float32Array([-1, -1, 0, 1, -1, 0, 1, 1, 0, -1, 1, 0]), 3),
   )
   quad.setIndex([0, 1, 2, 0, 2, 3])
-  const buffer = new THREE.InstancedInterleavedBuffer(Float32Array.from(sites), 7, 1)
+  const buffer = new THREE.InstancedInterleavedBuffer(Float32Array.from(sites), 8, 1)
   quad.setAttribute('plumeAt', new THREE.InterleavedBufferAttribute(buffer, 3, 0))
   quad.setAttribute('plumeBase', new THREE.InterleavedBufferAttribute(buffer, 1, 3))
   quad.setAttribute('plumeHeat', new THREE.InterleavedBufferAttribute(buffer, 1, 4))
   quad.setAttribute('plumePhase', new THREE.InterleavedBufferAttribute(buffer, 1, 5))
   quad.setAttribute('plumeSeed', new THREE.InterleavedBufferAttribute(buffer, 1, 6))
+  quad.setAttribute('plumeCycle', new THREE.InterleavedBufferAttribute(buffer, 1, 7))
   quad.instanceCount = volcanoes.length * PUFFS
   const material = new THREE.ShaderMaterial({
     transparent: true,
@@ -65,13 +68,18 @@ export function plumes(planet: Planet, volcanoes: readonly Volcano[]): THREE.Mes
       attribute float plumeHeat;
       attribute float plumePhase;
       attribute float plumeSeed;
+      attribute float plumeCycle;
       varying vec2 vCorner;
       varying float vAge;
       varying float vHeat;
       varying float vSeed;
       varying float vDay;
+      varying float vErupting;
+      ${ERUPTION_GLSL}
       void main() {
         vec3 up = normalize(plumeAt);
+        // Thicker and fiercer at the vent while the volcano erupts (eruptions.ts).
+        vErupting = eruption(plumeTime, plumeCycle);
         vec3 east = normalize(cross(vec3(0.0, 1.0, 0.0), up) + vec3(1e-5, 0.0, 0.0));
         vec3 north = cross(up, east);
         // How far along its rise this puff is, 0 at the vent.
@@ -81,7 +89,7 @@ export function plumes(planet: Planet, volcanoes: readonly Volcano[]): THREE.Mes
         float wander = (plumeSeed - 0.5) * age * tall * 0.5;
         vec3 along = up * (plumeBase + age * tall) + east * age * age * tall * 1.3 + north * wander;
         float scale = length((modelMatrix * vec4(1.0, 0.0, 0.0, 0.0)).xyz);
-        float size = mix(0.0025, 0.016, pow(age, 0.7)) * (0.5 + 0.5 * plumeHeat) * scale;
+        float size = mix(0.0025, 0.016, pow(age, 0.7)) * (0.5 + 0.5 * plumeHeat) * (0.9 + 0.2 * vErupting) * scale;
         vec4 view = viewMatrix * modelMatrix * vec4(along, 1.0);
         // Turned by its seed so no two puffs show the same face.
         float turn = plumeSeed * 6.283 + age * 1.5;
@@ -102,6 +110,7 @@ export function plumes(planet: Planet, volcanoes: readonly Volcano[]): THREE.Mes
       varying float vHeat;
       varying float vSeed;
       varying float vDay;
+      varying float vErupting;
       ${NOISE}
       void main() {
         // A soft round lump, its edge broken by a noise.
@@ -118,7 +127,9 @@ export function plumes(planet: Planet, volcanoes: readonly Volcano[]): THREE.Mes
         // smoke its lumps; brown-grey ash, not white steam.
         float top = 0.6 + 0.4 * smoothstep(-0.8, 0.8, vCorner.y + (lump - 0.5) * 0.8);
         vec3 ash = mix(vec3(0.05, 0.045, 0.045), vec3(0.27, 0.24, 0.22) * top * (0.8 + 0.3 * lump), vDay);
-        float vent = exp(-vAge * 9.0) * vHeat;
+        // A little fiercer while erupting, no more: doubled, the lit puffs at
+        // the vent swelled into one glowing ball over the summit.
+        float vent = exp(-vAge * 9.0) * vHeat * (0.85 + 0.35 * vErupting);
         float under = exp(-vAge * 3.5) * smoothstep(-0.2, -1.0, vCorner.y) * 0.4 * vHeat;
         vec3 colour = ash + vec3(1.0, 0.36, 0.07) * (vent * 2.0 + under);
         gl_FragColor = vec4(colour, density * mix(0.85, 0.5, vAge));

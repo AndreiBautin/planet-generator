@@ -1447,3 +1447,35 @@ neighbours by its own roll, so a wood colours in patches.
   light of their own colour, as the herds and ruins have.
 - Seen: three stacks and an arch off a wooded shore at midday. Not seen: a
   frozen world's coast, spray at dusk, a phone.
+
+## Eruptions
+
+`render/eruptions.ts` (`eruption`, `eruptionSeed`, tested): each volcano on a
+molten world goes through a cycle of its own — quiet, then about a third
+of its 45 seconds fountaining — keyed from where it stands, so they do not
+all go at once.
+
+- **Fountains**: seventy glowing bombs a vent, each thrown at its own angle
+  and speed, arcing up and falling back, yellow-white at the core and red
+  at the edge, thrown only while the volcano erupts.
+- **Flows**: from each volcano three rivers of lava, the steepest way down
+  its flanks to the lava sea or a hollow (found once per world on the page
+  from a few thousand surface samples), as ribbons on the ground: a dark
+  crust crawling downhill, cracked open to the glow, hotter near the vent
+  and in mid-stream, brighter while the volcano erupts.
+- **The plume** (volcanic.ts) grows a little and burns a little fiercer at
+  the vent while its volcano erupts. Doubled, the lit puffs at the vent
+  swelled into one glowing ball over the summit.
+- **The seed is passed in, never hashed on the GPU.** The same hash in
+  32-bit floats is a different number, so the fountains, the flows and the
+  plume each kept their own time. `ERUPTION_GLSL` takes the seed from
+  `eruptionSeed` as an attribute everywhere.
+- **A GLSL keyword as a name failed in silence**: the bombs' direction was
+  called `out`, the shader did not compile, and the fountains drew nothing
+  with no error on the page. Found by diffing the frame with the points on
+  and off (nothing changed) after reproducing their arithmetic in
+  JavaScript (they should have been there).
+- **Seen, not fixed**: close to a volcano at night its plume is a large
+  glowing mass over the vent — the existing lit puffs, before eruptions.
+- Seen: a fountain over a vent and three flows down its flank at night on
+  `h999999`. Not seen: a fountain by day, a phone.
