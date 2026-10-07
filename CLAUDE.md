@@ -1337,3 +1337,23 @@ screen** — its matrices were checked numerically (on the shore, along
   fills it.
 - Seen: a lighthouse by day and turning at night beside a lit town, a
   temple and a fort by day. Not seen: a phone, a ruin at night.
+
+## The phone pass
+
+- **Sunbeams on a modest phone** (`render/sun-fan.ts`): the screen-space
+  pass reads the finished frame, and a modest phone draws straight to the
+  screen with no frame to read, so it had no beams at all. It gets a fan
+  of eighteen soft rays standing in the sky round the sun instead — one
+  draw, a few dozen triangles — at the strength `sunbeamStrength` gives
+  the pass. **The depth test does the occluding**: the fan stands past the
+  ground, so a ridge in front of the sun cuts it off. Clouds do not, which
+  is why the pass is still the one for every device that can afford it.
+  The first fan was hard wedges, a flag's rising sun; each ray is soft
+  across its width now, the width divided by how far along it is so the
+  softness holds all the way out from the sun.
+- **`docs/PHONE_CHECKLIST.md`** is what only a phone can answer — first
+  load, smoothness, heat, the share sheets — with a shot link straight to
+  each feature of this backlog on the live site.
+- Seen: the fan at sunset on the modest profile (`?cores=4`, 375 × 812).
+  Not measured: what it costs on a real phone, which is the checklist's
+  job.

@@ -36,6 +36,7 @@ import { Kelp } from './kelp'
 import { SeaLight } from './sea-light'
 import { Rainbow, rainbowStrength } from './rainbow'
 import { Ships } from './ships'
+import { SunFan } from './sun-fan'
 import { Lighthouses } from './lighthouses'
 import { Ruins } from './ruins'
 import { Towns, townSites } from './towns'
@@ -456,6 +457,8 @@ export function startScene(
   scene.add(herds.object)
   const rainbow = new Rainbow()
   scene.add(rainbow.object)
+  const sunFan = new SunFan()
+  scene.add(sunFan.object)
   const awayFromSun = new THREE.Vector3()
   const bowUp = new THREE.Vector3()
   const marineSnow = new MarineSnow()
@@ -1148,6 +1151,7 @@ export function startScene(
     }
     underTheSea()
     if (composer !== undefined) aimBeams()
+    else fanBeams()
     if (composer === undefined) renderer.render(scene, camera)
     else composer.render()
     frameListener?.()
@@ -1237,6 +1241,30 @@ export function startScene(
       sunbeamStrength(elevation, 1 - smooth(0.05, 0.3, above), off) *
       (1 - DETAIL_UNDER.value)
     ;(tint.value as THREE.Color).copy(sun.color)
+  }
+
+  /**
+   * On a phone with no post pass, the sunbeams as a fan of rays in the sky
+   * (sun-fan.ts), at the strength the pass would have had, a little less:
+   * nothing in the fan reads the clouds, so it is kept quieter.
+   */
+  const fanBeams = (): void => {
+    const scale = shown === undefined ? 1 : stageOf(shown).scale
+    const above = camera.position.length() / scale - 1
+    camera.updateMatrixWorld()
+    sunOnScreen.copy(camera.position).addScaledVector(sunDirection, camera.far * 0.5)
+    sunOnScreen.project(camera)
+    const ahead = sunOnScreen.z < 1
+    const off = ahead ? Math.hypot(sunOnScreen.x * 0.5, sunOnScreen.y * 0.5) : 2
+    const elevation = meteorUp.copy(camera.position).normalize().dot(sunDirection)
+    sunFan.update(
+      camera.position,
+      sunDirection,
+      camera.far * 0.6,
+      sunbeamStrength(elevation, 1 - smooth(0.05, 0.3, above), off) * (1 - DETAIL_UNDER.value),
+      sun.color,
+      DETAIL_TIME.value,
+    )
   }
 
   /**
