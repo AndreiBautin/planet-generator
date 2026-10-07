@@ -74,10 +74,21 @@ export default defineConfig({
   },
   server: { port: PORT, strictPort: true },
   preview: { port: PORT, strictPort: true },
-  // Three.js alone is about 600 kB minified; the default 500 kB warning
-  // would fire on every build and be learned as noise. Raised to just
-  // above it, so a real jump in size still warns.
-  build: { chunkSizeWarningLimit: 800 },
+  // Three.js alone is about 575 kB minified, in a chunk of its own below;
+  // the default 500 kB warning would fire on it every build and be learned
+  // as noise. Raised to just above it, so a real jump in size still warns —
+  // the app's own chunk is about 245 kB.
+  build: {
+    chunkSizeWarningLimit: 600,
+    rolldownOptions: {
+      output: {
+        // Three.js in a chunk of its own: it changes only when the library
+        // is upgraded, so a deploy of the app leaves it cached on every
+        // device that has opened the app before.
+        codeSplitting: { groups: [{ name: 'three', test: /node_modules[\\/]three[\\/]/ }] },
+      },
+    },
+  },
   worker: { format: 'es' },
   plugins: [serviceWorker()],
 })

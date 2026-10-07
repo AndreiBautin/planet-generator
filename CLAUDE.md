@@ -1068,3 +1068,18 @@ cannot disagree.
   0.45 a town light starts at: stored as a float32, 0.45 comes back a hair
   under it, and the faintest houses vanished.
 - Not done: trees still grow among the houses.
+
+## Lighter first load
+
+- **Three.js is a chunk of its own** (`codeSplitting` in vite.config.ts):
+  about 575 kB of the 815 the app was in one file. It changes only when
+  the library is upgraded, so a deploy of the app leaves it cached on
+  every device that has opened the app before; the app's own chunk is
+  about 245 kB (81 gzipped). The size warning is set just above three's
+  chunk (600 kB), so a real jump still warns.
+- **The optional panels were not split off**, on measurement: clips,
+  postcards, the atlas and the system view are a few kB of the app's
+  chunk, and loading them on first use would make the clip and postcard
+  buttons start asynchronously for almost nothing.
+- Checked by serving the production build: both chunks load, the planet
+  draws, no console errors.
