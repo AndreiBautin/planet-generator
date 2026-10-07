@@ -1,5 +1,6 @@
 import * as THREE from 'three'
 
+import { TOWN_GLOW_GLSL, withTownGlow } from './town-glow'
 import { VALLEY_FOG } from './valley-fog'
 
 /**
@@ -73,6 +74,7 @@ export function weather(material: THREE.Material, w: Weathering): void {
   material.onBeforeCompile = (shader, renderer) => {
     before(shader, renderer)
     shader.uniforms.weatherSun = VALLEY_FOG.sun
+    withTownGlow(shader.uniforms)
     shader.vertexShader = shader.vertexShader
       .replace(
         'void main() {',
@@ -110,7 +112,7 @@ export function weather(material: THREE.Material, w: Weathering): void {
     shader.fragmentShader = shader.fragmentShader
       .replace(
         'void main() {',
-        `${NOISE}\nuniform vec3 weatherSun;\nvarying vec3 vWeatherLocal;\nvarying vec3 vWeatherPlaced;\nvarying vec3 vWeatherWorld;\nvarying vec3 vWeatherNormal;\nvarying vec3 vWeatherViewUp;\nvarying float vWeatherSeed;\nvoid main() {`,
+        `${NOISE}\n${TOWN_GLOW_GLSL}\nuniform vec3 weatherSun;\nvarying vec3 vWeatherLocal;\nvarying vec3 vWeatherPlaced;\nvarying vec3 vWeatherWorld;\nvarying vec3 vWeatherNormal;\nvarying vec3 vWeatherViewUp;\nvarying float vWeatherSeed;\nvoid main() {`,
       )
       .replace(
         '#include <color_fragment>',
@@ -137,7 +139,9 @@ export function weather(material: THREE.Material, w: Weathering): void {
         '#include <emissivemap_fragment>',
         /* glsl */ `#include <emissivemap_fragment>
         float weatherDay = smoothstep(-0.1, 0.15, dot(normalize(vWeatherWorld), normalize(weatherSun)));
-        totalEmissiveRadiance += diffuseColor.rgb * ${glslFloat(w.own)} * weatherDay;`,
+        totalEmissiveRadiance += diffuseColor.rgb * ${glslFloat(w.own)} * weatherDay;
+        // The towns' light at night on whatever stands round them (town-glow.ts).
+        totalEmissiveRadiance += diffuseColor.rgb * townGlowAt(vWeatherPlaced) * 0.7;`,
       )
       .replace(
         '#include <lights_fragment_end>',

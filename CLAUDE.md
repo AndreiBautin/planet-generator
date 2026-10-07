@@ -1772,3 +1772,24 @@ instanced triangles drawn, 197,000 skipped; the caravan drawn as before.
 - **Shot links past the glide's pitch** (backlog 8, item 6): a link's
   tilt beyond about −12.6° is clamped, but the app only writes links from
   the glide's own pitch, so only a hand-written link meets it. Left as is.
+
+## One light at night for the ground and everything on it
+
+`render/town-glow.ts` (`TOWN_GLOW_GLSL`, `withTownGlow`): the towns' glow
+map read at a point of the planet's frame, by the ground, the trees and
+every weathered model alike (backlog 8, item 7).
+
+- **The ground took the towns' light alone, as a flat orange of its own.**
+  So at night the sand round a village shone a bright beige while the
+  houses and woods, which took none of it — and since the weathering, no
+  light of their own at night either — stood as black silhouettes against
+  it. Now the glow is light falling on each surface's own colour, the same
+  for all of them: a village at night is lit windows in warmly lit walls,
+  the glow pooling round the town and fading into dark woods.
+- **Narrower and dimmer than the ground's old glow** (cubed rather than
+  squared, 0.7 rather than a flat 0.5 emitted): given to everything at the
+  old reach, a village at half past ten looked like a golden evening.
+- **From orbit the towns still show**: their light sprites (city-lights.ts)
+  carry that, not the ground's glow.
+- Seen: the village at dusk, night and dawn side by side, and the night
+  side from orbit. Not seen: a town on a cold or a desert world at night.

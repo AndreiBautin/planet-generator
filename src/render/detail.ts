@@ -772,7 +772,10 @@ export function withGroundDetail(
             vec2 cityUv = vec2(atan(cityUp.z, -cityUp.x) / 6.2831853 + 0.5, 1.0 - acos(clamp(cityUp.y, -1.0, 1.0)) / 3.1415927);
             float cityDark = 1.0 - smoothstep(-0.12, 0.04, dot(cityUp, detailCloudSun));
             float town = texture2D(detailCities, cityUv).r;
-            totalEmissiveRadiance += vec3(1.0, 0.62, 0.3) * town * town * cityDark * detailCityLight;
+            // Light on the ground's own colour, as it falls on the houses and
+            // trees (town-glow.ts): emitted as a flat orange of its own, the
+            // sand round a village shone beige while the village stood black.
+            totalEmissiveRadiance += diffuseColor.rgb * vec3(1.0, 0.62, 0.3) * town * town * town * cityDark * detailCityLight * 0.7;
           }
           if (detailAurora > 0.0) {
             vec3 up = normalize(vDetailPosition);
