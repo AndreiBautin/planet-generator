@@ -1513,3 +1513,42 @@ in five, desert the whole way), each decided by the cell and the seed.
 - Seen: dunes and an oasis with palms on `aaangxg`, and a caravan on the
   dunes at `shot=g,-36.734,126.65,270,4.0,10.00,-30`. Not seen: a phone,
   a caravan at night.
+
+## Balloons and airships
+
+`generation/aircraft.ts` (`balloonsIn`, `airshipIn`, tested) and
+`render/aircraft.ts`: on any world that is not molten, a drainage cell may
+hold a meet of one to four hot-air balloons (one in twenty, over thawed
+land only) and an airship (one in seventy, over land or sea).
+
+- **Balloons**: faceted teardrop envelopes in twelve gores of two colours
+  (two instanced meshes, one per half of the gores, each with its own
+  instance colour), a wicker basket on four ropes. Each drifts slowly round
+  the meet's point at its own pace on one wind, rising and sinking a
+  little and turning on its rope. Its burner fires for a breath every few
+  seconds: a flame at the mouth, and at night the whole envelope glows
+  from inside in its own colours, like a lantern.
+- **Airships**: a long hull with cruciform fins, a gondola and two engine
+  pods, in one of five muted hull colours, cruising a slow round of its
+  patch of sky with its nose along the way and bobbing gently; the
+  gondola's windows lit after dusk.
+- **Flown clear of the hills**: each is flown over the highest ground
+  under its whole round (`highestUnder`, sampled on two rings), so a round
+  over a ridge never passes into it.
+- **Their own light follows the day.** The little own-colour light the
+  herds and camels carry kept the balloons in full colour against black
+  ground at night; it is an instance attribute (`craftLight`) now, faded
+  with the sun, beside the burner's glow.
+- **The fade is measured from the anchor, inside the guaranteed reach.**
+  `NearCells` holds two rings of cells round the eye's, so anything inside
+  its own cell within two cells (0.0245) is always held; these shrink away
+  between 0.015 and 0.023 from their anchor. The deserts used 0.02–0.03,
+  past that reach, so an oasis at the edge could appear part-grown as its
+  cell came in: they use the same numbers now, and a caravan is read from
+  where it set out, since its camels walk out of their own cell.
+- **An airship within about two hull lengths is cut by the near plane** —
+  seen as a pale crescent and a floating gondola. Flying into one does
+  this; it is the camera, not the model.
+- Seen: a meet of four over snowy woods by day and the burner glowing at
+  night, and an airship by day and lit at night, on `k3m9xqa`. Not seen:
+  the flame itself up close, a phone.

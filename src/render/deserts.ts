@@ -14,9 +14,15 @@ const MOST_OASES = 16
 const MOST_CARAVANS = 16
 const MOST_PALMS = 16
 const MOST_CAMELS = 8
-/** Where things shrink away into the sand, in radians from the eye. */
-const SHRINK_FROM = 0.02
-const GONE_AT = 0.03
+/**
+ * Where things shrink away into the sand, in radians from the eye — from
+ * the point each is placed by, which is always inside its own cell, so
+ * inside the two rings of cells `NearCells` holds (two cells, 0.0245)
+ * whenever it is drawn at all. At 0.03 an oasis out at the edge could
+ * appear part-grown as its cell came into the rings.
+ */
+const SHRINK_FROM = 0.015
+const GONE_AT = 0.023
 /** Above this height there is nothing here to look for. */
 const HIGHEST_EYE = 0.06
 /** A palm's height and a camel's length, in radii: larger than life, as the trees and herds are. */
@@ -44,6 +50,8 @@ interface Placed {
 }
 
 interface Way {
+  /** Where it starts, in its own cell: what decides how near it is. */
+  from: Vec3
   points: Vec3[]
   length: number
   camels: number
@@ -198,7 +206,9 @@ export class Deserts {
           way,
           Math.min(way.length, Math.max(0, d + (forward ? 1 : -1) * 0.0002)),
         )
-        const shown = shownAt(here)
+        // A camel walks out of its own cell; how near the caravan is, and so
+        // whether its cell is held at all, is read from where it set out.
+        const shown = Math.min(shownAt(here), shownAt(way.from))
         if (shown <= 0) {
           this.camels.setMatrixAt(at, this.gone)
           continue
@@ -313,6 +323,7 @@ export class Deserts {
     }
     const span = Math.acos(Math.min(1, dot(caravan.from, caravan.to)))
     this.caravans[slot] = {
+      from: caravan.from,
       points,
       length: span,
       camels: Math.min(MOST_CAMELS, caravan.camels),

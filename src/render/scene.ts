@@ -32,6 +32,7 @@ import { spray } from './waterfalls'
 import { Birds } from './birds'
 import { Meteors } from './meteors'
 import { Fish } from './fish'
+import { Aircraft } from './aircraft'
 import { Deserts } from './deserts'
 import { CoastRocks } from './rocks'
 import { Herds } from './herds'
@@ -465,6 +466,8 @@ export function startScene(
   scene.add(rocks.group)
   const deserts = new Deserts()
   scene.add(deserts.group)
+  const aircraft = new Aircraft()
+  scene.add(aircraft.group)
   const rainbow = new Rainbow()
   scene.add(rainbow.object)
   const sunFan = new SunFan()
@@ -619,6 +622,7 @@ export function startScene(
     herds.setWorld(next.world)
     rocks.setWorld(next.world)
     deserts.setWorld(next.world)
+    aircraft.setWorld(next.world)
     fish.setWorld(next.world)
     // The woods' colours through the year (leaves.ts).
     DETAIL_SEASON.value.set(next.world.dials.season, seasonStrength(next.world.tilt))
@@ -1149,6 +1153,12 @@ export function startScene(
         shown.terrain.group.matrixWorld,
         DETAIL_TIME.value,
       )
+      aircraft.update(
+        inPlanetFrame(camera.position, turn, stage.scale),
+        shown.terrain.group.matrixWorld,
+        sunInGround.set(...inPlanetFrame(sunDirection, turn, 1)),
+        DETAIL_TIME.value,
+      )
       rocks.update(
         inPlanetFrame(camera.position, turn, stage.scale),
         shown.terrain.group.matrixWorld,
@@ -1232,6 +1242,7 @@ export function startScene(
     if (!air) {
       sisters.object.visible = false
       birds.object.visible = false
+      aircraft.group.visible = false
       herds.object.visible = false
       rainbow.object.visible = false
       meteors.object.visible = false
