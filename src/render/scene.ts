@@ -438,7 +438,13 @@ export function startScene(
   if (options.quality.shadowMap > 0) {
     renderer.shadowMap.enabled = true
     renderer.shadowMap.type = THREE.PCFShadowMap
+    // The sun always casts: switching `castShadow` on at the start of a
+    // dive changed every material's program and recompiled some thirty
+    // of them in one frame — 0.7 s of stall two seconds into the descent.
+    // From orbit the pass is skipped and the shadow's intensity is nought
+    // instead, which leaves the programs alone.
     sun.castShadow = true
+    renderer.shadowMap.autoUpdate = false
     sun.shadow.mapSize.set(options.quality.shadowMap, options.quality.shadowMap)
     sun.shadow.bias = -0.00002
     sun.shadow.normalBias = 0.0002
@@ -827,9 +833,11 @@ export function startScene(
     const above = camera.position.length() - 1
     if (renderer.shadowMap.enabled) {
       // Shadows only low down, where a tree is big enough to throw one:
-      // from orbit the pass would cost a frame and show nothing.
+      // from orbit the pass would cost a frame and show nothing. Never by
+      // `castShadow`, which would recompile every program (see above).
       const low = t > 0 && above < 0.2
-      sun.castShadow = low
+      renderer.shadowMap.needsUpdate = low
+      sun.shadow.intensity = low ? 1 : 0
       if (low) {
         // The box is stepped in size and snapped to its own texel grid, so
         // as the eye moves the shadow texels stay put on the ground. A box

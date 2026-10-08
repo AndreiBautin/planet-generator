@@ -116,15 +116,27 @@ export function buildHeavens(sky: Satellites): Heavens {
           float solid = texture2D(bands, vec2(t, 0.5)).r;
           if (solid < 0.01) discard;
           // In the planet's shadow: the line from here to the sun passes
-          // through the planet. Soft at the edge, as the sun is not a point.
+          // through the planet. The shadow is a cone, not a cylinder — the
+          // sun is wider than the planet, so the umbra narrows down its
+          // length and the penumbra widens — and the sun here is drawn big,
+          // so both are exaggerated. As a cylinder with a hard edge it was
+          // two parallel straight lines across the rings, which read as the
+          // rings being clipped off.
           float along = dot(vWorld, sun);
           float miss = length(vWorld - sun * along);
-          float shade = along > 0.0 ? 1.0 : smoothstep(planet * 0.96, planet * 1.04, miss);
+          float behind = max(-along, 0.0);
+          float core = planet * max(0.0, 1.0 - behind / 14.0);
+          float soft = planet * (0.06 + 0.05 * behind);
+          float shade = along > 0.0 ? 1.0 : smoothstep(core - soft, core + soft, miss);
           // Grains of ice and dust scatter forward most: brighter seen
-          // against the sun, but lit from either face.
+          // against the sun, but lit from either face. In the shadow the
+          // rings are not black: the planet's lit face shines on the near
+          // bands (planetshine, falling off outwards), and a little of
+          // the sky.
           vec3 eye = normalize(cameraPosition - vWorld);
           float forward = pow(max(dot(-eye, sun), 0.0), 6.0);
-          vec3 colour = tint * (0.08 + 1.1 * shade * (0.75 + forward * 0.8));
+          float shine = 0.16 / (1.0 + (r / planet - 1.0) * 2.0);
+          vec3 colour = tint * (0.05 + shine + 1.1 * shade * (0.75 + forward * 0.8));
           gl_FragColor = vec4(colour, solid * 0.85);
           #include <tonemapping_fragment>
           #include <colorspace_fragment>

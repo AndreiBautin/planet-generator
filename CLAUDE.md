@@ -1989,3 +1989,42 @@ found by eye. The first run caught one site the hand audit had missed
 listing (the lightning's acos in `weather.ts`, safe as it happens).
 `sqrt`, `log` and `normalize` are not covered: they were read once and
 their inputs are guarded, but nothing holds that.
+
+## The rings' shadow, and the stall at the start of a dive
+
+- **The planet's shadow on the rings was a cylinder with a hard edge**:
+  two parallel straight lines across the rings, which read as the rings
+  being clipped off (reported with a picture). It is a cone now
+  (`heavens.ts`): the umbra narrows down its length and the penumbra
+  widens, both exaggerated as the sun here is drawn big, and the rings in
+  shadow are not black — the planet's lit face shines on the near bands
+  (`shine`, falling off outwards). Seen on `9tcwfzj` from orbit at dusk
+  as a soft, tapering band with the rings still visible inside it.
+- **Switching `sun.castShadow` on at the start of a dive recompiled
+  every program.** Measured by stepping a dive at real pace with
+  `renderer.info.programs.length` read each frame: the frame the eye
+  passed 0.2 radii took 766 ms and compiled 14 programs, since
+  `castShadow` is part of every lit material's program key. The sun
+  always casts now; from orbit the shadow pass is skipped
+  (`shadowMap.autoUpdate = false`, `needsUpdate` only when low) and the
+  shadow's `intensity` is nought. That frame is 46 ms after.
+- **What is left of the descent's stall is first use**: about eighteen
+  programs over four frames two seconds into the dive (trees and their
+  depth pass, the ground's depth pass, seven `weathered` variants, the
+  three cloud shells going double-sided, birds, herds, rain), 0.65 s in
+  all, the worst frame 323 ms. `renderer.compileAsync(scene, camera)` in
+  orbit compiled 51 programs and spared none of them: the depth passes
+  are not materials the scene holds, and the rest do not exist yet. A
+  warm-up — one throwaway object per material family compiled with
+  `compileAsync` while the planet is still in orbit — is the fix, and a
+  round of its own.
+- **Screen flashing, reported, was not reproduced.** Per-frame means over
+  300 orbit frames and a 700-frame dive, then per-cell jump-and-return
+  over a held glide (nothing) and orbit (single cells in the birth
+  animation only). In a moving glide the per-cell detector fires on
+  ordinary motion and says nothing. What does brighten the whole view on
+  purpose: lightning near the eye lights the land 2.5× for a quarter
+  second with no bolt drawn (`weather.ts`), and an eclipse dims the whole
+  day. **Measuring with a frame readback every step starves the workers**
+  — stand-ins climbed to 134 and `pending` sat at its cap of 24 until the
+  readback stopped — the known trap, met again.
