@@ -1938,3 +1938,33 @@ inside where those levels are drawn. **The record mode makes this easy to
 see and the real flight can hit it too**: stepping frames faster than the
 workers build patches leaves stand-ins near the eye, which a slow device
 does as well.
+
+## The ground's photographs were read as linear, and the grass went flat
+
+Reported as grassy slopes reading as featureless yellow-green up close
+(the herd shot). Measured: the sunlit slope's luminance had a standard
+deviation of 2 on a mean of 200, the whole thing sitting on the tone
+map's shoulder.
+
+- **The cause was colour space, not the texture's scale.** The colour
+  maps were loaded as `NoColorSpace`, so the shader read sRGB bytes raw
+  (grass averages 0.32) and divided them by the photo's _linear_ mean
+  (0.09): every layer was levelled by the wrong number — grass 3.5× too
+  bright, stone 2×, snow 0.7× — and the sunlit grass clipped to one tone.
+  A note in `textures.ts` had reasoned that reading a photo as linear
+  "only deepens its shadows"; it is the other way round. The colour maps
+  are `SRGBColorSpace` now, decoded by the GPU on sampling, and the
+  `PHOTO_MEANS` match. The baked tiles (linear around 0.5) and the normal
+  maps stay linear. Checked by switching the texture off: the untextured
+  slope sat at 123, textured and levelled it sits at 124.
+- **Relief had been a constant since the first photograph arrived.** It
+  read the texture's alpha, which the baked tile filled with height and a
+  JPEG fills with 1. It is the levelled luminance now, for both.
+- **The grain is pushed out 1.8× from the level** (`GRAIN` in detail.ts):
+  at a glide's height the near scale sits about two mip levels down and
+  the blades average towards one tone. Scaling the texture coarser (450
+  or 800 repeats) did less than this and would show the repeat sooner.
+- Seen after: the herd's hillside as turf, the beach and sea stacks, and
+  a frozen slope. Not seen: a desert, a molten world (basalt and ash are
+  the same code and were the most mis-levelled, basalt's mean being
+  0.012), a phone.

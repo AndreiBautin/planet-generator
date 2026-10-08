@@ -22,9 +22,12 @@ import { bakeGroundTile, GROUND_KINDS, TILE, type GroundKind } from './ground-at
  * its colour, and an ochre world stays ochre with grass-shaped grain. The
  * baked tiles were drawn around mid-grey, hence their mean of 0.5.
  *
- * Linear, not sRGB, for the colour maps too: they are detail multiplied
- * into a colour already in linear light, and treating a photo as linear
- * only deepens its shadows a little, which here is welcome.
+ * The colour maps are sRGB and decoded on sampling (`SRGBColorSpace`, so
+ * the GPU does it and the mipmaps are built in linear light). Read raw,
+ * the bytes came out far brighter than the linear mean they are levelled
+ * by — grass 0.32 against 0.09 — and every sunlit slope was pushed onto
+ * the tone map's shoulder, where the grain flattened to nothing. The
+ * baked tiles and the normal maps are linear and stay so.
  */
 export interface GroundLayer {
   readonly color: { value: THREE.Texture }
@@ -61,7 +64,6 @@ function repeating(texture: THREE.Texture): THREE.Texture {
   texture.magFilter = THREE.LinearFilter
   texture.generateMipmaps = true
   texture.anisotropy = 4
-  texture.colorSpace = THREE.NoColorSpace
   return texture
 }
 
@@ -81,6 +83,7 @@ export function groundTextures(base = '/'): GroundTextures {
     }
     made[kind] = layer
     loader.load(`${base}textures/${kind}-color.jpg`, (texture) => {
+      texture.colorSpace = THREE.SRGBColorSpace
       layer.color.value = repeating(texture)
       layer.mean.value = PHOTO_MEANS[kind]
       baked.dispose()

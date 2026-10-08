@@ -382,6 +382,7 @@ export function withGroundDetail(
       /* glsl */ `
       // A texture laid on from three sides and blended by which way the
       // ground faces, so a sphere carries it with no stretching anywhere.
+      #define GRAIN 1.8
       vec4 groundTri(sampler2D tex, vec3 p, vec3 w) {
         vec4 c = vec4(0.0);
         if (w.x > 0.02) c += texture2D(tex, p.yz) * w.x;
@@ -401,6 +402,16 @@ export function withGroundDetail(
       // One kind of ground's share: its colour levelled to the brightness
       // it was cut at and part-desaturated, so the biome's own colour is
       // what the eye reads and the photograph gives it grain and shadow.
+      // The grain is pushed out from the level (GRAIN): sampled at a
+      // glide's height the photographs sit two mip levels down and their
+      // blades and pebbles average towards one tone. The relief is the
+      // levelled luminance — a blade of grass lit stands up, a shadow lies
+      // low — since a JPEG's alpha is 1 everywhere and the baked tile's
+      // height went with it when the photograph arrived.
+      vec3 groundGrain(vec4 near, vec4 broad, float mean) {
+        vec3 c = (near.rgb * 0.65 + broad.rgb * 0.35) / (mean * 2.0);
+        return 0.5 + (c - 0.5) * GRAIN;
+      }
       void groundLayer(
         sampler2D colorMap, sampler2D normalMap, float mean, float share,
         vec3 p, vec3 q, vec3 w, inout vec3 albedo, inout float relief, inout vec3 tilt
@@ -408,10 +419,10 @@ export function withGroundDetail(
         if (share < 0.02) return;
         vec4 near = groundTri(colorMap, p, w);
         vec4 broad = groundTri(colorMap, q, w);
-        vec3 c = (near.rgb * 0.65 + broad.rgb * 0.35) / (mean * 2.0);
+        vec3 c = groundGrain(near, broad, mean);
         float lum = dot(c, vec3(0.2126, 0.7152, 0.0722));
         albedo += mix(vec3(lum), c, 0.35) * share;
-        relief += (near.a * 0.65 + broad.a * 0.35) * share;
+        relief += clamp(lum, 0.0, 1.0) * share;
         if (share > 0.2) tilt += (groundTriNormal(normalMap, p, w) * 0.7 + groundTriNormal(normalMap, q, w) * 0.3) * share;
       }
       // A ground with no normal map of its own: colour and grain only.
@@ -422,10 +433,10 @@ export function withGroundDetail(
         if (share < 0.02) return;
         vec4 near = groundTri(colorMap, p, w);
         vec4 broad = groundTri(colorMap, q, w);
-        vec3 c = (near.rgb * 0.65 + broad.rgb * 0.35) / (mean * 2.0);
+        vec3 c = groundGrain(near, broad, mean);
         float lum = dot(c, vec3(0.2126, 0.7152, 0.0722));
         albedo += mix(vec3(lum), c, 0.35) * share;
-        relief += (near.a * 0.65 + broad.a * 0.35) * share;
+        relief += clamp(lum, 0.0, 1.0) * share;
       }
       ` +
       shader.fragmentShader
