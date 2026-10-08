@@ -1055,6 +1055,18 @@ export function withWaterDetail(material: THREE.Material): THREE.Material {
           vec3 mirrored = mix(seaSky, seaZenith, smoothstep(0.0, 0.45, rise));
           totalEmissiveRadiance += mirrored * mirror * (1.0 - white);
           diffuseColor.a = mix(diffuseColor.a, 1.0, mirror * 0.85);
+          // Light through the crests: a wave between the eye and the sun
+          // glows green-turquoise along its top, which is what makes the
+          // sea read as a body of water and not a blue skin.
+          #if NUM_DIR_LIGHTS > 0
+          {
+            vec3 toSun = directionalLights[0].direction;
+            float through = pow(max(dot(-normalize(vViewPosition), toSun), 0.0), 4.0);
+            float crest = smoothstep(0.1, 0.8, v_heave) * (1.0 - v_inland) * (1.0 - smoothstep(0.9, 1.0, v_ice));
+            float sunUp = smoothstep(-0.05, 0.15, dot(normalize(v_up), toSun));
+            totalEmissiveRadiance += vec3(0.12, 0.5, 0.42) * crest * through * sunUp * seaNear * (1.0 - white) * 1.4;
+          }
+          #endif
           // Clear towards the dry land, so the shore is wet sand going under
           // rather than an edge of water standing on it.
           float shoreClear = smoothstep(0.35, 0.97, v_dry);
@@ -1067,14 +1079,31 @@ export function withWaterDetail(material: THREE.Material): THREE.Material {
         /* glsl */ `#include <normal_fragment_maps>
         {
           vec3 swell = vec3(detailTime * 0.9, detailTime * 0.6, -detailTime * 0.7);
+          // Ripples at three scales, the finest stretched along one wind
+          // so they streak as wind-blown water does rather than pebbling.
+          vec3 along = normalize(cross(normalize(vDetailPosition), vec3(0.0, 1.0, 0.0)) + vec3(1e-4, 0.0, 0.0));
+          vec3 streaked = vDetailPosition + along * dot(vDetailPosition, along) * 2.5;
           float ripple =
             (detailNoise(vDetailPosition * 900.0 + swell) +
-              detailNoise(vDetailPosition * 2200.0 - swell * 1.7) * 0.6) * seaNear;
+              detailNoise(vDetailPosition * 2200.0 - swell * 1.7) * 0.6 +
+              detailNoise(streaked * 5200.0 + swell * 3.0) * 0.35 * (1.0 - smoothstep(0.004, 0.03, seaDistance))) * seaNear;
           normal = detailBump(
             -vViewPosition,
             normal,
-            vec2(dFdx(ripple), dFdy(ripple)) * 0.5,
+            vec2(dFdx(ripple), dFdy(ripple)) * 0.6,
             faceDirection);
+        }`,
+      )
+      .replace(
+        '#include <roughnessmap_fragment>',
+        /* glsl */ `#include <roughnessmap_fragment>
+        {
+          // Glassier near the eye, so the sun's glints are sharp, and a
+          // mottle of roughness across it so they sparkle rather than lie
+          // as one sheet of highlight; rougher where foam or ice lies.
+          float sparkle = detailNoise(vDetailPosition * 3000.0 + vec3(detailTime * 1.1, -detailTime * 0.8, detailTime * 0.5) * 0.004);
+          float glassy = seaNear * (1.0 - smoothstep(0.9, 1.0, v_ice));
+          roughnessFactor = mix(roughnessFactor, 0.07 + 0.18 * sparkle, glassy * 0.85);
         }`,
       )
       .replace(

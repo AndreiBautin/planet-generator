@@ -334,7 +334,7 @@ function postTarget(): THREE.WebGLRenderTarget {
 
 /** A vignette and a fine grain: the two cheapest things between a render and a photograph. */
 const GRADE_SHADER = {
-  uniforms: { tDiffuse: { value: null }, grain: { value: 0.035 }, vignette: { value: 0.32 } },
+  uniforms: { tDiffuse: { value: null }, grain: { value: 0.016 }, vignette: { value: 0.32 } },
   vertexShader: /* glsl */ `
     varying vec2 vUv;
     void main() {
@@ -357,7 +357,7 @@ const GRADE_SHADER = {
       // After AgX, which is neutral and flat on its own: a gentle S-curve
       // through the mid-grey and a little more saturation, the filmic
       // contrast ACES had without its burnt highlights and orange skin.
-      c.rgb = mix(c.rgb, c.rgb * c.rgb * (3.0 - 2.0 * c.rgb), 0.35);
+      c.rgb = mix(c.rgb, c.rgb * c.rgb * (3.0 - 2.0 * c.rgb), 0.22);
       float luma = dot(c.rgb, vec3(0.2126, 0.7152, 0.0722));
       c.rgb = mix(vec3(luma), c.rgb, 1.15);
       vec2 d = vUv - 0.5;
@@ -1598,7 +1598,7 @@ function inPlanetFrame(
 const BEAM_STRENGTH = 5.6
 
 /** The renderer's exposure in ordinary daylight; an eclipse dims it. */
-const EXPOSURE = 1.3
+const EXPOSURE = 1.15
 
 /** Apply a stage of the birth animation to a shown planet. */
 function pose(planet: Shown, stage: Birth): void {

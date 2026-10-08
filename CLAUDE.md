@@ -2257,3 +2257,28 @@ Not seen: a cold-climate or flat-roofed town since the change, a phone.
   snow at noon (the whites are where AgX differs most), a phone (no
   post pass there — the modest profile still tone-maps with AgX, without
   the grade).
+
+## Polish, round seven: the water up close, and the grain
+
+- **Ripples at three scales** (`withWaterDetail`, `normal_fragment_maps`):
+  the finest stretched along one wind direction so they streak as
+  wind-blown water does rather than pebbling, and only within 0.03 of
+  the eye.
+- **Sparkling glints**: near the eye the roughness drops towards 0.07
+  with a fine noise mottled across it (`roughnessmap_fragment`), so the
+  sun's highlight breaks into glitter rather than lying as one sheet;
+  rough again under ice.
+- **Light through the crests**: a wave between the eye and the sun
+  glows green-turquoise along its top (`v_heave`, the eye-to-sun term to
+  the fourth), which is what makes the sea read as a body of water and
+  not a blue skin. **Not seen**: the glide starts nose-up and inland, and
+  the one shot aimed at the sun showed sky; the bay at 17:00 with the sun
+  to the side is what was looked at.
+- **The grain is half what it was** (`grain` 0.016, was 0.035): reported
+  as "a bit grainy sometimes" on a 2560-wide desktop, where the per-pixel
+  film grain is finer than intended and reads as noise rather than
+  texture.
+- **Exposure is back to 1.15.** At 1.3 (round six) the beach and the
+  houses at 08:00 blew out to white; the grade's S-curve is 0.22 now, not
+  0.35, for the same reason. Judge an exposure change at a low sun over
+  sand or snow, not at noon over woods.
