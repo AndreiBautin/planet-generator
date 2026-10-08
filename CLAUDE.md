@@ -2008,6 +2008,14 @@ their inputs are guarded, but nothing holds that.
   always casts now; from orbit the shadow pass is skipped
   (`shadowMap.autoUpdate = false`, `needsUpdate` only when low) and the
   shadow's `intensity` is nought. That frame is 46 ms after.
+  **And the map must exist before anything samples it**: the first
+  deploy of this never ran the pass on a page opened in orbit, every
+  material sampled a map that was not there, and the whole day side came
+  out in shadow — a flat teal disc with the night's town lights on it
+  (reported with a picture within the hour). The pass runs once while
+  `sun.shadow.map` is null. **An orbit screenshot after any shadow change
+  is not optional**: the dive was measured and the orbit was not looked
+  at.
 - **What is left of the descent's stall is first use**: about eighteen
   programs over four frames two seconds into the dive (trees and their
   depth pass, the ground's depth pass, seven `weathered` variants, the

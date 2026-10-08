@@ -836,7 +836,10 @@ export function startScene(
       // from orbit the pass would cost a frame and show nothing. Never by
       // `castShadow`, which would recompile every program (see above).
       const low = t > 0 && above < 0.2
-      renderer.shadowMap.needsUpdate = low
+      // Rendered at least once: a page opened in orbit never ran the pass,
+      // every material sampled a map that did not exist, and the whole
+      // day side came out in shadow — a flat teal disc.
+      renderer.shadowMap.needsUpdate = low || sun.shadow.map === null
       sun.shadow.intensity = low ? 1 : 0
       if (low) {
         // The box is stepped in size and snapped to its own texel grid, so
