@@ -131,6 +131,11 @@ export interface Scene {
     readonly geometries: number
     readonly textures: number
     readonly pixelRatio: number
+    /** A typical recent frame and a slow one, ms, from the governor's own window. */
+    readonly frameMs: number
+    readonly slowFrameMs: number
+    /** The GPU the browser names, when it will; for a report from a machine that is not this one. */
+    readonly gpu: string
   }
   /** Sound on or off (sound.ts), from inside a press; says which it is now. */
   readonly toggleSound: () => boolean
@@ -780,6 +785,8 @@ export function startScene(
   // struggling, render at a lower resolution. Judged over a window of frames
   // rather than reacting to one, and only ever downward.
   const frames: number[] = []
+  /** The last full window, kept for `stats` so a reading is never of an empty one. */
+  let lastFrames: number[] = []
   let lastFrameAt = clock.now()
   const facing = new THREE.Vector3()
 
@@ -1051,6 +1058,7 @@ export function startScene(
     // Not while recording: frames there take whatever time they are told to.
     if (options.manual !== true && frames.length >= FRAME_WINDOW) {
       const next = nextPixelRatio(pixelRatio, typicalFrame(frames))
+      lastFrames = frames.slice()
       frames.length = 0
       if (next !== pixelRatio) {
         pixelRatio = next
@@ -1471,12 +1479,18 @@ export function startScene(
     onFrame: (listener) => {
       frameListener = listener
     },
-    stats: () => ({
-      ...renderer.info.render,
-      geometries: renderer.info.memory.geometries,
-      textures: renderer.info.memory.textures,
-      pixelRatio: renderer.getPixelRatio(),
-    }),
+    stats: () => {
+      const recent = [...(frames.length > 0 ? frames : lastFrames)].sort((a, b) => a - b)
+      return {
+        ...renderer.info.render,
+        geometries: renderer.info.memory.geometries,
+        textures: renderer.info.memory.textures,
+        pixelRatio: renderer.getPixelRatio(),
+        frameMs: recent[Math.floor(recent.length / 2)] ?? 0,
+        slowFrameMs: recent[Math.floor(recent.length * 0.95)] ?? 0,
+        gpu: gpuName(renderer),
+      }
+    },
     sunInPlanet: () => inPlanetFrame(sunDirection, lastTurn, 1),
     hold: (on) => {
       holding = on
@@ -1534,6 +1548,17 @@ function cloudMapOf(clouds: THREE.Mesh): THREE.Texture | null {
   const material: unknown = clouds.material
   if (material instanceof THREE.MeshStandardMaterial) return material.alphaMap
   return null
+}
+
+/** What the browser calls the GPU, or an empty string where it hides it. */
+function gpuName(renderer: THREE.WebGLRenderer): string {
+  const gl = renderer.getContext()
+  const info: unknown = gl.getExtension('WEBGL_debug_renderer_info')
+  if (info === null || typeof info !== 'object') return ''
+  const key = (info as { UNMASKED_RENDERER_WEBGL?: unknown }).UNMASKED_RENDERER_WEBGL
+  if (typeof key !== 'number') return ''
+  const name: unknown = gl.getParameter(key)
+  return typeof name === 'string' ? name : ''
 }
 
 function intoRoom(point: Vec3, turn: number): [number, number, number] {

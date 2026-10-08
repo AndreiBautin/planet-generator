@@ -2097,3 +2097,29 @@ ends at the foot, never wanders far, the same bolt for the same strike).
   getter. Seen: the bolt with a fork into the woods under the rain.
 - **The browser pane came back 0 × 0** after a viewport reset, and the
   frame copy threw; set a size explicitly before recording.
+
+## The orbit "flicker" is not in the pixels, and `?stats` says what is
+
+A screen recording of the orbit (2544 × 1384, 30 fps, 143 frames) was
+read frame by frame: the mean brightness falls smoothly as the planet
+turns, with no pulse, and a per-cell shimmer measure over its 108
+distinct frames found nothing. What it did show is **the app drawing
+10–15 frames a second on that machine** — each app frame held for two
+or three recorder frames — which judders, and judder gets reported as
+flicker. In the hidden pane at the same size on the same GPU (an RTX
+3060 Ti) a frame costs 14.6 ms with a full GPU sync, so the slowness is
+not the scene's cost; something about that window or browser is, and
+that needs a reading from inside it.
+
+- **`?stats`** (any build) writes a readout under the build label every
+  half second: a typical and a slow frame in ms from the governor's own
+  window, the viewport and pixel ratio, draw calls, and what the browser
+  calls the GPU (`gpuName`, through `WEBGL_debug_renderer_info`, empty
+  where hidden). `scene.stats()` carries `frameMs`, `slowFrameMs` and
+  `gpu` now; `lastFrames` keeps the governor's last full window so a
+  reading is never of an empty one.
+- **A hidden pane reads 0 ms and 0 calls**: it draws only for a
+  screenshot, so the readout is only meaningful in a window that is
+  shown.
+- **The night side close up after the town-light change** is still
+  unchecked.

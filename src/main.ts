@@ -94,6 +94,8 @@ let planet: Planet = createPlanet(seed, dials)
 // frames can be rendered exactly and compared — the only way to see flicker
 // in a preview that draws nothing on its own.
 const recording = config.developer && new URLSearchParams(window.location.search).has('record')
+/** `?stats`: a frame-time readout under the build label, for a report from any machine. */
+const showStats = new URLSearchParams(window.location.search).has('stats')
 // `?record=120000` starts the clock that far in, for a different time of day.
 const recordStart = Number(new URLSearchParams(window.location.search).get('record'))
 const recordClock = fixedClock(Number.isFinite(recordStart) && recordStart > 0 ? recordStart : 1000)
@@ -587,6 +589,13 @@ if (config.serviceWorker && 'serviceWorker' in navigator) {
   navigator.serviceWorker.register(new URL('sw.js', document.baseURI)).catch(() => {
     logger.warn('service-worker.failed')
   })
+}
+
+if (showStats && buildLabel !== null) {
+  window.setInterval(() => {
+    const s = scene.stats()
+    buildLabel.textContent = `build ${config.build} · ${String(Math.round(s.frameMs))} ms (slow ${String(Math.round(s.slowFrameMs))}) · ${String(window.innerWidth)}×${String(window.innerHeight)} @${String(s.pixelRatio)} · ${String(s.calls)} calls · ${s.gpu}`
+  }, 500)
 }
 
 if (recording) {
