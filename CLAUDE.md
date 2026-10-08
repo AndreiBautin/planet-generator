@@ -2219,3 +2219,21 @@ windows by day as well as by night (dark glass in a pale frame, two rows
 a face, the same `vHouseGlass` the night's lit panes use), a door on the
 front, the roof in courses. Seen: the gorge town on `83tzj46` at 11:00.
 Not seen: a cold-climate or flat-roofed town since the change, a phone.
+
+## Polish, rounds four and five: a taller sea, a lava sea that moves
+
+- **The swell is six trains and twice as tall** (`swell.ts`): a long
+  ground swell (0.032 radii, 14 s) under everything, then shorter trains
+  from more directions; four read as a regular pattern from a glide, six
+  as a sea. The steepnesses sum to about 0.6 — 0.6 × 0.8 × 1.7 = 0.82,
+  short of folding in the shallows; `swell.test.ts` holds the fold
+  bound. The ships ride the same table, so they rose with it.
+- **The lava sea heaves** (`withLavaDetail`, detail.ts): two slow long
+  swells along the vertical in the vertex shader, faded with distance as
+  the water's are. The crust's current is faster (0.006, cycle 0.1),
+  surges run down the seams, and now and then a plate **boils open** —
+  its skin thins to the glow by a noise keyed on the plate and time, and
+  darkens again. Asked for as lava that flows "instead of just being a
+  flat entity". Checked by frame difference over a second (75 per pixel
+  over the lower half) and seen heaving at the horizon on `h999999`.
+- Not seen: open sea from a low glide after the change, a phone.

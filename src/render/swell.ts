@@ -9,16 +9,23 @@ import type { Vec3 } from '@/generation/cube'
  *
  * Each train is a heading (radians from east), a wavelength and a
  * steepness (in radii, and its share of a full fold) and a period
- * (seconds). The steepnesses sum to under a half: a Gerstner surface
+ * (seconds). The steepnesses sum to about 0.6: a Gerstner surface
  * folds through itself once the trains' steepness, times the 0.8 of their
  * sideways push and the shoaling, passes one. At 0.83 it reached 1.13 in
  * the shallows, and the sea by every shore folded up through itself.
  */
 export const SWELL_TRAINS: readonly (readonly [number, number, number, number])[] = [
-  [0.3, 0.02, 0.08, 11],
-  [1.9, 0.0105, 0.1, 7.5],
-  [-0.8, 0.0055, 0.11, 5.2],
-  [2.6, 0.0028, 0.12, 3.6],
+  // A long ground swell under everything, then shorter trains crossing it
+  // from more directions than before: four read as a regular pattern from
+  // a glide, six as a sea. Steeper than the first table (0.41 in all), so
+  // the swell stands twice as tall, still short of folding (0.6 × 0.8 ×
+  // 1.7 = 0.82 < 1).
+  [0.3, 0.032, 0.1, 14],
+  [1.1, 0.02, 0.12, 11],
+  [1.9, 0.0105, 0.12, 7.5],
+  [-0.8, 0.0055, 0.1, 5.2],
+  [2.6, 0.0028, 0.09, 3.6],
+  [-2.2, 0.0016, 0.07, 2.7],
 ]
 
 /** Where the swell fades out with distance from the eye, so far coarse patches lie still. */

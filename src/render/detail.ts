@@ -1111,6 +1111,22 @@ export function withWaterDetail(material: THREE.Material): THREE.Material {
 export function withLavaDetail(material: THREE.Material): THREE.Material {
   material.onBeforeCompile = (shader) => {
     passThrough(shader, undefined)
+    // The sea of lava heaves: two slow, long swells along the vertical,
+    // faded with distance as the water's are, so near the eye the crust
+    // rises and falls rather than lying as a flat sheet. Reported as the
+    // lava being "a flat entity".
+    shader.vertexShader = shader.vertexShader.replace(
+      '#include <begin_vertex>',
+      /* glsl */ `#include <begin_vertex>
+      {
+        vec3 lavaUp = normalize(position);
+        float lavaView = length((modelViewMatrix * vec4(position, 1.0)).xyz);
+        float lavaLift = 1.0 - smoothstep(0.02, 0.2, lavaView);
+        float ph1 = dot(position, vec3(0.6, 0.0, 0.8)) * 314.0 - detailTime * 0.35;
+        float ph2 = dot(position, vec3(-0.5, 0.3, 0.8)) * 790.0 + detailTime * 0.6;
+        transformed += lavaUp * lavaLift * (sin(ph1) * 0.00035 + sin(ph2) * 0.00012);
+      }`,
+    )
     shader.fragmentShader = shader.fragmentShader.replace(
       '#include <emissivemap_fragment>',
       /* glsl */ `#include <emissivemap_fragment>
@@ -1123,10 +1139,10 @@ export function withLavaDetail(material: THREE.Material): THREE.Material {
           detailNoise(vDetailPosition * 9.0 + 7.7),
           detailNoise(vDetailPosition * 9.0 + 1.3)) - 0.5;
         current -= up * dot(current, up);
-        current = normalize(current + 1e-5) * 0.0035;
+        current = normalize(current + 1e-5) * 0.006;
         // Two phases of the same crust, half a cycle apart, each carried
         // along the current and faded out before it has moved far.
-        float cycle = 0.12;
+        float cycle = 0.1;
         float t1 = fract(detailTime * cycle);
         float t2 = fract(detailTime * cycle + 0.5);
         vec3 p1 = vDetailPosition - current * ((t1 - 0.5) / cycle);
@@ -1147,11 +1163,19 @@ export function withLavaDetail(material: THREE.Material): THREE.Material {
             blend);
           seam = max(seam, fine * (1.0 - far));
         }
-        // Lava streaming along the seams, quicker than the crust.
+        // Lava streaming along the seams, quicker than the crust, with
+        // surges running down the current.
         float stream = detailNoise((vDetailPosition - current * detailTime * 4.0) * 260.0);
+        float surge = 0.7 + 0.6 * smoothstep(0.3, 0.9, fract(dot(vDetailPosition, normalize(current + 1e-5)) * 60.0 - detailTime * 0.25 + id));
         float pulse = 0.85 + 0.15 * sin(detailTime * 1.3 + id * 6.28);
-        totalEmissiveRadiance *= mix(0.12 + id * 0.15, (1.6 + stream * 1.4) * pulse, seam);
-        diffuseColor.rgb *= mix(0.4, 1.0, seam);
+        // And the crust itself breaks open now and then: a plate flares
+        // from within, its skin thinning to the glow, and darkens again.
+        float boil = smoothstep(0.78, 0.97, detailNoise(vec3(id * 37.0, detailTime * 0.09, id * 11.0)));
+        float skin = detailNoise(vDetailPosition * 220.0 + detailTime * 0.02);
+        float cracked = boil * smoothstep(0.35, 0.7, skin) * (1.0 - far);
+        float glowing = max(seam, cracked * 0.8);
+        totalEmissiveRadiance *= mix(0.12 + id * 0.15, (1.6 + stream * 1.4) * pulse * surge, glowing);
+        diffuseColor.rgb *= mix(0.4, 1.0, glowing);
       }`,
     )
   }
