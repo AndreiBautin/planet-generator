@@ -1964,7 +1964,8 @@ map's shoulder.
   at a glide's height the near scale sits about two mip levels down and
   the blades average towards one tone. Scaling the texture coarser (450
   or 800 repeats) did less than this and would show the repeat sooner.
-- Seen after: the herd's hillside as turf, the beach and sea stacks, and
-  a frozen slope. Not seen: a desert, a molten world (basalt and ash are
-  the same code and were the most mis-levelled, basalt's mean being
-  0.012), a phone.
+- Seen after: the herd's hillside as turf, the beach and sea stacks, a
+  frozen slope, and a volcano's flank on `h999999` by day (basalt as dark
+  grained rock under the plume and the flows; aim at a volcano with
+  `volcanoesOf` imported in the page, as the lava sea is most of the
+  world). Not seen: a desert, a phone.
