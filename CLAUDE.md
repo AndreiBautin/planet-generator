@@ -1418,9 +1418,14 @@ neighbours by its own roll, so a wood colours in patches.
   roads to the carts, which turn back at the water. With the herds' little
   light of their own, or a high sun left the wagons' sides sky-blue.
 - **Seen**: two bridges over a river in a town (one arched, with a pier),
-  a wagon on a road by day and its lantern by night. **Seen and not
-  fixed**: houses standing in that same river — town lights keep off river channels
-  but not off the drawn water there; worth a look on its own.
+  a wagon on a road by day and its lantern by night. **Houses stood in
+  that same river**: a light kept off the channel (`river < 0.2`) but the
+  channel is carved and its sheet drawn a vertex past the water's edge,
+  so a house just off it stood in the drawn water. A house now wants dry
+  ground `HOUSE_MARGIN` (0.0006 rad) round it in four directions
+  (`clear` in settlements.ts, held by the test); roads are not asked,
+  since they bridge. Seen: the town at the gorge with every house clear
+  of the river.
 
 ## Rocky coasts
 

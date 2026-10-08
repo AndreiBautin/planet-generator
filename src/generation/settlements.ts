@@ -182,6 +182,15 @@ function settle(planet: Planet): Settlements {
     const here = waterAt(planet, water, [d[0] / length, d[1] / length, d[2] / length], near)
     return here.river >= 0.2 || Number.isFinite(here.lake)
   }
+  // A house wants dry ground round it, not only under it: the river's
+  // channel is carved and its sheet drawn a vertex past the water's edge,
+  // so a light just off the river stood as a house in the drawn water.
+  const clear = (d: Vec3): boolean => {
+    for (let k = 0; k < 4; k += 1) {
+      if (!dry(offset(d, (k * Math.PI) / 2, HOUSE_MARGIN))) return false
+    }
+    return true
+  }
   const light = (d: Vec3, bright: number, warm: number): void => {
     const length = Math.hypot(d[0], d[1], d[2]) || 1
     lights.push(d[0] / length, d[1] / length, d[2] / length, bright, warm)
@@ -210,7 +219,7 @@ function settle(planet: Planet): Settlements {
         // Gaussian round the heart: dense in the middle, thinning out.
         const radius = spread * Math.sqrt(-2 * Math.log(Math.max(1e-6, own.next()))) * 0.6
         const d = offset(town.at, own.next() * Math.PI * 2, radius)
-        if (!dry(d)) continue
+        if (!dry(d) || !clear(d)) continue
         light(
           d,
           0.45 + own.next() * 0.55,
@@ -395,6 +404,8 @@ export function townCoverOf(planet: Planet): ((d: Vec3) => TownCover) | undefine
 const farmReach = (town: Town): number => (0.0025 + town.size * 0.009) * 2.4
 
 /** The brightness that tells a town's light from a road's (roads stop at 0.42). */
+/** How far round a house the ground must be dry, radians: past the river sheet's reach and the carved bank. */
+export const HOUSE_MARGIN = 0.0006
 export const TOWN_LIGHT = 0.44
 
 function smoothRange(from: number, to: number, value: number): number {

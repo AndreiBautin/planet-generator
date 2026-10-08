@@ -3,7 +3,31 @@ import { describe, expect, it } from 'vitest'
 import { hydrologyOf, waterAt } from './hydrology'
 import { createPlanet, surfaceAt } from './planet'
 import { parseSeed } from './seed'
-import { LONGEST_BRIDGE, settlementsOf, TOWN_LIGHT, townCoverOf } from './settlements'
+import { HOUSE_MARGIN, LONGEST_BRIDGE, settlementsOf, TOWN_LIGHT, townCoverOf } from './settlements'
+
+/** Four unit directions `angle` radians round `d`, square to each other. */
+const ringAround = (
+  d: readonly [number, number, number],
+  angle: number,
+): [number, number, number][] => {
+  const [ux, uy, uz] = d
+  const [sx, sy, sz]: [number, number, number] = Math.abs(uy) < 0.9 ? [0, 1, 0] : [1, 0, 0]
+  const ax = uy * sz - uz * sy
+  const ay = uz * sx - ux * sz
+  const az = ux * sy - uy * sx
+  const al = Math.hypot(ax, ay, az) || 1
+  const [e1x, e1y, e1z] = [ax / al, ay / al, az / al]
+  const [e2x, e2y, e2z] = [uy * e1z - uz * e1y, uz * e1x - ux * e1z, ux * e1y - uy * e1x]
+  return [0, 1, 2, 3].map((k) => {
+    const c = Math.cos((k * Math.PI) / 2) * angle
+    const s = Math.sin((k * Math.PI) / 2) * angle
+    const vx = ux + e1x * c + e2x * s
+    const vy = uy + e1y * c + e2y * s
+    const vz = uz + e1z * c + e2z * s
+    const l = Math.hypot(vx, vy, vz) || 1
+    return [vx / l, vy / l, vz / l]
+  })
+}
 
 const planetOf = (raw: string): ReturnType<typeof createPlanet> => {
   const seed = parseSeed(raw)
@@ -24,6 +48,14 @@ describe('settlements', () => {
       const here = waterAt(temperate, water, d, near)
       expect(here.river).toBeLessThan(0.2)
       expect(Number.isFinite(here.lake)).toBe(false)
+      // And round a house, past the drawn sheet's reach: a light just off
+      // the channel stood as a house in the drawn water.
+      if ((lights[k + 3] ?? 0) < TOWN_LIGHT) continue
+      for (const [ax, ay, az] of ringAround(d, HOUSE_MARGIN)) {
+        const beside = waterAt(temperate, water, [ax, ay, az], near)
+        expect(beside.river).toBeLessThan(0.2)
+        expect(Number.isFinite(beside.lake)).toBe(false)
+      }
     }
   })
 
