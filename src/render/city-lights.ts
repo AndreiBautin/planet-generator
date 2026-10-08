@@ -51,8 +51,14 @@ export function cityLights(placed: Float32Array): THREE.Points | undefined {
         vGlow = cityLook.x * dark;
         vWarm = cityLook.y;
         vec4 view = viewMatrix * vec4(world, 1.0);
-        // A spark from afar, a little larger close to, never a blob.
-        gl_PointSize = clamp(2.2 / max(away, 0.02) * 0.06, 1.3, 3.2);
+        // A spark from afar, a little larger close to, never a blob. Never
+        // under about two and a half pixels, though: from orbit a 1.3 px
+        // point snapped between one pixel and parts of two as the planet
+        // turned, and every town twinkled, the bloom making it worse. The
+        // light it would have had is kept by dimming it as it is widened.
+        float wanted = clamp(2.2 / max(away, 0.02) * 0.06, 1.3, 3.2);
+        gl_PointSize = max(wanted, 2.6);
+        vGlow *= (wanted * wanted) / (gl_PointSize * gl_PointSize);
         gl_Position = projectionMatrix * view;
       }
     `,

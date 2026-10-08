@@ -2052,3 +2052,25 @@ their inputs are guarded, but nothing holds that.
   day. **Measuring with a frame readback every step starves the workers**
   — stand-ins climbed to 134 and `pending` sat at its cap of 24 until the
   readback stopped — the known trap, met again.
+
+## The orbit flickered, and it was the town lights
+
+Reported as the screen "sort of flickers" on the orbit screen, after a
+first pass had found nothing. The first pass measured single-frame jumps
+at 1000 × 640; this one measured **shimmer** — per cell of a 96 × 54
+grid, the mean frame-to-frame change against the mean two-frame change,
+hot where the first is the larger — at 1920 × 1080. Eight hot cells, all
+on the night side where the towns are, and hiding every `Points`
+material took them to nought.
+
+- **A 1.3 px point twinkles.** From orbit `city-lights.ts` sized each
+  light at its floor of 1.3 px, and as the planet turned a point that
+  small snapped between covering one pixel and parts of two; the bloom
+  made each snap a flash. The points are never under 2.6 px now, dimmed
+  by the ratio of the areas so a town gives the same light. Three runs
+  of 120 frames after: no hot cell.
+- **Measure shimmer, not jumps, and at the reporter's size**: a jump
+  detector asks for a change that comes back the next frame, and a
+  twinkle that keeps changing never qualifies.
+- Not checked: the night side close up at the new size (the lights are
+  larger and dimmer there too, by the same rule).
