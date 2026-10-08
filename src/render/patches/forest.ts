@@ -52,24 +52,37 @@ const LEAF = new THREE.Color(1, 1, 1)
  */
 const CONIFER: readonly (readonly [number, number])[] = [
   [0.05, 0],
-  [0.05, 0.25],
-  [0.34, 0.27],
-  [0.06, 0.55],
-  [0.25, 0.53],
-  [0.05, 0.8],
+  [0.05, 0.22],
+  [0.36, 0.24],
+  [0.08, 0.42],
+  [0.3, 0.43],
+  [0.07, 0.6],
+  [0.24, 0.6],
+  [0.06, 0.76],
+  [0.17, 0.77],
+  [0.04, 0.9],
   [0.001, 1.05],
 ]
 const BROADLEAF: readonly (readonly [number, number])[] = [
   [0.06, 0],
-  [0.06, 0.32],
-  [0.3, 0.36],
-  [0.42, 0.56],
-  [0.36, 0.76],
-  [0.18, 0.92],
-  [0.001, 0.97],
+  [0.06, 0.3],
+  [0.26, 0.34],
+  [0.38, 0.46],
+  [0.43, 0.58],
+  [0.41, 0.7],
+  [0.34, 0.8],
+  [0.24, 0.88],
+  [0.13, 0.94],
+  [0.05, 0.97],
+  [0.001, 0.98],
 ]
-/** Sides round the trunk: five reads as round at a tree's size on screen, and is sixty triangles a tree. */
-const AROUND = 5
+/**
+ * Sides round the trunk. Five read as a pentagon close to — a wood of
+ * dark faceted cones was the plainest PS1 tell in the whole app — and
+ * seven with five ragged tiers is 140 triangles a tree against 60, which
+ * the governor pays for where it must.
+ */
+const AROUND = 7
 
 const MODEL = (() => {
   const lathe = (outline: readonly (readonly [number, number])[]): THREE.LatheGeometry =>
@@ -230,6 +243,7 @@ attribute vec3 treeWood;
 attribute vec2 treeLook;
 varying vec3 vTreeTint;
 varying float vTreeHeight;
+varying float vTreeLeaf;
 varying vec3 vTreeUp;
 varying vec3 vTreePlanet;
 float treeMorph() {
@@ -283,6 +297,13 @@ const TREE_PLACE = /* glsl */ `
   float tier = mix(0.82, 1.18, fract(sin(shape.y * 41.0 + treeOwn.x * 23.0) * 43758.5));
   float lobes = 1.0 + 0.2 * sin(around * 3.0 + treeOwn.z * 6.2832 + shape.y * 6.0);
   shape.xz *= mix(1.0, mix(tier, lobes, treeFate.z), leafy) * mix(0.72, 1.3, treeOwn.x);
+  // Ragged, not turned: each point of a tier's rim or a crown's lobe out or
+  // in by its own hash, so no silhouette is a clean polygon.
+  float rim = step(0.12, length(shape.xz)) * leafy;
+  float rag = fract(sin(dot(vec2(around * 5.0, shape.y * 17.0), vec2(12.9898, 78.233)) + treeOwn.x * 31.0) * 43758.5453);
+  shape.xz *= mix(1.0, mix(0.72 + 0.56 * rag, 0.88 + 0.24 * rag, treeFate.z), rim);
+  // The tiers droop at their rims a little, as boughs do.
+  shape.y -= rim * (1.0 - treeFate.z) * length(shape.xz) * 0.18;
   shape.y *= mix(0.82, 1.22, treeOwn.y);
   vec2 lean = vec2(cos(treeOwn.y * 6.2832), sin(treeOwn.y * 6.2832));
   shape.xz += lean * shape.y * shape.y * (treeOwn.z - 0.3) * 0.14;
@@ -329,11 +350,16 @@ export function treeMaterial(): THREE.MeshStandardMaterial {
         vTreeTint *= 0.84 + 0.32 * fract(sin(dot(position, vec3(12.9898, 78.233, 37.719)) + treeWood.x * 91.0) * 43758.5453);
         vTreeTint *= mix(vec3(0.92, 0.96, 1.0), vec3(1.08, 1.05, 0.86), smoothstep(0.45, 1.0, position.y));
         vTreeHeight = position.y;
+        #ifdef USE_COLOR
+        vTreeLeaf = step(0.5, color.g);
+        #else
+        vTreeLeaf = 1.0;
+        #endif
         vTreeUp = normalize(normalMatrix * up);
         vTreePlanet = transformed;`,
       )
     shader.fragmentShader =
-      'varying vec3 vTreeTint;\nvarying float vTreeHeight;\nvarying vec3 vTreeUp;\nvarying vec3 vTreePlanet;\nuniform vec4 detailMoons[2];\nuniform vec3 treeSun;\n' +
+      'varying vec3 vTreeTint;\nvarying float vTreeHeight;\nvarying float vTreeLeaf;\nvarying vec3 vTreeUp;\nvarying vec3 vTreePlanet;\nuniform vec4 detailMoons[2];\nuniform vec3 treeSun;\n' +
       MOON_SHADOW +
       TOWN_GLOW_GLSL +
       shader.fragmentShader
@@ -360,12 +386,25 @@ export function treeMaterial(): THREE.MeshStandardMaterial {
           vec3(dot(reflectedLight.indirectDiffuse, vec3(0.299, 0.587, 0.114))),
           0.65
         );
+        // The sky is above: a crown's top takes more of it than its
+        // underside, which is most of what makes a tree read as solid.
+        reflectedLight.indirectDiffuse *= 0.7 + 0.5 * max(dot(normal, normalize(vTreeUp)), 0.0);
         // No sun past the terminator, as for the ground.
         #if NUM_DIR_LIGHTS > 0
         {
-          float treeDay = smoothstep(-0.05, 0.08, dot(normalize(vTreeUp), directionalLights[0].direction));
+          vec3 sunDir = directionalLights[0].direction;
+          float treeDay = smoothstep(-0.05, 0.08, dot(normalize(vTreeUp), sunDir));
           // In an eclipse's shadow with the ground under them (eclipse.ts).
           treeDay *= 1.0 - moonShadowFrom(vTreePlanet, treeSun);
+          // Leaves are not a solid: the sun wraps round the lit side into
+          // the shade, and shines through from behind, warm. A cone lit as
+          // a wall was a black side and a green side.
+          float wrap = max((dot(normal, sunDir) + 0.6) / 1.6, 0.0) - max(dot(normal, sunDir), 0.0);
+          vec3 eyeDir = normalize(vViewPosition);
+          float through = pow(max(dot(-eyeDir, sunDir), 0.0), 3.0);
+          vec3 leafSun = directionalLights[0].color * vTreeLeaf * treeDay;
+          reflectedLight.directDiffuse += diffuseColor.rgb * leafSun * wrap * 0.4 * RECIPROCAL_PI;
+          reflectedLight.directDiffuse += diffuseColor.rgb * vec3(1.0, 0.95, 0.55) * leafSun * through * 0.6 * RECIPROCAL_PI;
           reflectedLight.directDiffuse *= treeDay;
           reflectedLight.directSpecular *= treeDay;
         }

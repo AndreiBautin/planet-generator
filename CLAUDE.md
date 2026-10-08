@@ -2153,3 +2153,34 @@ leaves the median at 17 and the picture hitching three times a second.
   its own; the governor is the fix that does not depend on which.
 - The recorder has `postPasses()` now, each pass with `enabled`, for
   measuring the post stack.
+
+## Polish, round one: the trees
+
+The agenda changed on 2026-10-08: the flicker and stutter settled, the
+ask is now a premium, modern look — "make assets look nice, more
+realistic, that wow factor" — over bug hunting. The trees first, as the
+asset most in view from a glide, and a wood of dark five-sided cones was
+the plainest PS1 tell in the app.
+
+- **The model** (`forest.ts`): seven sides round the trunk, not five,
+  and five tiers for a conifer (eleven rings; the broadleaf has eleven
+  too, as the lathe must), 140 triangles a tree against 60. In the
+  vertex shader each tier's rim or crown's lobe is pushed out or in by
+  its own hash (`rag`), so no silhouette is a clean polygon, and the
+  conifer's tiers droop at the rim.
+- **The leaves are lit as leaves**: a wrap term carries the sun round
+  into the shade, a translucency term shines it through from behind in
+  warm yellow-green (`vTreeLeaf` says which vertices are leaf, from the
+  model's vertex colour), and the sky's light favours a crown's top over
+  its underside. A cone lit as a wall was a black side and a green side.
+- **Cost**: the frame's triangles across every pass went from 6.9M to
+  12.6M over a wood (the shadow pass draws the trees too). GPU timer
+  queries read 21 ms after against 30 ms before at 1600 × 900, which
+  says the measurement moves more with the pane's state than with the
+  trees; the governor is the backstop.
+- **A silent shader error again**: the leaf varying was declared in the
+  vertex shader and not the fragment's, the program failed to link, and
+  the woods drew as flat dark blobs on the ground — found by the
+  console's `VALIDATE_STATUS` message, not by any thrown error.
+- Seen: the woods close to under rain and at the ridge in morning light.
+  Not seen: a broadleaf wood close up, autumn, a phone.
