@@ -77,6 +77,10 @@ export const DETAIL_CITIES: { value: THREE.Texture | null } = { value: null }
 export const DETAIL_CITY_LIGHT = { value: 0 }
 /** How strongly the aurora (aurora.ts) lights the ground under it on the night side; nought with none. */
 export const DETAIL_AURORA = { value: 0 }
+/** How far a pack-ice floe stands over the lead beside it, in planet radii: about a ship's height. */
+const ICE_HEIGHT = 0.0004
+/** How far a lava plate stands proud of the melt in the seams, in planet radii. */
+const LAVA_PLATE_HEIGHT = 0.0005
 /** How far under the sea the eye is, 0 to 1 (underwater.ts): caustics on the sea bed, the surface lit from below. */
 export const DETAIL_UNDER = { value: 0 }
 export const DETAIL_RING_BANDS = {
@@ -136,6 +140,49 @@ export const NOISE = /* glsl */ `
   }
   // Tilt a normal by a height's change across the pixel — Three's own bump
   // mapping, under another name so it cannot collide with a bump map's.
+  // Pack ice as a surface, not a paint: floes standing over the leads
+  // between them, a pressure ridge where floes meet, a slab's own gentle
+  // dome and hummocks over it. 0 in a lead, about 1 on a floe. Read by the
+  // water's vertex shader (to raise the floes) and its fragment shader (to
+  // light their edges and paint them), so the two cannot disagree.
+  float iceRelief(vec3 p) {
+    float n = abs(detailNoise(p * 600.0) - 0.5);
+    float lead = 1.0 - smoothstep(0.0, 0.05, n);
+    float ridge = smoothstep(0.05, 0.09, n) * (1.0 - smoothstep(0.09, 0.16, n));
+    float slab = detailNoise(p * 160.0);
+    float hummock = detailNoise(p * 1400.0);
+    return (1.0 - lead) * (0.6 + 0.25 * slab + 0.15 * hummock) + ridge * 0.45;
+  }
+  // The lava sea's crust: plates carried on a current, read twice half a
+  // cycle apart and cross-faded (flow mapping, which lets a pattern move
+  // without stretching for ever). Returns the seam (1 in the glowing
+  // crack between plates), the plate's id, and a height: plates stand
+  // proud with their rims sagging to the seams, ropes of cooled crust
+  // wrinkling their tops. One function for the vertex shader (which lifts
+  // the plates) and the fragment (which lights and paints them).
+  vec3 lavaPlates(vec3 p, float time) {
+    vec3 up = normalize(p);
+    vec3 current = vec3(
+      detailNoise(p * 9.0 + 3.1),
+      detailNoise(p * 9.0 + 7.7),
+      detailNoise(p * 9.0 + 1.3)) - 0.5;
+    current -= up * dot(current, up);
+    current = normalize(current + 1e-5) * 0.006;
+    float cycle = 0.1;
+    float t1 = fract(time * cycle);
+    float t2 = fract(time * cycle + 0.5);
+    vec3 p1 = p - current * ((t1 - 0.5) / cycle);
+    vec3 p2 = p - current * ((t2 - 0.5) / cycle);
+    float blend = abs(t1 - 0.5) * 2.0;
+    vec3 a = detailCells(p1 * 70.0);
+    vec3 b = detailCells(p2 * 70.0);
+    float seam = mix(1.0 - smoothstep(0.0, 0.07, a.y - a.x), 1.0 - smoothstep(0.0, 0.07, b.y - b.x), blend);
+    float id = mix(a.z, b.z, blend);
+    float proud = mix(smoothstep(0.0, 0.35, a.y - a.x), smoothstep(0.0, 0.35, b.y - b.x), blend);
+    float ropes = mix(detailNoise(p1 * 900.0), detailNoise(p2 * 900.0), blend);
+    float height = proud * (0.7 + 0.3 * id) + ropes * proud * 0.3;
+    return vec3(seam, id, height);
+  }
   vec3 detailBump(vec3 position, vec3 normal, vec2 slope, float facing) {
     vec3 sx = normalize(dFdx(position));
     vec3 sy = normalize(dFdy(position));
@@ -146,6 +193,8 @@ export const NOISE = /* glsl */ `
     return normalize(abs(det) * normal - grad);
   }
 `
+/** The noise, cells and relief functions alone, for a vertex shader: `detailBump` takes screen derivatives, which a vertex has not. */
+const NOISE_VERTEX = NOISE.slice(0, NOISE.indexOf('vec3 detailBump')) + '\n'
 
 /** Pass the planet-frame position (and any extra attribute) through to the fragment shader. */
 function passThrough(
@@ -159,6 +208,7 @@ function passThrough(
   const assign = extra === undefined ? '' : `\n  v_${extra.attribute} = ${extra.attribute};`
   shader.vertexShader =
     `uniform float detailTime;\nvarying vec3 vDetailPosition;\nvarying vec3 vDetailNormal;\n${declare}` +
+    NOISE_VERTEX +
     shader.vertexShader.replace(
       '#include <begin_vertex>',
       `#include <begin_vertex>\n  vDetailPosition = position;\n  vDetailNormal = normal;${assign}`,
@@ -923,6 +973,10 @@ export function withWaterDetail(material: THREE.Material): THREE.Material {
           vec3 coarseSheet = coarsePosition.xyz * ((coarseLength + depth) / coarseLength);
           transformed = mix(transformed, coarseSheet, seaMorph);
         }
+        // Pack ice stands as floes over the leads (iceRelief), about a
+        // ship's height proud of the water.
+        float packIceV = smoothstep(0.9, 1.0, v_ice);
+        if (packIceV > 0.0) waveOffset += normalize(position) * iceRelief(position) * ${ICE_HEIGHT.toFixed(5)} * packIceV;
         transformed += waveOffset;`,
         )
     shader.uniforms.seaSky = DETAIL_SKY
@@ -1027,12 +1081,21 @@ export function withWaterDetail(material: THREE.Material): THREE.Material {
         // Pack ice floats on the water, slabs split by dark leads, and does
         // not mirror the sky.
         float packIce = smoothstep(0.9, 1.0, v_ice);
+        float iceRel = 0.0;
         if (packIce > 0.0) {
+          // The floes the vertices were raised by, faded to their average
+          // from orbit where a pixel spans a lead; their tops snow-bright,
+          // their rims and the ridges between them the blue of old ice,
+          // and the leads the dark water they are.
           float iceSpan = length(fwidth(vDetailPosition)) * 600.0;
-          float lead = 1.0 - smoothstep(0.0, 0.05 + iceSpan * 0.3, abs(detailNoise(vDetailPosition * 600.0) - 0.5));
-          float slab = 0.88 + 0.12 * detailNoise(vDetailPosition * 160.0);
-          float onIce = packIce * (1.0 - lead * 0.85 * (1.0 - smoothstep(0.3, 1.0, iceSpan)));
-          diffuseColor.rgb = mix(diffuseColor.rgb, seaIce * slab, onIce);
+          float seen = 1.0 - smoothstep(0.3, 1.0, iceSpan);
+          iceRel = mix(0.62, iceRelief(vDetailPosition), seen);
+          float floe = smoothstep(0.1, 0.4, iceRel);
+          float rim = smoothstep(0.1, 0.4, iceRel) * (1.0 - smoothstep(0.4, 0.7, iceRel));
+          vec3 iceColour = mix(seaIce * (0.8 + 0.3 * iceRel), seaIce * vec3(0.72, 0.86, 1.0), rim * 0.7);
+          float onIce = packIce * mix(0.15, floe, seen) + packIce * (1.0 - seen) * 0.6;
+          onIce = min(onIce, packIce);
+          diffuseColor.rgb = mix(diffuseColor.rgb, iceColour, onIce);
           diffuseColor.a = mix(diffuseColor.a, 1.0, onIce);
           white = max(white, onIce);
         }
@@ -1087,10 +1150,14 @@ export function withWaterDetail(material: THREE.Material): THREE.Material {
             (detailNoise(vDetailPosition * 900.0 + swell) +
               detailNoise(vDetailPosition * 2200.0 - swell * 1.7) * 0.6 +
               detailNoise(streaked * 5200.0 + swell * 3.0) * 0.35 * (1.0 - smoothstep(0.004, 0.03, seaDistance))) * seaNear;
+          // The floes' relief is lit as relief: their rims, ridges and
+          // hummocks take the sun and throw shade, from screen derivatives
+          // of the same height the vertices were raised by.
+          float iceBump = packIce > 0.0 ? iceRel * 6.0 * packIce : 0.0;
           normal = detailBump(
             -vViewPosition,
             normal,
-            vec2(dFdx(ripple), dFdy(ripple)) * 0.6,
+            vec2(dFdx(ripple), dFdy(ripple)) * 0.6 + vec2(dFdx(iceBump), dFdy(iceBump)),
             faceDirection);
         }`,
       )
@@ -1154,6 +1221,36 @@ export function withLavaDetail(material: THREE.Material): THREE.Material {
         float ph1 = dot(position, vec3(0.6, 0.0, 0.8)) * 314.0 - detailTime * 0.35;
         float ph2 = dot(position, vec3(-0.5, 0.3, 0.8)) * 790.0 + detailTime * 0.6;
         transformed += lavaUp * lavaLift * (sin(ph1) * 0.00035 + sin(ph2) * 0.00012);
+        // And the crust's plates stand proud of the melt in the seams
+        // (lavaPlates): rafts of rock riding the current, not a paint.
+        transformed += lavaUp * lavaLift * lavaPlates(position, detailTime).z * ${LAVA_PLATE_HEIGHT.toFixed(5)};
+      }`,
+    )
+    shader.fragmentShader =
+      'float lavaSeam = 0.0;\nfloat lavaId = 0.0;\nfloat lavaGlowing = 0.0;\n' +
+      shader.fragmentShader
+    // The crust takes little of the sky's orange fill and half the sun:
+    // under a molten world's light a dark rock still read as rust.
+    shader.fragmentShader = shader.fragmentShader.replace(
+      '#include <lights_fragment_end>',
+      /* glsl */ `#include <lights_fragment_end>
+      reflectedLight.indirectDiffuse *= mix(0.25, 1.0, lavaGlowing);
+      reflectedLight.directDiffuse *= mix(0.5, 1.0, lavaGlowing);`,
+    )
+    shader.fragmentShader = shader.fragmentShader.replace(
+      '#include <normal_fragment_maps>',
+      /* glsl */ `#include <normal_fragment_maps>
+      {
+        // The plates as a surface: their proud tops, sagging rims and ropy
+        // wrinkles lit from screen derivatives of the height the vertices
+        // were raised by, so a raft has a lit edge and a shadowed one.
+        vec3 plates = lavaPlates(vDetailPosition, detailTime);
+        lavaSeam = plates.x;
+        lavaId = plates.y;
+        float lavaBump = plates.z * 5.0 * (1.0 - smoothstep(0.3, 1.5, length(vViewPosition)));
+        normal = detailBump(-vViewPosition, normal, vec2(dFdx(lavaBump), dFdy(lavaBump)), faceDirection);
+        // Cooled crust is dull rock; only the melt in the seams is glossy.
+        roughnessFactor = mix(0.92, roughnessFactor, lavaSeam);
       }`,
     )
     shader.fragmentShader = shader.fragmentShader.replace(
@@ -1169,28 +1266,27 @@ export function withLavaDetail(material: THREE.Material): THREE.Material {
           detailNoise(vDetailPosition * 9.0 + 1.3)) - 0.5;
         current -= up * dot(current, up);
         current = normalize(current + 1e-5) * 0.006;
-        // Two phases of the same crust, half a cycle apart, each carried
-        // along the current and faded out before it has moved far.
+        // The plates and seams the normal was bent by (lavaPlates, above);
+        // the finer chips between them only near the eye.
         float cycle = 0.1;
         float t1 = fract(detailTime * cycle);
         float t2 = fract(detailTime * cycle + 0.5);
         vec3 p1 = vDetailPosition - current * ((t1 - 0.5) / cycle);
         vec3 p2 = vDetailPosition - current * ((t2 - 0.5) / cycle);
         float blend = abs(t1 - 0.5) * 2.0;
-        vec3 platesA = detailCells(p1 * 70.0);
-        vec3 platesB = detailCells(p2 * 70.0);
-        float seamA = 1.0 - smoothstep(0.0, 0.12, platesA.y - platesA.x);
-        float seamB = 1.0 - smoothstep(0.0, 0.12, platesB.y - platesB.x);
-        float seam = mix(seamA, seamB, blend);
-        float id = mix(platesA.z, platesB.z, blend);
+        float seam = lavaSeam;
+        float id = lavaId;
         if (far < 0.99) {
           vec3 chipsA = detailCells(p1 * 700.0);
           vec3 chipsB = detailCells(p2 * 700.0);
+          // Hairline cracks between the chips of crust, not a second
+          // network of glowing seams: at a tenth of a chip wide they lit
+          // half the sea and the crust read as pink coral.
           float fine = mix(
-            1.0 - smoothstep(0.0, 0.1, chipsA.y - chipsA.x),
-            1.0 - smoothstep(0.0, 0.1, chipsB.y - chipsB.x),
+            1.0 - smoothstep(0.0, 0.03, chipsA.y - chipsA.x),
+            1.0 - smoothstep(0.0, 0.03, chipsB.y - chipsB.x),
             blend);
-          seam = max(seam, fine * (1.0 - far));
+          seam = max(seam, fine * 0.45 * (1.0 - far));
         }
         // Lava streaming along the seams, quicker than the crust, with
         // surges running down the current.
@@ -1199,12 +1295,16 @@ export function withLavaDetail(material: THREE.Material): THREE.Material {
         float pulse = 0.85 + 0.15 * sin(detailTime * 1.3 + id * 6.28);
         // And the crust itself breaks open now and then: a plate flares
         // from within, its skin thinning to the glow, and darkens again.
-        float boil = smoothstep(0.78, 0.97, detailNoise(vec3(id * 37.0, detailTime * 0.09, id * 11.0)));
+        float boil = smoothstep(0.88, 0.99, detailNoise(vec3(id * 37.0, detailTime * 0.09, id * 11.0)));
         float skin = detailNoise(vDetailPosition * 220.0 + detailTime * 0.02);
         float cracked = boil * smoothstep(0.35, 0.7, skin) * (1.0 - far);
-        float glowing = max(seam, cracked * 0.8);
-        totalEmissiveRadiance *= mix(0.12 + id * 0.15, (1.6 + stream * 1.4) * pulse * surge, glowing);
-        diffuseColor.rgb *= mix(0.4, 1.0, glowing);
+        float glowing = max(seam, cracked * 0.6);
+        // The crust is black basalt, its glow only in the seams and where
+        // a plate has boiled open; lit as a pale rock with a glow of its
+        // own everywhere, the sea read as pink coral.
+        totalEmissiveRadiance *= mix(0.02 + id * 0.05, (1.6 + stream * 1.4) * pulse * surge, glowing);
+        diffuseColor.rgb = mix(vec3(0.022, 0.019, 0.018) * (0.8 + 0.4 * id), diffuseColor.rgb, glowing);
+        lavaGlowing = glowing;
       }`,
     )
   }

@@ -2314,3 +2314,37 @@ inside the air only.
   disc at noon (small and white, behind the eye in most views), through
   a cloud (the sky draws over the clouds, so the disc will show through
   thin cloud and should not through a storm), a phone.
+
+## Polish, round nine: lava and ice as surfaces, not paint
+
+Reported: lava "still just one flat surface", and ice the same. Both
+were painted on the sea sheet with no relief. Now:
+
+- **One function each for the vertex and the fragment shader**, in
+  `NOISE` (`iceRelief`, `lavaPlates`), so the heights the vertices are
+  raised by and the heights the normals are bent by cannot disagree.
+  `NOISE_VERTEX` is `NOISE` without `detailBump`: that one takes screen
+  derivatives, which a vertex shader has not, and the vertex shader
+  refused to compile with it in — found by the console, the lava having
+  drawn as a flat dark sheet.
+- **Lava**: plates stand `LAVA_PLATE_HEIGHT` (0.0005) proud of the melt,
+  their rims sagging to the seams, ropes of crust wrinkling their tops;
+  the fragment bends the normal by the same height and keeps the seam
+  and plate id in globals for the emissive block. The crust is basalt
+  (`vec3(0.022, …)`), dull (roughness 0.92 off the seams), and takes a
+  quarter of the sky's orange fill and half the sun — **as a darkened
+  orange under that light it still read as pink coral**, measured by the
+  median pixel near the eye (214, 108, 70) against the darkest quarter
+  (111, 52, 37). The seams are 0.07 of a cell wide (were 0.12), the
+  hairline cracks 0.03 (were 0.1), the boils rarer; the median is crust
+  now (125, 58, 41).
+- **Ice**: floes stand `ICE_HEIGHT` (0.0004) over the leads, with a
+  pressure ridge where floes meet, a dome and hummocks on each; painted
+  snow-bright on top, old-ice blue at the rims, dark water in the leads,
+  faded to an average from orbit where a pixel spans a lead.
+- **To look at pack ice**, a shot link at 4‰ over open sea: a
+  `glideFrom` starts at 0.038 up, where a floe a ship's height tall is
+  nothing. Open sea on `9tcwfzj` was found by sampling `surfaceAt` on a
+  ring round candidate points; (−40, −180) is one.
+- Seen: both from a low glide. Not seen: either from orbit after the
+  change, lava at night, a phone.
