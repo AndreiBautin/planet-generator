@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest'
 
-import { nextPixelRatio, pickQuality, SLOW_FRAME_MS, typicalFrame } from './quality'
+import {
+  DROPPED_SHARE,
+  droppedShare,
+  nextPixelRatio,
+  pickQuality,
+  SLOW_FRAME_MS,
+  typicalFrame,
+} from './quality'
 
 describe('pickQuality', () => {
   it('draws less on a phone than on a desktop', () => {
@@ -50,8 +57,21 @@ describe('nextPixelRatio', () => {
     expect(nextPixelRatio(1.5, 40)).toBe(1.25)
   })
 
-  it('stops at the floor', () => {
-    expect(nextPixelRatio(1, 80)).toBe(1)
+  it('stops at the floor, which is below one', () => {
+    expect(nextPixelRatio(1, 80)).toBe(0.75)
+    expect(nextPixelRatio(0.75, 80)).toBe(0.75)
+  })
+
+  it('steps down for dropped frames though the typical frame is on time', () => {
+    // 90 frames at 16.7 ms with 4 of them a skipped refresh: the median is
+    // fine and the picture stutters.
+    const window = Array.from({ length: 90 }, (_, k) => (k % 22 === 0 ? 33 : 16.7))
+    expect(typicalFrame(window)).toBeLessThan(SLOW_FRAME_MS)
+    expect(droppedShare(window)).toBeGreaterThan(DROPPED_SHARE)
+    expect(nextPixelRatio(1, typicalFrame(window), droppedShare(window))).toBe(0.75)
+    // One drop in ninety is left alone.
+    const once = Array.from({ length: 90 }, (_, k) => (k === 5 ? 33 : 16.7))
+    expect(nextPixelRatio(1, typicalFrame(once), droppedShare(once))).toBe(1)
   })
 
   it('steps an in-between ratio to the next one below it', () => {

@@ -86,7 +86,7 @@ import type { Vec3 } from './patches/cube'
 import type { ViewCone } from './patches/lod'
 import { floorRadiusAt, groundRadiusAt } from './patches/patch-data'
 import { Terrain } from './patches/terrain'
-import { nextPixelRatio, typicalFrame, type Quality } from './quality'
+import { droppedShare, nextPixelRatio, typicalFrame, type Quality } from './quality'
 import { groundTextures } from './textures'
 import { SEA_RADIUS, waterMaterial } from './water'
 
@@ -162,6 +162,8 @@ export interface Scene {
   readonly eyeFacing: () => Vec3
   /** Where the sun is, as a direction in the planet's own frame, as it is turned now. */
   readonly sunInPlanet: () => Vec3
+  /** The post pipeline's passes, to switch off one at a time when measuring: for the development recorder. */
+  readonly postPasses: () => readonly { enabled: boolean }[]
   readonly dispose: () => void
 }
 
@@ -1057,7 +1059,7 @@ export function startScene(
     lastFrameAt = now
     // Not while recording: frames there take whatever time they are told to.
     if (options.manual !== true && frames.length >= FRAME_WINDOW) {
-      const next = nextPixelRatio(pixelRatio, typicalFrame(frames))
+      const next = nextPixelRatio(pixelRatio, typicalFrame(frames), droppedShare(frames))
       lastFrames = frames.slice()
       frames.length = 0
       if (next !== pixelRatio) {
@@ -1492,6 +1494,7 @@ export function startScene(
       }
     },
     sunInPlanet: () => inPlanetFrame(sunDirection, lastTurn, 1),
+    postPasses: () => composer?.passes ?? [],
     hold: (on) => {
       holding = on
     },

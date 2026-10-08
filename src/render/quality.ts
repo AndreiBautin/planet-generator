@@ -50,8 +50,14 @@ export interface Quality {
   readonly post: boolean
 }
 
-/** Pixel ratios the governor steps down through, highest first. */
-export const PIXEL_RATIOS = [2, 1.5, 1.25, 1] as const
+/**
+ * Pixel ratios the governor steps down through, highest first. Below one
+ * on purpose: a 2560-wide window at ratio one is 3.3 million pixels, which
+ * on a desktop GPU sat at 11–18 ms a frame from orbit — right on a 60 Hz
+ * screen's line, dropping frames in stretches — and at 0.75 it is under
+ * two million. The style is pixel art already.
+ */
+export const PIXEL_RATIOS = [2, 1.5, 1.25, 1, 0.75] as const
 
 export function pickQuality(device: Device): Quality {
   const phone = Math.min(device.width, device.height) < 700
@@ -89,14 +95,29 @@ export function typicalFrame(samples: readonly number[]): number {
 
 /** Slower than this, a frame is dropped on a 60 Hz screen often enough to see. */
 export const SLOW_FRAME_MS = 24
+/** A frame longer than this is one the screen skipped a refresh for (a 60 Hz drop is about 33 ms). */
+export const DROPPED_FRAME_MS = 26
+/** Dropping more than this share of frames reads as stutter, though the typical frame is still on time. */
+export const DROPPED_SHARE = 0.03
+
+/** The share of frames in a window that the screen skipped a refresh for. */
+export function droppedShare(samples: readonly number[]): number {
+  if (samples.length === 0) return 0
+  let dropped = 0
+  for (const ms of samples) if (ms > DROPPED_FRAME_MS) dropped += 1
+  return dropped / samples.length
+}
 
 /**
- * The next pixel ratio given the current one and a typical frame. Only ever
- * steps down, one step at a time: stepping back up when frames recover is
- * how a governor ends up see-sawing between two settings every few seconds.
+ * The next pixel ratio given the current one, a typical frame and the share
+ * of dropped frames. Only ever steps down, one step at a time: stepping
+ * back up when frames recover is how a governor ends up see-sawing between
+ * two settings every few seconds. The dropped share is what catches a
+ * device that is only just too slow: a frame that misses one refresh in
+ * twenty leaves the median on time and the picture stuttering.
  */
-export function nextPixelRatio(current: number, frameMs: number): number {
-  if (frameMs <= SLOW_FRAME_MS) return current
+export function nextPixelRatio(current: number, frameMs: number, dropped = 0): number {
+  if (frameMs <= SLOW_FRAME_MS && dropped <= DROPPED_SHARE) return current
   const lower = PIXEL_RATIOS.find((ratio) => ratio < current - 0.01)
   return lower ?? current
 }

@@ -2123,3 +2123,33 @@ that needs a reading from inside it.
   shown.
 - **The night side close up after the town-light change** is still
   unchecked.
+
+## The orbit stutter: a governor that could not see dropped frames
+
+With `?stats` the reporter's window read **17 ms typical, 17 ms slow**,
+at 2560 × 1305 and pixel ratio 1 on an RTX 3060 Ti — a steady 60 Hz by
+the numbers, and stuttering to the eye. Measured here at that size with
+GPU timer queries (`EXT_disjoint_timer_query_webgl2`, the honest way;
+a `readPixels` sync per frame is ±3 ms of noise and named five points
+as a 3 ms cost) the GPU takes 11–12 ms a typical orbit frame and 16–20
+in stretches as the planet turns, with the CPU at 3.5 ms. That is right
+on a 60 Hz screen's line: a frame that misses one refresh in twenty
+leaves the median at 17 and the picture hitching three times a second.
+
+- **The governor judged by the median alone**, which a dropped frame
+  never moves, and its floor was ratio 1, which a desktop at ratio 1
+  already sits at. It steps down now when more than `DROPPED_SHARE`
+  (3%) of a window's frames exceed `DROPPED_FRAME_MS` (26), and the
+  ratios run to 0.75 (`quality.test.ts` holds both). At 0.75 a 2560-wide
+  window is under two million pixels, which is about 7 ms here.
+- **Not verified in the reporter's window**: the pane runs manual
+  frames, where the governor is off by design. `?stats` shows the ratio,
+  so the step to 0.75 and whether the stutter goes with it are a
+  reading away.
+- **No single object is the cost.** The water, ground, two cloud
+  shells, the air and the sky are each a planet's worth of pixels with a
+  heavy fragment shader, and the post stack is cheap by comparison
+  (bloom under 1 ms). Thinning any one of them from orbit is a round of
+  its own; the governor is the fix that does not depend on which.
+- The recorder has `postPasses()` now, each pass with `enabled`, for
+  measuring the post stack.

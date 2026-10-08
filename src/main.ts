@@ -615,6 +615,8 @@ if (recording) {
       /** What the last frame drew, across every pass. */
       stats: () => scene.stats(),
       sun: () => scene.sunInPlanet(),
+      /** The post pipeline's passes, each with `enabled`. */
+      postPasses: () => scene.postPasses(),
       /** The terrain's last selection: stand-ins, the nearest, patches pending. */
       terrain: () => ({ ...TERRAIN_STATS }),
       /** Where Fly would start the glide now. */
