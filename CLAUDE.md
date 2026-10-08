@@ -1968,4 +1968,5 @@ map's shoulder.
   frozen slope, and a volcano's flank on `h999999` by day (basalt as dark
   grained rock under the plume and the flows; aim at a volcano with
   `volcanoesOf` imported in the page, as the lava sea is most of the
-  world). Not seen: a desert, a phone.
+  world), and the dunes of `aaangxg` with their ripples and grain (sand's
+  own factor was near 1, so it moved least). Not seen: a phone.
