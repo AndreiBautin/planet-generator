@@ -2384,3 +2384,25 @@ towns' glow, and no moon on the ground. `render/moonlight.ts`:
   horizon at 23:00 there), and the village at 23:00, where the town glow
   still rules. Not seen: moonlight on water or snow, two moons at once,
   a phone.
+
+## Polish, round eleven: the ground close up
+
+- **A third photograph scale** (`r`, 6000 repeats) within `detailClose`
+  of the eye, for the four layers with normal maps: the near scale is
+  four texels to a pixel from a low glide and its blades and pebbles
+  average away; this one is about a texel a pixel there. Blended in at
+  up to half as the eye nears, albedo, relief and tilt alike, scaled by
+  the four layers' share of the total.
+- **Creases are darker** (`detailCrease`): the ground's curvature from
+  the screen derivatives of its smooth normal against its position —
+  normals that converge as the position runs is a hollow — darkening
+  the sky's light by up to 0.4 and the sun's by up to 0.16 within 0.25
+  of the eye. **Not seen doing anything**: the hillside and the beach
+  looked at are smooth; a gully or a rock face close up is where it
+  should show, and nobody has looked.
+- **The water's glassy floor is 0.11, not 0.07**: at 0.07 the midday sun
+  lay on the shallows by the sea stacks as one white sheet. Changed
+  after the last look, so unverified.
+- Seen: the herd hillside (grain, standard deviation 5.9 at 1600 wide)
+  and the beach by the stacks. Not seen: a cliff close up, snow close
+  up, a phone.

@@ -542,6 +542,7 @@ export function withGroundDetail(
         float detailHeight = 0.0;
         float detailShade = 1.0;
         float detailRough = 1.0;
+        float detailCrease = 1.0;
         vec3 detailTilt = vec3(0.0);
         float stand = 1.0 - smoothstep(detailRange * 0.55, detailRange, detailDistance);
 
@@ -615,7 +616,28 @@ export function withGroundDetail(
             groundFlat(groundSalt, groundSaltMean, wSalt, p, q, w, albedo, relief);
             groundLayer(groundSand, groundSandNormal, groundSandMean, wSand, p, q, w, albedo, relief, detailTilt);
             groundLayer(groundSnow, groundSnowNormal, groundSnowMean, wSnow, p, q, w, albedo, relief, detailTilt);
-            groundLayer(groundStone, groundStoneNormal, groundStoneMean, wStone, p, q, w, albedo, relief, detailTilt);`
+            groundLayer(groundStone, groundStoneNormal, groundStoneMean, wStone, p, q, w, albedo, relief, detailTilt);
+            // A third, finer scale within a glide's reach of the ground:
+            // the near scale is four texels to a pixel from a low glide
+            // and its blades and pebbles are averaged away; this one is a
+            // texel a pixel there, blended in as the eye nears.
+            if (detailClose > 0.01) {
+              vec3 r = vDetailPosition * 6000.0 + 41.0;
+              vec3 fineAlbedo = vec3(0.0);
+              float fineRelief = 0.0;
+              vec3 fineTilt = vec3(0.0);
+              groundLayer(groundGrass, groundGrassNormal, groundGrassMean, wGrass, r, p, w, fineAlbedo, fineRelief, fineTilt);
+              groundLayer(groundSand, groundSandNormal, groundSandMean, wSand, r, p, w, fineAlbedo, fineRelief, fineTilt);
+              groundLayer(groundSnow, groundSnowNormal, groundSnowMean, wSnow, r, p, w, fineAlbedo, fineRelief, fineTilt);
+              groundLayer(groundStone, groundStoneNormal, groundStoneMean, wStone, r, p, w, fineAlbedo, fineRelief, fineTilt);
+              float fineShare = wGrass + wSand + wSnow + wStone;
+              if (fineShare > 0.02) {
+                float fineMix = 0.5 * detailClose * fineShare / total;
+                albedo = mix(albedo, fineAlbedo * total / fineShare, fineMix);
+                relief = mix(relief, fineRelief * total / fineShare, fineMix);
+                detailTilt = mix(detailTilt, fineTilt * total / fineShare, fineMix);
+              }
+            }`
             }
             albedo /= total;
             relief /= total;
@@ -822,11 +844,27 @@ export function withGroundDetail(
           -vViewPosition,
           normal,
           vec2(dFdx(detailHeight), dFdy(detailHeight)) * 0.9,
-          faceDirection);`,
+          faceDirection);
+        // Creases are darker: the ground's own curvature from the screen
+        // derivatives of its smooth normal against its position — normals
+        // that converge as the position runs is a hollow, which the sky
+        // lights less — near the eye, where a gully is otherwise lit the
+        // same as the open slope either side.
+        {
+          vec3 creaseN = normalize(vDetailNormal);
+          vec3 cpx = dFdx(vDetailPosition);
+          vec3 cpy = dFdy(vDetailPosition);
+          float creaseSpan = dot(cpx, cpx) + dot(cpy, cpy);
+          float curvature = (dot(dFdx(creaseN), cpx) + dot(dFdy(creaseN), cpy)) / max(creaseSpan, 1e-14);
+          float creaseNear = 1.0 - smoothstep(0.03, 0.25, detailDistance);
+          detailCrease = 1.0 - clamp(-curvature * 0.0012, 0.0, 0.4) * creaseNear;
+        }`,
       )
       .replace(
         '#include <lights_fragment_end>',
         /* glsl */ `#include <lights_fragment_end>
+        reflectedLight.indirectDiffuse *= detailCrease;
+        reflectedLight.directDiffuse *= 0.6 + 0.4 * detailCrease;
         // The planet shadows its own ground: once the sun is under the
         // horizon it lights nothing there, however a slope faces. Without
         // it, every hillside turned towards a sun already set glowed red
@@ -1172,7 +1210,7 @@ export function withWaterDetail(material: THREE.Material): THREE.Material {
           // as one sheet of highlight; rougher where foam or ice lies.
           float sparkle = detailNoise(vDetailPosition * 3000.0 + vec3(detailTime * 1.1, -detailTime * 0.8, detailTime * 0.5) * 0.004);
           float glassy = seaNear * (1.0 - smoothstep(0.9, 1.0, v_ice));
-          roughnessFactor = mix(roughnessFactor, 0.07 + 0.18 * sparkle, glassy * 0.85);
+          roughnessFactor = mix(roughnessFactor, 0.11 + 0.2 * sparkle, glassy * 0.85);
         }`,
       )
       .replace(
