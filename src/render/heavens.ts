@@ -136,8 +136,15 @@ export function buildHeavens(sky: Satellites): Heavens {
           vec3 eye = normalize(cameraPosition - vWorld);
           float forward = pow(max(dot(-eye, sun), 0.0), 6.0);
           float shine = 0.16 / (1.0 + (r / planet - 1.0) * 2.0);
-          vec3 colour = tint * (0.05 + shine + 1.1 * shade * (0.75 + forward * 0.8));
-          gl_FragColor = vec4(colour, solid * 0.85);
+          // The bands' own light and dark in the colour, since the alpha is
+          // dense enough to hide it, and fine grooves across the width —
+          // without them the ring was one flat beige sheet.
+          float grooves = 0.94 + 0.06 * sin(t * 1400.0) * sin(t * 310.0 + 1.3);
+          vec3 colour = tint * (0.05 + shine + 1.1 * shade * (0.75 + forward * 0.8)) * (0.72 + 0.45 * solid) * grooves;
+          // Dense where the bands are: at 0.85 of the bands' own value the
+          // planet showed through the whole ring as through a veil, and
+          // its rim's glow with it. The thin bands stay see-through.
+          gl_FragColor = vec4(colour, min(1.0, solid * 2.2));
           #include <tonemapping_fragment>
           #include <colorspace_fragment>
         }
@@ -153,7 +160,10 @@ export function buildHeavens(sky: Satellites): Heavens {
     // RingGeometry lies in its XY plane; the planet's equator is the room's XZ.
     ring.rotation.x = -Math.PI / 2
     // After the ground and the clouds, before the air, which is the haze over all of it.
-    ring.renderOrder = 5
+    // After the air's shell (renderOrder 10): drawn before it, the ring in
+    // front of the planet took the atmosphere's rim over it, as the ring
+    // writes no depth and the shell's far side passed the depth test.
+    ring.renderOrder = 11
     group.add(ring)
   }
 

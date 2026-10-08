@@ -2406,3 +2406,34 @@ towns' glow, and no moon on the ground. `render/moonlight.ts`:
 - Seen: the herd hillside (grain, standard deviation 5.9 at 1600 wide)
   and the beach by the stacks. Not seen: a cliff close up, snow close
   up, a phone.
+
+## Polish, round twelve: the rings, again
+
+Reported with two pictures of `ww2jeyw`: the far side of the ring cut
+off along a straight horizontal line, and the planet seen through the
+near side with its blue rim drawn over the ring.
+
+- **The far plane stopped at the air's shell** (eye distance + 1 +
+  `AIR_RADIUS`), and a ring reaching past that was cut along the plane —
+  a straight line. It reaches to the rings' outer edge and the farthest
+  moon now (`reach`, scaled by the birth scale). The moons had been
+  past it too.
+- **The rim over the ring** was the air shell (renderOrder 10) drawing
+  after the ring (5): the ring writes no depth, so the shell's far side
+  passed the test and blended over it. The ring is renderOrder 11.
+  Measured by setting it to 20 live and seeing no change, which is what
+  said the rest was the ring's own translucency.
+- **The ring was a veil**: alpha was 0.85 of the band texture's value,
+  about half overall, so the planet and its rim showed through the whole
+  near side. Alpha is `min(1, solid × 2.2)` now — the main bands opaque,
+  the thin ones still see-through — with the bands' own light and dark
+  put back into the colour (`0.72 + 0.45 · solid`) and fine grooves
+  across the width, since opaque and flat it read as a beige sheet.
+- **The pane's `zoom` captures the live canvas, not the overlay image**:
+  three zooms in this session showed a frame other than the one
+  captured. To see a crop of a captured frame, draw the crop into the
+  overlay and take a plain screenshot.
+- Seen: `ww2jeyw` from 8° above the plane at 3.6 out. Not seen: from
+  below the plane, from a glide under the rings, the rings' shadow on the
+  ground since the alpha change (it reads the band texture, not the
+  alpha, so it should be as before), a phone.

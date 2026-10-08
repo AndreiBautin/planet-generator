@@ -943,7 +943,18 @@ export function startScene(
     // to tell the sea sheet from the shore it meets at a grazing angle, and
     // every coastline flickered as the planet turned (seen on a desktop).
     const near = Math.max(Math.min(0.1, Math.max(0.0004, above * 0.2)), clearAhead() * 0.5)
-    const far = above + 1 + AIR_RADIUS + 0.1
+    // And out to the rings' edge and the farthest moon, which both lie past
+    // the air's shell: the far plane at the shell cut a wide ring's far
+    // side off along a straight line across the sky (reported).
+    let reach = AIR_RADIUS
+    let reachScale = 1
+    if (shown !== undefined) {
+      reachScale = stageOf(shown).scale
+      reach = Math.max(reach, shown.heavens.outer)
+      for (const moon of shown.heavens.moons)
+        reach = Math.max(reach, moon.mesh.position.length() + moon.radius)
+    }
+    const far = above + 1 + reach * reachScale + 0.1
     if (
       Math.abs(near - camera.near) > camera.near * 0.05 ||
       Math.abs(far - camera.far) > camera.far * 0.05
