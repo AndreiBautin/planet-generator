@@ -27,6 +27,18 @@ describe('the swell', () => {
     expect(biggest).toBeGreaterThan(0.0001)
   })
 
+  it('stands taller in the shallows and still at the shore, as the water draws it', () => {
+    let deep = 0
+    let shallow = 0
+    for (let t = 0; t < 30; t += 0.37) {
+      deep = Math.max(deep, Math.abs(swellHeaveAt(at, t, above)))
+      shallow = Math.max(shallow, Math.abs(swellHeaveAt(at, t, above, 0.001)))
+      expect(swellHeaveAt(at, t, above, 0)).toBe(0)
+    }
+    expect(shallow).toBeGreaterThan(deep * 1.3)
+    expect(shallow).toBeLessThan(deep * 1.7 + 1e-12)
+  })
+
   it('lies still beyond where the water stops drawing it', () => {
     const far = [
       at[0] * (1 + SWELL_FAR * 2),

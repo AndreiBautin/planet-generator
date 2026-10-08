@@ -1851,9 +1851,13 @@ shore triangle.
 hull's height, so a ship at a fixed height sailed under a blue lid of sea.
 The four Gerstner trains are one table: the water's shader is generated
 from it (`SWELL_TRAINS_GLSL`) and `swellHeaveAt` lifts hulls and wakes by
-the same heave, faded with distance as the shader fades it. It reads the
-open-sea swell only — no shoaling, ice or inland damping — which is right
-on the lanes and slightly low in the shallows by a harbour.
+the same heave, faded with distance as the shader fades it. It shoals and
+stills by the depth under the hull as the shader does (`swellHeaveAt`'s
+`depth`, one `floorRadiusAt` sounding a drawn ship a frame, the wake
+taking the hull's), so a ship by a harbour rides the taller wave drawn
+there; held by `swell.test.ts`. No ice or inland damping: the lanes are
+open water. **Not seen on screen** — the test holds it, and a ship by a
+pier was never in frame in this session.
 
 ## A comet blacked out the frame; cliffs, and the stacks off them
 

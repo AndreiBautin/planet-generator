@@ -82,6 +82,7 @@ import {
 } from './detail'
 import type { Vec3 } from './patches/cube'
 import type { ViewCone } from './patches/lod'
+import { floorRadiusAt } from './patches/patch-data'
 import { Terrain } from './patches/terrain'
 import { nextPixelRatio, typicalFrame, type Quality } from './quality'
 import { groundTextures } from './textures'
@@ -690,7 +691,7 @@ export function startScene(
           traffic.group.userData.withGround = true
           ground.group.add(traffic.group)
           // Piers at the coastal towns, and ships sailing between them (ships.ts).
-          ships = new Ships(harbours)
+          ships = new Ships(harbours, (at) => SEA_RADIUS - floorRadiusAt(next.world, at))
           ships.group.userData.withGround = true
           ground.group.add(ships.group)
           // A lighthouse on the shore beside each harbour (lighthouses.ts),

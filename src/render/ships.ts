@@ -55,7 +55,11 @@ export class Ships {
   private readonly size = new THREE.Vector3(1, 1, 1)
   private readonly gone = new THREE.Matrix4().makeScale(0, 0, 0)
 
-  constructor(harbours: Harbours) {
+  /** The water under a point of the sea (a unit direction), in radii; deep everywhere if not given. */
+  private readonly depthAt: (at: Vec3) => number
+
+  constructor(harbours: Harbours, depthAt: (at: Vec3) => number = () => Infinity) {
+    this.depthAt = depthAt
     this.loops = harbours.lanes.map(loopOf)
     this.loops.forEach((loop, lane) => {
       const count = Math.min(3, Math.max(1, Math.round(loop.length / 0.04)))
@@ -160,9 +164,13 @@ export class Ships {
       const side = new THREE.Vector3().crossVectors(up, forward).normalize()
       this.basis.makeBasis(side, up, forward)
       this.turn.setFromRotationMatrix(this.basis)
-      // Riding the swell the water draws (swell.ts), and a gentle roll on it.
+      // Riding the swell the water draws (swell.ts), shoaled by the depth
+      // under the hull (one sounding a ship a frame; the wake takes the
+      // same), and a gentle roll on it.
       const sea: Vec3 = [at[0] * SEA_RADIUS, at[1] * SEA_RADIUS, at[2] * SEA_RADIUS]
-      const bob = Math.sin(seconds * 1.3 + s * 2.1) * 0.00003 + swellHeaveAt(sea, seconds, eye)
+      const depth = this.depthAt(at)
+      const bob =
+        Math.sin(seconds * 1.3 + s * 2.1) * 0.00003 + swellHeaveAt(sea, seconds, eye, depth)
       this.place.set(...at).multiplyScalar(SEA_RADIUS + RIDE + bob)
       this.matrix.compose(this.place, this.turn, this.size)
       this.hulls.setMatrixAt(s, this.matrix)
@@ -179,7 +187,12 @@ export class Ships {
         const r =
           SEA_RADIUS +
           0.00004 +
-          swellHeaveAt([p[0] * SEA_RADIUS, p[1] * SEA_RADIUS, p[2] * SEA_RADIUS], seconds, eye)
+          swellHeaveAt(
+            [p[0] * SEA_RADIUS, p[1] * SEA_RADIUS, p[2] * SEA_RADIUS],
+            seconds,
+            eye,
+            depth,
+          )
         const v = (s * WAKE_POINTS + k) * 6
         for (const [o, sign] of [
           [0, -1],
