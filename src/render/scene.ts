@@ -18,7 +18,8 @@ import { HAZE_SUN, installHaze } from './haze'
 import { installSteadyShadows } from './shadows'
 import { BORN, birthAt, type Birth } from './birth'
 import type { Builder } from './builder'
-import { cloudDataOf, cloudsFromTexture, cloudsSeenFrom } from './clouds'
+import { Bolt } from './bolt'
+import { CLOUD_RADIUS, cloudDataOf, cloudsFromTexture, cloudsSeenFrom } from './clouds'
 import { fromPalette } from './colour'
 import { CometSky } from './comet'
 import { buildHeavens, type Heavens } from './heavens'
@@ -83,7 +84,7 @@ import {
 } from './detail'
 import type { Vec3 } from './patches/cube'
 import type { ViewCone } from './patches/lod'
-import { floorRadiusAt } from './patches/patch-data'
+import { floorRadiusAt, groundRadiusAt } from './patches/patch-data'
 import { Terrain } from './patches/terrain'
 import { nextPixelRatio, typicalFrame, type Quality } from './quality'
 import { groundTextures } from './textures'
@@ -458,6 +459,7 @@ export function startScene(
   // Rain around the eye where the cloud over it is heavy, while flying low.
   const rain = new Rain()
   const lightning = new Lightning()
+  const bolt = new Bolt()
   const sound = new Soundscape()
   let frameListener: (() => void) | undefined
   let heardStrikes = 0
@@ -608,8 +610,11 @@ export function startScene(
       clouds = next.clouds ?? cloudsFromTexture(next.world, new Uint8Array(8), 2)
       // Rain hanging from the storms, turning with the clouds they fall from.
       const held = cloudDataOf(clouds)
-      if (held !== undefined && held.width > 2 && !next.world.molten)
+      if (held !== undefined && held.width > 2 && !next.world.molten) {
         clouds.add(rainShafts(held.data, held.width))
+        // And the bolt of a strike, in the layer's frame as the strike is.
+        clouds.add(bolt.object)
+      }
       rain.snows(next.world.kind === 'frozen')
       DETAIL_CLOUDS.value = cloudMapOf(clouds)
       air = buildAtmosphere(next.world, sun.position)
@@ -1235,6 +1240,20 @@ export function startScene(
         held?.width ?? 0,
       )
       skylight.intensity += flash * 2.5
+      if (flash > 0.01) {
+        // The channel from the cloud base to the ground under the strike
+        // (bolt.ts): the strike is in the cloud layer's frame, the ground
+        // in the planet's.
+        const at = lightning.at
+        const [rx, ry, rz] = intoRoom(at, turn * 1.15)
+        const foot = groundRadiusAt(shown.world, inPlanetFrame({ x: rx, y: ry, z: rz }, turn, 1))
+        bolt.update(
+          lightning.strikes,
+          [at[0] * CLOUD_RADIUS, at[1] * CLOUD_RADIUS, at[2] * CLOUD_RADIUS],
+          [at[0] * foot, at[1] * foot, at[2] * foot],
+          flash,
+        )
+      } else bolt.update(lightning.strikes, [0, 1, 0], [0, 1, 0], 0)
       if (sound.playing) {
         // How fast the eye goes, smoothed, and how much coast is under it,
         // read every few frames: sea and land both within a short way.

@@ -2074,3 +2074,26 @@ material took them to nought.
   twinkle that keeps changing never qualifies.
 - Not checked: the night side close up at the new size (the lights are
   larger and dimmer there too, by the same rule).
+
+## Lightning has a bolt
+
+The flash lit the cloud from inside and the land for a quarter second
+with nothing drawn, so from a glide under a storm the whole view
+brightened and dimmed for no visible reason — the likeliest cause of the
+"screen flashing" report that nothing else reproduced. `render/bolt.ts`
+draws the channel: a jagged line from the cloud base to the ground
+under the strike with two forks, additive, shown for as long as the
+flash lasts (`boltSegments` is pure and tested: starts at the cloud,
+ends at the foot, never wanders far, the same bolt for the same strike).
+
+- **In the cloud layer's frame**, a child of it as the rain shafts are,
+  since the strike is decided there (`Lightning.at`); the ground under
+  it is read in the planet's frame through `intoRoom` and
+  `inPlanetFrame` with the layer's `1.15×` turn.
+- **Checking it took a low glide aimed at it.** The strike came within
+  200 frames of a tour on `fa4ut4f`, but the eye was over the deck and
+  the bolt below it; and the scene hides the bolt every tick when there
+  is no flash, so forcing `visible` by hand does nothing — pin it with a
+  getter. Seen: the bolt with a fork into the woods under the rain.
+- **The browser pane came back 0 × 0** after a viewport reset, and the
+  frame copy threw; set a size explicitly before recording.

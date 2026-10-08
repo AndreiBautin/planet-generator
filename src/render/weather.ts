@@ -180,6 +180,11 @@ export class Lightning {
   strikes = 0
   lastAngle = 0
 
+  /** Where the last strike was, a unit direction in the cloud layer's frame. */
+  get at(): [number, number, number] {
+    return [this.where.x, this.where.y, this.where.z]
+  }
+
   /**
    * `eye` is the camera's direction in the cloud layer's frame, `low` how
    * far it is in the weather (1 low down, 0 from orbit). Returns how bright
