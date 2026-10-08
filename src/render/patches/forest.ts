@@ -391,3 +391,31 @@ export function treeDepthMaterial(): THREE.MeshDepthMaterial {
   material.customProgramCacheKey = () => 'planet-trees-depth'
   return material
 }
+
+/**
+ * Throwaway meshes with a tree's geometry and one instance, for the shader
+ * warm-up (render/warm.ts): one in the trees' material and one in their
+ * depth material as its own material, so both programs are made before
+ * the first wood is in view. Never drawn — added for the compile call
+ * and taken out.
+ */
+export function forestWarmers(material: THREE.Material, depth: THREE.Material): THREE.Mesh[] {
+  return [material, depth].map((m) => {
+    const geometry = new THREE.InstancedBufferGeometry()
+    for (const [name, attribute] of Object.entries(MODEL.attributes))
+      geometry.setAttribute(name, attribute)
+    geometry.setIndex(MODEL.index)
+    const buffer = new THREE.InstancedInterleavedBuffer(new Float32Array(STRIDE), STRIDE, 1)
+    geometry.setAttribute('treeFine', new THREE.InterleavedBufferAttribute(buffer, 3, 0))
+    geometry.setAttribute('treeCoarse', new THREE.InterleavedBufferAttribute(buffer, 3, 3))
+    geometry.setAttribute('treeFate', new THREE.InterleavedBufferAttribute(buffer, 3, 6))
+    geometry.setAttribute('treeWood', new THREE.InterleavedBufferAttribute(buffer, 3, 9))
+    geometry.setAttribute('treeLook', new THREE.InterleavedBufferAttribute(buffer, 2, 12))
+    geometry.setAttribute('treeMist', new THREE.InterleavedBufferAttribute(buffer, 1, 14))
+    geometry.instanceCount = 1
+    const mesh = new THREE.Mesh(geometry, m)
+    mesh.castShadow = true
+    mesh.receiveShadow = true
+    return mesh
+  })
+}

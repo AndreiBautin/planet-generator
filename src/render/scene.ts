@@ -27,6 +27,7 @@ import { flowingCoverAt, updateFlow } from './winds'
 import { Soundscape } from './sound'
 import { auroraFor, auroraStrength } from './aurora'
 import { VALLEY_FOG } from './valley-fog'
+import { warmPrograms } from './warm'
 import { Embers, plumes, PLUME_SUN } from './volcanic'
 import { Eruptions } from './eruptions'
 import { spray } from './waterfalls'
@@ -733,7 +734,31 @@ export function startScene(
       bornAt: animate ? clock.now() : keep ? previous.bornAt : undefined,
     }
     pose(shown, animate ? birthAt(0) : stageOf(shown))
+    // The shaders a dive first draws, made while the planet is still in
+    // orbit (warm.ts): soon, and again as the towns and the rest arrive.
+    warmDue = [clock.now() + 2500, clock.now() + 6000, clock.now() + 10000]
     next.resolve(true)
+  }
+
+  const isMaterial = (value: unknown): value is THREE.Material => value instanceof THREE.Material
+  /** When to warm the shaders next, soonest first. */
+  let warmDue: number[] = []
+  const warm = (): void => {
+    if (shown === undefined) return
+    const sided: THREE.Material[] = [...seas]
+    shown.clouds.traverse((node) => {
+      if (!(node instanceof THREE.Mesh)) return
+      const material: unknown = node.material
+      if (isMaterial(material)) sided.push(material)
+    })
+    void warmPrograms(
+      renderer,
+      scene,
+      camera,
+      composer?.readBuffer ?? null,
+      sided,
+      shown.terrain.warmers(),
+    )
   }
 
   const stageOf = (planet: Shown): Birth =>
@@ -1012,6 +1037,10 @@ export function startScene(
   const tick = (): void => {
     renderer.info.reset()
     const now = clock.now()
+    if (warmDue.length > 0 && now >= (warmDue[0] ?? Infinity)) {
+      warmDue = warmDue.slice(1)
+      warm()
+    }
     frames.push(now - lastFrameAt)
     lastFrameAt = now
     // Not while recording: frames there take whatever time they are told to.

@@ -2022,10 +2022,21 @@ their inputs are guarded, but nothing holds that.
   three cloud shells going double-sided, birds, herds, rain), 0.65 s in
   all, the worst frame 323 ms. `renderer.compileAsync(scene, camera)` in
   orbit compiled 51 programs and spared none of them: the depth passes
-  are not materials the scene holds, and the rest do not exist yet. A
-  warm-up — one throwaway object per material family compiled with
-  `compileAsync` while the planet is still in orbit — is the fix, and a
-  round of its own.
+  are not materials the scene holds, and the rest do not exist yet.
+- **The warm-up** (`render/warm.ts`, `Terrain.warmers`, `forestWarmers`)
+  fixes that, at 2.5, 6 and 10 s after a planet is shown. Why
+  `compileAsync` had spared nothing: it compiles **for the renderer as it
+  stands**, and called with no render target bound it made programs for
+  the screen's colour space and tone mapping, while the frame, drawn into
+  the post pipeline's target, needed its own — so the composer's
+  `readBuffer` is bound first. The clouds and the sea, which flip `side`
+  under the eye, are compiled both ways; the trees, their depth pass and
+  the ground's depth pass come from throwaway meshes added for the call
+  (the depth materials as plain materials — a render target's key has no
+  tone mapping either way, so the program is the same one the shadow
+  pass wants). After: the dive compiles one program and its worst frame
+  is 49 ms; the warm-up is one frame of about 150 ms in orbit, with the
+  planet at rest. Not measured: a phone.
 - **Screen flashing, reported, was not reproduced.** Per-frame means over
   300 orbit frames and a 700-frame dive, then per-cell jump-and-return
   over a held glide (nothing) and orbit (single cells in the birth

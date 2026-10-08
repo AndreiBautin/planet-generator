@@ -15,7 +15,14 @@ import {
   type Vec3,
 } from './cube'
 import { aheadOf, ancestorAt, centreOf, selectLeaves, type LodParams, type ViewCone } from './lod'
-import { forestFor, TREE_COARSEST, TREE_LEVEL, treeDepthMaterial, treeMaterial } from './forest'
+import {
+  forestFor,
+  forestWarmers,
+  TREE_COARSEST,
+  TREE_LEVEL,
+  treeDepthMaterial,
+  treeMaterial,
+} from './forest'
 import { patchIndex, quarterIndex, type PatchData } from './patch-data'
 import { DETAIL_TIME, TERRAIN_MORPH } from '../detail'
 
@@ -112,6 +119,22 @@ export class Terrain {
       return 1 - t * t * (3 - 2 * t)
     })
     for (const root of ROOTS) this.request(root)
+  }
+
+  /**
+   * Throwaway meshes for the shader warm-up (render/warm.ts): a tree in
+   * its own and its depth material, and a patch of ground in its depth
+   * material, so the programs a dive first draws are made in orbit.
+   */
+  warmers(): THREE.Object3D[] {
+    const ground = new THREE.Mesh(
+      new THREE.BufferGeometry().setAttribute(
+        'position',
+        new THREE.BufferAttribute(new Float32Array(9), 3),
+      ),
+      this.materials.groundDepth,
+    )
+    return [...forestWarmers(this.treeMaterial, this.treeDepth), ground]
   }
 
   /** Whether the six whole faces are in, so the planet can be shown at all. */
