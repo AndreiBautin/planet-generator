@@ -38,6 +38,8 @@ export function buildAtmosphere(planet: Planet, sun: THREE.Vector3): THREE.Mesh 
       sun: { value: sun.clone().normalize() },
       /** 0 to 1: how far the glow has come up, for a planet being born. */
       strength: { value: 1 },
+      /** What is left of the sun's light at the eye after the air (scene.ts sets it each frame): the disc's colour. */
+      sunTint: { value: new THREE.Color(1, 1, 1) },
       /** The shell and the ground, in the room's units: they grow with a planet being born. */
       outer: { value: AIR_RADIUS },
       inner: { value: GROUND_RADIUS },
@@ -53,6 +55,7 @@ export function buildAtmosphere(planet: Planet, sun: THREE.Vector3): THREE.Mesh 
     fragmentShader: /* glsl */ `
       uniform vec3 glow;
       uniform vec3 sun;
+      uniform vec3 sunTint;
       uniform float strength;
       uniform float outer;
       uniform float inner;
@@ -140,6 +143,12 @@ export function buildAtmosphere(planet: Planet, sun: THREE.Vector3): THREE.Mesh 
         float phaseR = 0.0597 * (1.0 + mu * mu);
         float g = 0.76;
         float phaseM = 0.1194 * ((1.0 - g * g) * (1.0 + mu * mu)) / ((2.0 + g * g) * pow(1.0 + g * g - 2.0 * g * mu, 1.5));
+        // The forward peak is capped: at g 0.76 the lobe is still six
+        // tenths of its peak ten degrees from the sun, and with the bloom
+        // that whited out the sky for twenty degrees round a low sun, where
+        // the sun's own disc then could not be seen. The glare round the
+        // disc is drawn on purpose below, tight.
+        phaseM = min(phaseM, 1.1);
         vec3 sky = (sumR * betaR * phaseR + sumM * betaM * phaseM) * 9.0 * strength;
         // Sunset: the dust and haze low in the air redden the sun far more
         // than the air alone does, and glow round it as it sets — orange
@@ -151,8 +160,19 @@ export function buildAtmosphere(planet: Planet, sun: THREE.Vector3): THREE.Mesh 
         float dusk = smoothstep(0.3, 0.02, sunUp) * smoothstep(-0.22, -0.02, sunUp);
         float low = pow(1.0 - abs(dot(d, normalize(o))), 3.0);
         float toward = max(mu, 0.0);
-        float lobe = pow(toward, 3.0) * 0.5 + pow(toward, 24.0) * 1.4;
+        float lobe = pow(toward, 3.0) * 0.35 + pow(toward, 24.0) * 0.6;
         sky += vec3(1.0, 0.38, 0.1) * lobe * low * dusk * inside * strength * 0.9;
+        // The sun itself, from inside the air: a disc drawn larger than
+        // life (about a degree across, as the moons are near), its light
+        // what the air has left it — white at noon, orange at the rim —
+        // with a glare that falls off round it. There was no disc at all:
+        // the sun was a brightness in the haze and the beams it threw.
+        {
+          float disc = smoothstep(0.99985, 0.99993, mu);
+          float glare = pow(toward, 400.0) * 0.5 + pow(toward, 60.0) * 0.08;
+          float sunShown = inside * strength * smoothstep(-0.03, 0.03, sunUp);
+          sky += sunTint * (disc * 14.0 + glare * 3.0) * sunShown;
+        }
         // Linear light out: the frame is tone-mapped and encoded once, at
         // the end, by the post pass, like every other material's.
         gl_FragColor = vec4(sky, 1.0);

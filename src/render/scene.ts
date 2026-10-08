@@ -1001,6 +1001,14 @@ export function startScene(
         sunlightThrough(value, elevation, sunTint)
         sunTint.lerp(WHITE, 1 - low)
         sun.color.copy(SUN_COLOUR).multiply(sunTint)
+        {
+          // The sun's disc in the sky takes the same light (atmosphere.ts).
+          const airMaterial: unknown = shown?.air.material
+          if (airMaterial instanceof THREE.ShaderMaterial) {
+            const tint: unknown = airMaterial.uniforms.sunTint?.value
+            if (tint instanceof THREE.Color) tint.copy(sunTint)
+          }
+        }
         airColour.multiply(hazeTint.copy(sunTint).lerp(WHITE, 0.45))
         fog.color.copy(airColour)
         DETAIL_SKY.value.copy(airColour)
@@ -1595,7 +1603,7 @@ function inPlanetFrame(
 }
 
 /** How bright the sunbeams are at their strongest (sunbeams.ts). */
-const BEAM_STRENGTH = 5.6
+const BEAM_STRENGTH = 3.2
 
 /** The renderer's exposure in ordinary daylight; an eclipse dims it. */
 const EXPOSURE = 1.15

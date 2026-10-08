@@ -2282,3 +2282,35 @@ Not seen: a cold-climate or flat-roofed town since the change, a phone.
   houses at 08:00 blew out to white; the grade's S-curve is 0.22 now, not
   0.35, for the same reason. Judge an exposure change at a low sun over
   sand or snow, not at noon over woods.
+
+## Polish, round eight: the sun has a disc, and the beams were the grain
+
+There was no sun: a brightness in the haze and the beams it threw. The
+sky shader (`atmosphere.ts`) now draws a disc about a degree across
+(larger than life, as the moons are) in the light the air has left it
+(`sunTint`, set each frame from scene.ts's `sunlightThrough`, so it is
+white at noon and orange at the rim), with a tight glare round it, from
+inside the air only.
+
+- **It could not be seen at first**: the sky within ten degrees of a low
+  sun was white for 240 pixels, so the disc had nothing to stand out
+  from. Measured by a brightness profile across the sun's screen
+  position. Capping the Mie forward peak changed nothing and trimming
+  the dusk lobe little; **the beams pass was the wash** (profile 620–753
+  with it, 497–748 without). It is held back within a few hundredths of
+  the frame round the sun (`clear`), and its own disc and glare belong
+  there.
+- **The beams' jitter was the grain** reported earlier: a per-pixel hash
+  along each ray read as noise across every sunlit haze. It is an
+  ordered dither now (interleaved gradient noise on `gl_FragCoord`), and
+  `BEAM_STRENGTH` is 3.2 (was 5.6) with the add weighted to the sun
+  (`0.25 + 0.6 · near`): the first disc shot had a mustard blob of
+  gathered light across the whole village.
+- **To aim at the sun**: the bearing from the eye to the sun's horizontal
+  component, with a positive tilt; the glide starts nose-up, so a
+  `glideFrom` toward the sun showed sky. The shot link with the sun at
+  NDC (−0.02, 0.88) is `g,-9.55,8.738,272,4.0,17.50,8`.
+- Seen: golden hour toward the sun over the coastal town. Not seen: the
+  disc at noon (small and white, behind the eye in most views), through
+  a cloud (the sky draws over the clouds, so the disc will show through
+  thin cloud and should not through a storm), a phone.

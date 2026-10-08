@@ -49,8 +49,11 @@ export const SUNBEAM_SHADER = {
       vec2 toSun = sunAt - vUv;
       // Reach no further than the frame's own width: a ray's source must be in the picture.
       vec2 stride = toSun / float(STEPS) * min(1.0, 0.9 / max(length(toSun), 1e-4));
-      // Each pixel jittered along its line, so the steps do not show as bands.
-      float jitter = fract(sin(dot(vUv, vec2(12.9898, 78.233))) * 43758.5453);
+      // Each pixel jittered along its line, so the steps do not show as
+      // bands — by an ordered dither (interleaved gradient noise), not a
+      // hash: the hash was per-pixel random and read as grain across
+      // every sunlit haze.
+      float jitter = fract(52.9829189 * fract(0.06711056 * gl_FragCoord.x + 0.00583715 * gl_FragCoord.y));
       vec2 at = vUv + stride * jitter;
       float gathered = 0.0;
       float weight = 1.0;
@@ -63,9 +66,13 @@ export const SUNBEAM_SHADER = {
         weight *= 0.95;
       }
       gathered /= float(STEPS);
-      // Strongest near the sun, fading across the frame.
+      // Strongest near the sun, fading across the frame — but held back
+      // right round the sun, where every step lands on bright sky and the
+      // gather whited out twenty degrees of it; the sun's own disc and
+      // glare (atmosphere.ts) are what belong there.
       float near = 1.0 - smoothstep(0.0, 0.9, length(toSun));
-      gl_FragColor = vec4(here.rgb + tint * gathered * strength * (0.4 + near), here.a);
+      float clear = smoothstep(0.04, 0.22, length(toSun));
+      gl_FragColor = vec4(here.rgb + tint * gathered * strength * (0.25 + 0.6 * near) * clear, here.a);
     }
   `,
 }
