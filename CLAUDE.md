@@ -2237,3 +2237,23 @@ Not seen: a cold-climate or flat-roofed town since the change, a phone.
   flat entity". Checked by frame difference over a second (75 per pixel
   over the lower half) and seen heaving at the horizon on `h999999`.
 - Not seen: open sea from a low glide after the change, a phone.
+
+## Polish, round six: AgX and a grade
+
+- **Tone mapping is AgX** (`renderer.toneMapping`), not ACES: ACES burnt
+  the whites (snow, cloud tops, a sunlit beach) and pushed warm colours
+  orange. AgX on its own is neutral and flat — the first frame read as
+  washed — so the grade pass (`GRADE_SHADER`, after the OutputPass, in
+  display space) adds a gentle S-curve through mid-grey (0.35 of a
+  smoothstep) and 1.15 saturation, and `EXPOSURE` is 1.3 (was 1.15):
+  the richness ACES had, with soft highlights.
+- **Ambient occlusion was looked at and not done.** three's GTAO and
+  SSAO passes draw the scene again under an override normal material,
+  and nothing here survives that: the trees, the houses and the ground
+  are placed and shaped in their own vertex shaders, so an override
+  draws them somewhere else. An AO term needs to be written per
+  material (the trees' and houses' foot darkening is the start of one).
+- Seen: the gorge town and orbit at dusk. Not seen: a sunset glide,
+  snow at noon (the whites are where AgX differs most), a phone (no
+  post pass there — the modest profile still tone-maps with AgX, without
+  the grade).

@@ -354,6 +354,12 @@ const GRADE_SHADER = {
     }
     void main() {
       vec4 c = texture2D(tDiffuse, vUv);
+      // After AgX, which is neutral and flat on its own: a gentle S-curve
+      // through the mid-grey and a little more saturation, the filmic
+      // contrast ACES had without its burnt highlights and orange skin.
+      c.rgb = mix(c.rgb, c.rgb * c.rgb * (3.0 - 2.0 * c.rgb), 0.35);
+      float luma = dot(c.rgb, vec3(0.2126, 0.7152, 0.0722));
+      c.rgb = mix(vec3(luma), c.rgb, 1.15);
       vec2 d = vUv - 0.5;
       float edge = 1.0 - smoothstep(0.35, 1.1, dot(d, d) * 2.4);
       c.rgb *= mix(1.0 - vignette, 1.0, edge);
@@ -388,7 +394,7 @@ export function startScene(
   renderer.info.autoReset = false
   let pixelRatio = options.quality.pixelRatio
   renderer.setPixelRatio(pixelRatio)
-  renderer.toneMapping = THREE.ACESFilmicToneMapping
+  renderer.toneMapping = THREE.AgXToneMapping
   renderer.toneMappingExposure = EXPOSURE
   renderer.setSize(window.innerWidth, window.innerHeight)
 
@@ -1592,7 +1598,7 @@ function inPlanetFrame(
 const BEAM_STRENGTH = 5.6
 
 /** The renderer's exposure in ordinary daylight; an eclipse dims it. */
-const EXPOSURE = 1.15
+const EXPOSURE = 1.3
 
 /** Apply a stage of the birth animation to a shown planet. */
 function pose(planet: Shown, stage: Birth): void {
