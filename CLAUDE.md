@@ -2348,3 +2348,39 @@ were painted on the sea sheet with no relief. Now:
   ring round candidate points; (−40, −180) is one.
 - Seen: both from a low glide. Not seen: either from orbit after the
   change, lava at night, a phone.
+
+## Polish, round ten: moonlight
+
+The night side had a flat floor of ambient (`NIGHT_LIGHT`) and the
+towns' glow, and no moon on the ground. `render/moonlight.ts`:
+
+- **Not a second three.js light.** Every custom material cuts the sun's
+  direct light past the terminator (`groundDay`, `treeDay`, …), which
+  would cut a second directional light with it. The moon is a uniform
+  (`MOON_LIGHT`: direction in view space, strength) and a term each
+  material adds at `#include <aomap_fragment>` — which follows
+  `lights_fragment_end` in every three shader and which nothing here
+  replaces, so it lands after the cuts. `withMoonlight(shader)` is called
+  from `passThrough` (ground, water, lava), the trees, the houses and
+  `weathered`; **a house is weathered and a town, and both ask**, so the
+  call returns if the uniform is already there — declared twice, the
+  program failed and every house drew black.
+- **`moonlightOf` is pure and tested**: the brightest moon by lit
+  fraction squared and size, out by day, and only once risen over the
+  eye (the eye's own direction from the centre, since the moons sit in
+  the room's frame).
+- **Strength is far over a real moon's**, on purpose: at `MOON_STRENGTH`
+  0.42 a moonlit hillside measured no brighter than a moonless one (the
+  lower half of the frame at luma 0.5 of 255); at 1.6 a risen moon gives
+  luma 22, which reads as moonlight. Measured by patching the uniform's
+  `set`, since the scene writes it every frame and a plain assignment
+  lasts one tick.
+- **Most of the surface's colour is taken out under the moon** (0.7
+  towards luminance): lit green, the hillside read as a dim day.
+- **The pane's viewport collapsed to 0 × 0 twice during this round**,
+  each time reading as a black frame; check `recorder.canvas.width`
+  before believing a black capture.
+- Seen: the herd hillside at 02:00 on `83tzj46` (the moon was on the
+  horizon at 23:00 there), and the village at 23:00, where the town glow
+  still rules. Not seen: moonlight on water or snow, two moons at once,
+  a phone.

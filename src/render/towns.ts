@@ -6,6 +6,7 @@ import { surfaceAt, type Planet } from '@/generation/planet'
 import { TOWN_LIGHT } from '@/generation/settlements'
 
 import { VALLEY_FOG } from './valley-fog'
+import { withMoonlight } from './moonlight'
 import { weather } from './weathered'
 
 /**
@@ -346,6 +347,7 @@ function growNear(material: THREE.MeshStandardMaterial, scale: { value: number }
           0.65
         ) * mix(1.4, 1.0, vHouseDark);`,
       )
+    withMoonlight(shader)
   }
   material.customProgramCacheKey = () => 'planet-houses'
 }

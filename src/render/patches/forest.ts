@@ -3,6 +3,7 @@ import * as THREE from 'three'
 import { DETAIL_CLOUD_SUN, DETAIL_NORMAL_MATRIX, TERRAIN_MORPH } from '../detail'
 import { DETAIL_MOONS, MOON_SHADOW } from '../eclipse'
 import { DETAIL_SEASON, LEAF_SEASON_GLSL } from '../leaves'
+import { withMoonlight } from '../moonlight'
 import { TOWN_GLOW_GLSL, withTownGlow } from '../town-glow'
 import { withValleyFog } from '../valley-fog'
 import type { PatchData } from './patch-data'
@@ -412,6 +413,7 @@ export function treeMaterial(): THREE.MeshStandardMaterial {
         )
     // The depth is the ground's: up a tree there is that much less mist over it.
     withValleyFog(shader, 'treeMist', 'treeMist - (length(transformed) - length(ground))')
+    withMoonlight(shader)
   }
   material.customProgramCacheKey = () => 'planet-trees'
   return material

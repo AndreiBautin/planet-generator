@@ -28,6 +28,7 @@ import { flowingCoverAt, updateFlow } from './winds'
 import { Soundscape } from './sound'
 import { auroraFor, auroraStrength } from './aurora'
 import { VALLEY_FOG } from './valley-fog'
+import { MOON_LIGHT, moonlightOf } from './moonlight'
 import { warmPrograms } from './warm'
 import { Embers, plumes, PLUME_SUN } from './volcanic'
 import { Eruptions } from './eruptions'
@@ -973,6 +974,7 @@ export function startScene(
   const SUN_COLOUR = new THREE.Color(0xfff2e0)
   const SKY_LIGHT = new THREE.Color(0x9fc3ff)
   const NIGHT_LIGHT = new THREE.Color(0x1c2a44)
+  const moonDir = new THREE.Vector3()
   const airAround = (above: number): void => {
     const low = 1 - smooth(0.08, 0.35, above)
     const elevation = camera.position.clone().normalize().dot(sunDirection)
@@ -1041,6 +1043,24 @@ export function startScene(
           .copy(skylight.color)
           .multiplyScalar(skylight.intensity * 0.7)
           .addScalar(0.015)
+        // The brightest moon lights the night side (moonlight.ts): its
+        // direction in view space and its strength by phase and size, out
+        // while the sun is up.
+        {
+          const moons = (shown?.heavens.moons ?? []).map(({ mesh, radius }) => {
+            const d = moonDir.copy(mesh.position).normalize()
+            return { direction: [d.x, d.y, d.z] as const, radius }
+          })
+          const eyeUp = moonDir.copy(camera.position).normalize()
+          const moon = moonlightOf(
+            moons,
+            [sunDirection.x, sunDirection.y, sunDirection.z],
+            (1 - twilight) * low,
+            [eyeUp.x, eyeUp.y, eyeUp.z],
+          )
+          moonDir.set(...moon.direction).transformDirection(camera.matrixWorldInverse)
+          MOON_LIGHT.value.set(moonDir.x, moonDir.y, moonDir.z, moon.strength)
+        }
       }
     }
     // The sun in view space for the haze, weighted by how much daylight

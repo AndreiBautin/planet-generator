@@ -4,6 +4,7 @@ import { HAZE_SUN } from './haze'
 import type { GroundKind } from './ground-atlas'
 import type { GroundTextures } from './textures'
 import { DETAIL_MOONS, MOON_SHADOW } from './eclipse'
+import { withMoonlight } from './moonlight'
 import { withValleyFog } from './valley-fog'
 import { DETAIL_SEASON, LEAF_SEASON_GLSL } from './leaves'
 import { SEA_RADIUS } from './water'
@@ -238,6 +239,7 @@ function passThrough(
   shader.uniforms.cloudFlow = CLOUD_FLOW
   shader.uniforms.cloudFlowLife = CLOUD_FLOW_LIFE
   shader.uniforms.hazeSun = HAZE_SUN
+  withMoonlight(shader)
 }
 
 /**

@@ -1,3 +1,4 @@
+import { withMoonlight } from './moonlight'
 import * as THREE from 'three'
 
 import { TOWN_GLOW_GLSL, withTownGlow } from './town-glow'
@@ -174,6 +175,7 @@ export function weather(material: THREE.Material, w: Weathering): void {
         }
         #endif`,
       )
+    withMoonlight(shader)
   }
   const key = JSON.stringify(w)
   material.customProgramCacheKey = () => `${beforeKey()}|weathered|${key}`
