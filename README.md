@@ -7,6 +7,20 @@ seed, so the same link always opens the same world, on any device.
 
 **Live:** [andreibautin.github.io/planet-generator](https://andreibautin.github.io/planet-generator/)
 
+## What is in a world
+
+From orbit: clouds with lit tops and shaded flanks that the winds carry
+round, a terminator with the towns' lights coming on behind it, moons
+with their phases and eclipses, rings that shadow the ground, an aurora
+in polar night, and a sun with a disc and a glare. On the ground: woods of
+ragged conifers and broadleaves that turn with the seasons, villages of
+eaved houses with lit windows, harbours with ships riding a six-train
+swell, rivers that flow and fall, pack ice standing in floes, lava seas of
+crusted plates over glowing seams, herds, flocks, caravans, balloons,
+lighthouses, ruins — and weather you fly through: rain, snow, lightning
+with its bolt, rainbows, valley mist at dawn, and moonlight on the night
+side.
+
 ## On a phone
 
 Open the link, then **Add to Home Screen** (Safari's Share menu on iOS;

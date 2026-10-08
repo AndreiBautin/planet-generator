@@ -2437,3 +2437,19 @@ near side with its blue rim drawn over the ring.
   below the plane, from a glide under the rings, the rings' shadow on the
   ground since the alpha change (it reads the band texture, not the
   alpha, so it should be as before), a phone.
+
+## The polish series, closed
+
+Twelve rounds on 2026-10-08 after the flicker and stutter work: trees,
+clouds, houses, swell, lava, AgX and the grade, water surface and grain,
+the sun's disc and the beams, lava and ice relief, moonlight, the ground
+close up, the rings. A final sweep of the hero shots (temperate, molten,
+frozen with rings) found one regression and fixed it: **the lava plates'
+seams, a pixel wide from orbit, sparkled as red static** — faded to the
+sea's average glow by pixel span (`seamSeen`), as every other noise here
+is. The README has a paragraph of what is in a world now.
+
+Left unverified from the series, for whoever picks it up: the water's
+crest glow with the sun ahead, the crease shading on a cliff close up,
+the rings from below the plane and from a glide beneath them, moonlight
+on water and snow, and everything on a phone (`docs/PHONE_CHECKLIST.md`).
