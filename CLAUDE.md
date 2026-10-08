@@ -1974,3 +1974,18 @@ map's shoulder.
   `volcanoesOf` imported in the page, as the lava sea is most of the
   world), and the dunes of `aaangxg` with their ripples and grain (sand's
   own factor was near 1, so it moved least). Not seen: a phone.
+
+## Every shader `pow` is audited by a test
+
+`src/render/shader-pow.test.ts` reads every renderer's source through
+`import.meta.glob` (raw), finds each GLSL `pow(` and takes its base. A
+base that is one whole `max`, `abs`, `clamp` or `acos` call passes by
+itself; any other must be listed in `REASONED` with the file, the exact
+base and why it cannot go below nought, and a reason for a `pow` that is
+gone fails too. A new `pow` fails the gate until someone has thought
+about its base — which is the whole point, after the comet, the aurora
+and the galaxy lane each blacked out the frame the same way and each was
+found by eye. The first run caught one site the hand audit had missed
+listing (the lightning's acos in `weather.ts`, safe as it happens).
+`sqrt`, `log` and `normalize` are not covered: they were read once and
+their inputs are guarded, but nothing holds that.
