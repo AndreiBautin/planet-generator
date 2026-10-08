@@ -2206,3 +2206,16 @@ edge. In `clouds.ts` now:
 - Seen: `p43fuk9` from orbit at dusk, heaps with lit tops and shaded
   undersides. Not seen: the deck from a glide beneath it since the
   change, the tops shell edge-on, a phone.
+
+## Polish, round three: houses that are houses
+
+A box with a lid read as a toy. `houseGeometry` (towns.ts) now builds
+walls, a roof whose slopes run out past the walls to eaves hung a little
+below the wall tops (with undersides, so the overhang has a thickness
+from below), gables at the wall planes, and a stone chimney through one
+slope — marked for the shader by a third vertex colour. The pitch
+scaling leaves the eaves alone (they sit below y = 1). In the shader:
+windows by day as well as by night (dark glass in a pale frame, two rows
+a face, the same `vHouseGlass` the night's lit panes use), a door on the
+front, the roof in courses. Seen: the gorge town on `83tzj46` at 11:00.
+Not seen: a cold-climate or flat-roofed town since the change, a phone.

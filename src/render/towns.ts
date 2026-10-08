@@ -75,77 +75,44 @@ export function townSites(placed: Float32Array): TownSites {
   return { houses, roads }
 }
 
-/** A house: walls from the ground up to one, a pitched roof over, in the unit square. */
+/**
+ * A house: walls from the ground up to one, a pitched roof over with eaves
+ * standing out past the walls, and a chimney on one slope, in the unit
+ * square. The roof's own colour marks it for the shader, the chimney's
+ * marks it as stone. A plain box with a lid read as a toy.
+ */
 function houseGeometry(): THREE.BufferGeometry {
   const walls = new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0).toNonIndexed()
-  // The roof: a ridge along z, two slopes and two gables.
+  // The roof: a ridge along z, two slopes out past the walls to the eaves
+  // (which hang a little below the wall tops), two gables at the walls.
+  const r = 0.62
+  const e = 0.94
+  const g = 0.56
+  const ridge = 1.55
+  const tri = (...points: readonly (readonly [number, number, number])[]): number[] =>
+    points.flatMap((p) => [...p])
+  const roofPoints = [
+    // Left slope, two triangles, wound to face out and up.
+    ...tri([-r, e, -g], [-r, e, g], [0, ridge, g]),
+    ...tri([-r, e, -g], [0, ridge, g], [0, ridge, -g]),
+    // Right slope.
+    ...tri([r, e, g], [r, e, -g], [0, ridge, -g]),
+    ...tri([r, e, g], [0, ridge, -g], [0, ridge, g]),
+    // Gables, at the wall planes.
+    ...tri([-0.5, 1, 0.5], [0.5, 1, 0.5], [0, ridge, 0.5]),
+    ...tri([0.5, 1, -0.5], [-0.5, 1, -0.5], [0, ridge, -0.5]),
+    // The eaves' undersides, so the overhang has a thickness from below.
+    ...tri([-r, e, g], [-r, e, -g], [-0.5, e, -g]),
+    ...tri([-r, e, g], [-0.5, e, -g], [-0.5, e, g]),
+    ...tri([r, e, -g], [r, e, g], [0.5, e, g]),
+    ...tri([r, e, -g], [0.5, e, g], [0.5, e, -g]),
+  ]
   const roof = new THREE.BufferGeometry()
-  const r = 0.55
-  roof.setAttribute(
-    'position',
-    new THREE.BufferAttribute(
-      new Float32Array([
-        // Slopes.
-        -r,
-        1,
-        -r,
-        -r,
-        1,
-        r,
-        0,
-        1.55,
-        r,
-        -r,
-        1,
-        -r,
-        0,
-        1.55,
-        r,
-        0,
-        1.55,
-        -r,
-        r,
-        1,
-        r,
-        r,
-        1,
-        -r,
-        0,
-        1.55,
-        -r,
-        r,
-        1,
-        r,
-        0,
-        1.55,
-        -r,
-        0,
-        1.55,
-        r,
-        // Gables.
-        -r,
-        1,
-        r,
-        r,
-        1,
-        r,
-        0,
-        1.55,
-        r,
-        r,
-        1,
-        -r,
-        -r,
-        1,
-        -r,
-        0,
-        1.55,
-        -r,
-      ]),
-      3,
-    ),
-  )
+  roof.setAttribute('position', new THREE.BufferAttribute(new Float32Array(roofPoints), 3))
   roof.computeVertexNormals()
+  // The chimney: a stone stack through one slope, past the ridge line.
+  const chimney = new THREE.BoxGeometry(0.13, 0.5, 0.13).translate(0.27, 1.22, -0.16).toNonIndexed()
+  chimney.deleteAttribute('uv')
   const colour = (geometry: THREE.BufferGeometry, rgb: readonly [number, number, number]): void => {
     const count = geometry.getAttribute('position').count
     const colours = new Float32Array(count * 3)
@@ -155,8 +122,9 @@ function houseGeometry(): THREE.BufferGeometry {
   walls.deleteAttribute('uv')
   colour(walls, [0.82, 0.78, 0.7])
   colour(roof, [0.55, 0.22, 0.16])
+  colour(chimney, [0.6, 0.7, 0.2])
   const merged = new THREE.BufferGeometry()
-  const parts = [walls, roof]
+  const parts = [walls, roof, chimney]
   const total = parts.reduce((n, g) => n + g.getAttribute('position').count, 0)
   for (const name of ['position', 'normal', 'color']) {
     const out = new Float32Array(total * 3)
@@ -317,21 +285,41 @@ function growNear(material: THREE.MeshStandardMaterial, scale: { value: number }
     shader.fragmentShader = shader.fragmentShader
       .replace(
         'void main() {',
-        'varying vec3 vHouseLocal;\nvarying float vHouseDark;\nvarying float vHouseSeed;\nvarying vec3 vHouseRoof;\nvarying vec3 vHouseWalls;\nvoid main() {',
+        'varying vec3 vHouseLocal;\nvarying float vHouseDark;\nvarying float vHouseSeed;\nvarying vec3 vHouseRoof;\nvarying vec3 vHouseWalls;\nfloat vHouseGlass = 0.0;\nvoid main() {',
       )
       .replace(
         '#include <color_fragment>',
         /* glsl */ `#include <color_fragment>
         {
-          // The model's own colours only say which is roof and which wall.
+          // The model's own colours only say which is roof, which wall and
+          // which chimney.
           float roof = step(diffuseColor.g, 0.5);
+          float chimney = step(0.5, diffuseColor.g) * step(diffuseColor.b, 0.3);
           vec3 walls = vHouseWalls;
           // Weathered: darker at the foot where the rain splashes, and each
           // face a touch different from the next.
           walls *= mix(0.72, 1.0, smoothstep(0.0, 0.35, vHouseLocal.y));
           walls *= 0.92 + 0.16 * fract(sin(dot(floor(vHouseLocal * 2.0 + 0.5), vec3(17.1, 31.7, 11.3)) + vHouseSeed * 40.0) * 4375.85);
+          // Windows and a door by day as well as by night: a wall with
+          // nothing on it read as a crate. The panes are dark glass in a
+          // pale frame, two rows along each face; the door on the front.
+          float along = abs(vHouseLocal.x) > 0.499 ? vHouseLocal.z : vHouseLocal.x;
+          float px = fract(along * 3.0 + 0.5);
+          float py = fract(vHouseLocal.y * 2.0);
+          float frame = step(0.26, px) * step(px, 0.74) * step(0.16, py) * step(py, 0.59);
+          float glass = step(0.3, px) * step(px, 0.7) * step(0.2, py) * step(py, 0.55);
+          float onWall = step(vHouseLocal.y, 0.95) * (1.0 - roof) * (1.0 - chimney);
+          float door = step(abs(vHouseLocal.x), 0.13) * step(vHouseLocal.y, 0.46) * step(0.499, vHouseLocal.z);
+          vHouseGlass = glass * onWall * (1.0 - door);
+          walls = mix(walls, walls * 1.12 + 0.05, frame * onWall * (1.0 - door));
+          walls = mix(walls, vec3(0.1, 0.13, 0.17), vHouseGlass);
+          walls = mix(walls, vec3(0.28, 0.17, 0.1), door * onWall);
+          // The roof in courses: tiles or slates in rows up the slope.
           vec3 roofColour = vHouseRoof * (0.9 + 0.2 * fract(vHouseSeed * 13.0));
-          diffuseColor.rgb = mix(walls, roofColour, roof);
+          float course = 0.92 + 0.08 * step(0.5, fract((vHouseLocal.y - 1.0) * 14.0 + step(0.5, fract(vHouseLocal.z * 7.0)) * 0.5));
+          roofColour *= course;
+          vec3 stone = vec3(0.42, 0.4, 0.38) * (0.9 + 0.2 * fract(vHouseSeed * 7.0));
+          diffuseColor.rgb = mix(mix(walls, roofColour, roof), stone, chimney);
         }`,
       )
       .replace(
@@ -342,12 +330,9 @@ function growNear(material: THREE.MeshStandardMaterial, scale: { value: number }
         totalEmissiveRadiance += diffuseColor.rgb * 0.22 * (1.0 - vHouseDark);
         // Windows: on the walls only (below the eaves), in two rows of
         // panes along each face, on most houses after dark.
-        if (vHouseDark > 0.01 && vHouseLocal.y < 0.95) {
-          float along = abs(vHouseLocal.x) > 0.499 ? vHouseLocal.z : vHouseLocal.x;
-          float pane = step(0.3, fract(along * 3.0 + 0.5)) * step(fract(along * 3.0 + 0.5), 0.7);
-          float row = step(0.2, fract(vHouseLocal.y * 2.0)) * step(fract(vHouseLocal.y * 2.0), 0.55);
+        if (vHouseDark > 0.01) {
           float lit = step(0.25, vHouseSeed);
-          totalEmissiveRadiance += vec3(1.0, 0.7, 0.35) * pane * row * lit * vHouseDark * 1.6;
+          totalEmissiveRadiance += vec3(1.0, 0.7, 0.35) * vHouseGlass * lit * vHouseDark * 1.6;
         }`,
       )
       .replace(
