@@ -2184,3 +2184,25 @@ the plainest PS1 tell in the app.
   console's `VALIDATE_STATUS` message, not by any thrown error.
 - Seen: the woods close to under rain and at the ridge in morning light.
   Not seen: a broadleaf wood close up, autumn, a phone.
+
+## Polish, round two: the clouds have relief
+
+From orbit the deck was a painted sheet: a flat sphere lit by its own
+sphere normal, so a heap of cloud had no lit side, no shaded side and no
+edge. In `clouds.ts` now:
+
+- **The normal is bent by the cover's relief** (`cloudHeight`: the cover
+  through a smoothstep plus the billows), from its screen derivatives,
+  with the bump-from-derivative arithmetic three uses for bump maps
+  inlined at `normal_fragment_maps` — so each heap takes the sun on one
+  side and shade on the other, and its edge turns away. `CLOUD_BUMP` is
+  0.012: at 0.004 the relief was there and too faint to read from orbit.
+  The base deck and the tops take it; the cirrus does not.
+- **A silver lining**: light through the thin edges (`cloudEdge`, the
+  cover's own fade), brighter against the sun.
+- **Judge it side-lit.** With the sun behind the eye (`o,…,14.00`) the
+  relief barely shows and the first look read as no change; at 17:30 the
+  heaps stand up.
+- Seen: `p43fuk9` from orbit at dusk, heaps with lit tops and shaded
+  undersides. Not seen: the deck from a glide beneath it since the
+  change, the tops shell edge-on, a phone.

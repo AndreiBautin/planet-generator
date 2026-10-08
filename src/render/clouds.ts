@@ -55,10 +55,21 @@ const LAYERS: Readonly<Record<Layer, { readonly radius: number; readonly opacity
   cirrus: { radius: 1.058, opacity: 0.3 },
 }
 
+/**
+ * How far the relief of the cover bends the deck's normal: enough that a
+ * heap's edge turns most of the way from the sun, not so much that every
+ * billow is a black pit. Tuned by eye from orbit.
+ */
+const CLOUD_BUMP = 0.012
+
 const SHAPES: Readonly<Record<Layer, string>> = {
   base: /* glsl */ `
           float shaped = smoothstep(0.28, 0.78, cover + (billow - 0.5) * 0.5);
           diffuseColor.a *= shaped;
+          // The deck's relief, for the normal: thick cloud stands high,
+          // and the billows heap it.
+          cloudHeight = smoothstep(0.2, 1.0, cover) + (billow - 0.5) * 0.6;
+          cloudEdge = 1.0 - shaped;
           // The underside of the deck: greyer, and greyest under the thickest
           // cloud — a storm's base is slate, not a paler white.
           diffuseColor.rgb *= (0.74 + billow * 0.26) * (1.0 - smoothstep(0.6, 1.0, cover) * 0.18);
@@ -74,7 +85,9 @@ const SHAPES: Readonly<Record<Layer, string>> = {
           float looking = abs(dot(normalize(vViewPosition), normalize(vNormal)));
           diffuseColor.a *= shaped * smoothstep(0.12, 0.35, looking);
           // Sunlit tops: the brightest thing in the sky after the sun.
-          diffuseColor.rgb *= 1.02 + billow * 0.12;`,
+          diffuseColor.rgb *= 1.02 + billow * 0.12;
+          cloudHeight = smoothstep(0.5, 1.0, cover) + (billow - 0.5) * 0.8;
+          cloudEdge = 1.0 - shaped;`,
   cirrus: /* glsl */ `
           vec3 d = vCloudDir;
           // Streaks: fine across latitude, long along it. The latitude they
@@ -118,7 +131,7 @@ function layerMaterial(planet: Planet, texture: THREE.Texture, layer: Layer): TH
         '#include <begin_vertex>\n  vCloudDir = normalize(position);\n  vCloudUp = normalize(normalMatrix * normalize(position));',
       )
     shader.fragmentShader =
-      'uniform float cloudTime;\nuniform vec4 cloudLightning;\nuniform vec2 detailRings;\nuniform vec4 detailRingBands[16];\nuniform vec3 cloudRingSun;\nuniform vec4 detailMoons[2];\nuniform vec4 cloudFlow;\nuniform vec2 cloudFlowLife;\nvarying vec3 vCloudDir;\nvarying vec3 vCloudUp;\nfloat cloudFlash = 0.0;\n' +
+      'uniform float cloudTime;\nuniform vec4 cloudLightning;\nuniform vec2 detailRings;\nuniform vec4 detailRingBands[16];\nuniform vec3 cloudRingSun;\nuniform vec4 detailMoons[2];\nuniform vec4 cloudFlow;\nuniform vec2 cloudFlowLife;\nvarying vec3 vCloudDir;\nvarying vec3 vCloudUp;\nfloat cloudFlash = 0.0;\nfloat cloudHeight = 0.0;\nfloat cloudEdge = 0.0;\n' +
       NOISE +
       FLOW_GLSL +
       RING_SHADOW +
@@ -127,6 +140,31 @@ function layerMaterial(planet: Planet, texture: THREE.Texture, layer: Layer): TH
         .replace(
           '#include <emissivemap_fragment>',
           '#include <emissivemap_fragment>\n        totalEmissiveRadiance += vec3(0.85, 0.85, 1.0) * cloudFlash * 2.5;',
+        )
+        .replace(
+          '#include <normal_fragment_maps>',
+          // A cloud is not a sphere: the normal is bent by the relief of
+          // the cover and the billows, from their screen derivatives, so a
+          // heap of cloud has a lit side and a shaded side and an edge that
+          // turns away. Lit flat, the deck was a painted sheet.
+          /* glsl */ `#include <normal_fragment_maps>
+        ${
+          layer === 'cirrus'
+            ? ''
+            : /* glsl */ `{
+          vec2 dHdxy = vec2(dFdx(cloudHeight), dFdy(cloudHeight)) * ${CLOUD_BUMP.toFixed(5)};
+          vec3 surf = -vViewPosition;
+          vec3 sx = dFdx(surf);
+          vec3 sy = dFdy(surf);
+          vec3 r1 = cross(sy, normal);
+          vec3 r2 = cross(normal, sx);
+          float det = dot(sx, r1);
+          vec3 grad = sign(det) * (dHdxy.x * r1 + dHdxy.y * r2);
+          vec3 bent = abs(det) * normal - grad;
+          float bl = length(bent);
+          if (bl > 1e-12) normal = bent / bl;
+        }`
+        }`,
         )
         .replace(
           '#include <lights_fragment_end>',
@@ -142,6 +180,11 @@ function layerMaterial(planet: Planet, texture: THREE.Texture, layer: Layer): TH
           cloudDay *= 1.0 - moonShadowFrom(vCloudDir, cloudRingSun);
           reflectedLight.directDiffuse *= cloudDay;
           reflectedLight.directSpecular *= cloudDay;
+          // Light through the thin edges, against the sun: the silver
+          // lining, and a brighter underside where the deck is thin.
+          vec3 toEye = normalize(vViewPosition);
+          float against = pow(max(dot(-toEye, directionalLights[0].direction), 0.0), 6.0);
+          reflectedLight.directDiffuse += directionalLights[0].color * cloudDay * cloudEdge * (0.12 + 0.6 * against) * RECIPROCAL_PI;
         }
         #endif`,
         )
