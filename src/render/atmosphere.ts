@@ -113,7 +113,12 @@ export function buildAtmosphere(planet: Planet, sun: THREE.Vector3): THREE.Mesh 
         if (path <= 0.0) discard;
 
         float thickness = outer - inner;
-        float rayleighHeight = thickness * 0.25;
+        // Seen from outside, the air thins faster with height, so the limb
+        // is a thin bright line fading out into space rather than a thick
+        // blue band with an edge at the top of the shell. From inside, the
+        // sky keeps the depth it was tuned with.
+        float seenInside = 1.0 - smoothstep(inner + thickness * 0.4, outer, length(cameraPosition));
+        float rayleighHeight = thickness * mix(0.14, 0.25, seenInside);
         float mieHeight = thickness * 0.08;
         vec3 betaR = rayleighBeta();
         vec3 betaM = vec3(3.0);

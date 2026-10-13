@@ -181,6 +181,12 @@ function layerMaterial(planet: Planet, texture: THREE.Texture, layer: Layer): TH
           cloudDay *= 1.0 - moonShadowFrom(vCloudDir, cloudRingSun);
           reflectedLight.directDiffuse *= cloudDay;
           reflectedLight.directSpecular *= cloudDay;
+          // The terminator burns warm from afar, as on the ground (detail.ts).
+          {
+            float dawnLine = (dot(normalize(vCloudUp), directionalLights[0].direction) - 0.03) / 0.07;
+            float farSeen = smoothstep(0.15, 0.6, length(vViewPosition));
+            reflectedLight.directDiffuse *= mix(vec3(1.0), vec3(1.3, 0.6, 0.32), exp(-dawnLine * dawnLine) * farSeen);
+          }
           // Light through the thin edges, against the sun: the silver
           // lining, and a brighter underside where the deck is thin.
           vec3 toEye = normalize(vViewPosition);

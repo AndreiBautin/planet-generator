@@ -879,6 +879,16 @@ export function withGroundDetail(
           groundDay *= 1.0 - moonShadowFrom(vDetailPosition, detailCloudSun);
           reflectedLight.directDiffuse *= groundDay;
           reflectedLight.directSpecular *= groundDay;
+          // Seen from afar, the line where day turns to night burns warm:
+          // the ground there is lit by a sun on its horizon, through the most
+          // air. The light at the eye is reddened already from a glide, so
+          // only from far off — at a glide it would redden twice.
+          {
+            float dawnLine = (dot(groundUp, directionalLights[0].direction) - 0.03) / 0.07;
+            float farSeen = smoothstep(0.15, 0.6, length(vViewPosition));
+            vec3 warm = mix(vec3(1.0), vec3(1.25, 0.62, 0.34), exp(-dawnLine * dawnLine) * farSeen);
+            reflectedLight.directDiffuse *= warm;
+          }
           // Seen from under the sea, the sun through the moving surface
           // draws a net of light on the sea bed: two drifting fields, bright
           // where they agree, and fainter the deeper the floor.

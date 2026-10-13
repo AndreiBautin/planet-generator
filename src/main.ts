@@ -111,6 +111,8 @@ const recordStart = Number(new URLSearchParams(window.location.search).get('reco
 const recordClock = fixedClock(Number.isFinite(recordStart) && recordStart > 0 ? recordStart : 1000)
 const clock = recording ? recordClock : systemClock
 attachIdle(document.body, clock)
+// Recording is for looking at the planet; the splash would only sit in front of it.
+if (recording) document.body.classList.remove('booting')
 // Over the trees as well as the ground: at its lowest the glide flew through the pines.
 const rig = createRig(clock, () => (direction) => canopyRadiusAt(planet, direction))
 attachGestures(canvas, clock, rig.gestures)
