@@ -1797,7 +1797,7 @@ function buildSky(world: Planet, pixelRatio: number): THREE.Points {
           // rather than being black between the stars.
           float haze = smoothstep(0.55, 0.85, detailNoise(vSky * 2.4 + 13.0)) * (1.0 - band);
           vec3 nebula = mix(vec3(0.25, 0.32, 0.6), vec3(0.45, 0.25, 0.5), detailNoise(vSky * 3.1));
-          gl_FragColor = vec4((tint * light * 0.11 + nebula * haze * 0.018) * bandSeen, 1.0);
+          gl_FragColor = vec4((tint * light * 0.085 + nebula * haze * 0.018) * bandSeen, 1.0);
         }
       `,
     }),
