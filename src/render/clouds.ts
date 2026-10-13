@@ -64,7 +64,8 @@ const CLOUD_BUMP = 0.012
 
 const SHAPES: Readonly<Record<Layer, string>> = {
   base: /* glsl */ `
-          float shaped = smoothstep(0.28, 0.78, cover + (billow - 0.5) * 0.5);
+          // The billows break a thin edge into wisps and leave the body whole.
+          float shaped = smoothstep(0.22, 0.86, cover + (billow - 0.5) * mix(0.6, 0.3, smoothstep(0.35, 0.8, cover)));
           diffuseColor.a *= shaped;
           // The deck's relief, for the normal: thick cloud stands high,
           // and the billows heap it.
@@ -195,9 +196,12 @@ function layerMaterial(planet: Planet, texture: THREE.Texture, layer: Layer): TH
           float t = cloudTime * 0.012;
           // Bend where the map is read, slowly, so the shapes drift and
           // deform rather than scroll.
+          // Drawn out along the wind, mostly east and west, at two scales:
+          // read straight, the map's heaps were round puffs all one size,
+          // stamped across the globe like cotton.
           vec2 warp = vec2(
-            detailNoise(vCloudDir * 5.0 + t) - 0.5,
-            detailNoise(vCloudDir * 5.0 + 11.0 - t) - 0.5) * 0.012;
+            (detailNoise(vCloudDir * 3.0 + t) - 0.5) * 0.034 + (detailNoise(vCloudDir * 9.0 + 5.0 - t) - 0.5) * 0.012,
+            (detailNoise(vCloudDir * 3.0 + 11.0 - t) - 0.5) * 0.01 + (detailNoise(vCloudDir * 9.0 + 17.0 + t) - 0.5) * 0.005);
           // Carried by the winds, as two copies of the map (winds.ts).
           float cover = flowBlend(
             texture2D(alphaMap, flowUv(vAlphaMapUv, 0) + warp).g,
