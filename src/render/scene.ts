@@ -333,9 +333,14 @@ function postTarget(): THREE.WebGLRenderTarget {
   })
 }
 
-/** A vignette and a fine grain: the two cheapest things between a render and a photograph. */
+/**
+ * The grade: a gentle curve, a little saturation and a vignette. There was
+ * a film grain too, a fixed hash per pixel; over a moving picture it stood
+ * still like dust on the screen, and was reported as grainy twice, at
+ * 0.035 and again at 0.016. It is gone.
+ */
 const GRADE_SHADER = {
-  uniforms: { tDiffuse: { value: null }, grain: { value: 0.016 }, vignette: { value: 0.32 } },
+  uniforms: { tDiffuse: { value: null }, vignette: { value: 0.32 } },
   vertexShader: /* glsl */ `
     varying vec2 vUv;
     void main() {
@@ -345,14 +350,8 @@ const GRADE_SHADER = {
   `,
   fragmentShader: /* glsl */ `
     uniform sampler2D tDiffuse;
-    uniform float grain;
     uniform float vignette;
     varying vec2 vUv;
-    float gradeHash(vec2 p) {
-      vec3 q = fract(vec3(p.xyx) * 0.1031);
-      q += dot(q, q.yzx + 33.33);
-      return fract((q.x + q.y) * q.z);
-    }
     void main() {
       vec4 c = texture2D(tDiffuse, vUv);
       // After AgX, which is neutral and flat on its own: a gentle S-curve
@@ -364,7 +363,6 @@ const GRADE_SHADER = {
       vec2 d = vUv - 0.5;
       float edge = 1.0 - smoothstep(0.35, 1.1, dot(d, d) * 2.4);
       c.rgb *= mix(1.0 - vignette, 1.0, edge);
-      c.rgb += (gradeHash(gl_FragCoord.xy) - 0.5) * grain * c.rgb;
       gl_FragColor = c;
     }
   `,

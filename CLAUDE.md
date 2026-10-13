@@ -2279,7 +2279,9 @@ Not seen: a cold-climate or flat-roofed town since the change, a phone.
   not a blue skin. **Not seen**: the glide starts nose-up and inland, and
   the one shot aimed at the sun showed sky; the bay at 17:00 with the sun
   to the side is what was looked at.
-- **The grain is half what it was** (`grain` 0.016, was 0.035): reported
+- **The film grain is gone** (2026-10-13), reported grainy a second time
+  at 0.016: a fixed hash per pixel stands still over a moving picture.
+  Before that it was halved (`grain` 0.016, was 0.035): reported
   as "a bit grainy sometimes" on a 2560-wide desktop, where the per-pixel
   film grain is finer than intended and reads as noise rather than
   texture.
