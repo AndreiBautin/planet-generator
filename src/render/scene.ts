@@ -1785,7 +1785,19 @@ function buildSky(world: Planet, pixelRatio: number): THREE.Points {
           float laneAt = (off + (mottle - 0.5) * 0.03) / 0.014;
           float lane = 1.0 - 0.6 * exp(-laneAt * laneAt);
           float light = band * (0.15 + 1.4 * pow(mottle, 1.6)) * lane * bandSeen;
-          gl_FragColor = vec4(vec3(0.62, 0.62, 0.74) * light * 0.13, 1.0);
+          // Coloured, not grey: warmer where it is brightest, as a galaxy's
+          // old stars crowd its core, bluer out at the fringes, with now
+          // and then a reddish knot where stars are forming. A flat grey
+          // band read as a smear on the lens.
+          float core = smoothstep(0.35, 0.85, mottle);
+          vec3 tint = mix(vec3(0.5, 0.58, 0.82), vec3(0.86, 0.78, 0.68), core);
+          float knots = smoothstep(0.72, 0.9, detailNoise(vSky * 23.0 + 7.0)) * band;
+          tint = mix(tint, vec3(0.95, 0.5, 0.6), knots * 0.5);
+          // And off the band, faint clouds of colour, so the sky has depth
+          // rather than being black between the stars.
+          float haze = smoothstep(0.55, 0.85, detailNoise(vSky * 2.4 + 13.0)) * (1.0 - band);
+          vec3 nebula = mix(vec3(0.25, 0.32, 0.6), vec3(0.45, 0.25, 0.5), detailNoise(vSky * 3.1));
+          gl_FragColor = vec4((tint * light * 0.11 + nebula * haze * 0.018) * bandSeen, 1.0);
         }
       `,
     }),
