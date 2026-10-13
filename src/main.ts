@@ -12,6 +12,7 @@ import { startScene } from '@/render/scene'
 import { logger, setLogLevel } from '@/shared/logger'
 import { attachGestures } from '@/ui/controls'
 import { attachHud } from '@/ui/hud'
+import { attachIdle } from '@/ui/idle'
 import { TERRAIN_STATS } from '@/render/patches/terrain'
 import { landmarksOf, tourOrder } from '@/generation/landmarks'
 import { createRig } from '@/ui/rig'
@@ -53,6 +54,11 @@ if (buildLabel !== null) {
 }
 setLogLevel(config.logLevel)
 for (const warning of warnings) logger.warn('config.invalid', { warning })
+
+// The splash never outstays a world that will not come (index.html, .splash).
+window.setTimeout(() => {
+  document.body.classList.remove('booting')
+}, 15_000)
 
 const freshSeed = (): Seed =>
   newSeed((bytes) => {
@@ -104,6 +110,7 @@ const showStats = new URLSearchParams(window.location.search).has('stats')
 const recordStart = Number(new URLSearchParams(window.location.search).get('record'))
 const recordClock = fixedClock(Number.isFinite(recordStart) && recordStart > 0 ? recordStart : 1000)
 const clock = recording ? recordClock : systemClock
+attachIdle(document.body, clock)
 // Over the trees as well as the ground: at its lowest the glide flew through the pines.
 const rig = createRig(clock, () => (direction) => canopyRadiusAt(planet, direction))
 attachGestures(canvas, clock, rig.gestures)
@@ -131,7 +138,7 @@ const show = async (born: boolean): Promise<void> => {
   if (!(await scene.show(next, { born }))) return
   // Its sister worlds in the sky (render/sisters.ts).
   scene.setSystem(systemOf(home), seed)
-  document.body.classList.remove('forming')
+  document.body.classList.remove('forming', 'booting')
   logger.info('planet.shown', { seed, kind: next.kind })
   remember(next)
 }

@@ -164,14 +164,18 @@
         transform: none;
       }
       .caption strong {
-        font-size: clamp(22px, 5vw, 32px);
-        font-weight: 650;
-        letter-spacing: 0.02em;
+        font-family: var(--display);
+        font-size: clamp(24px, 5vw, 36px);
+        font-weight: 600;
+        letter-spacing: -0.01em;
       }
       .caption span {
-        font-size: 13px;
+        order: -1;
+        font-size: 11px;
+        font-weight: 600;
         color: var(--dim);
-        letter-spacing: 0.06em;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
       }
       @media (prefers-reduced-motion: reduce) {
         .caption {
@@ -757,6 +761,13 @@
       .touring .rail {
         opacity: 0.4;
       }
+      /* Flying or touring with no hand on anything, the chrome goes so the
+         view is the whole screen; a touch, a move or a key brings it back. */
+      .idle .title,
+      .idle .dock,
+      .idle .rail {
+        opacity: 0;
+      }
 
       .dock {
         position: fixed;
@@ -988,24 +999,33 @@
         accent-color: var(--accent);
       }
 
+      /* One look for every passing word: a glass pill above the dock. */
       .toast {
         position: fixed;
         left: 50%;
-        top: 40%;
-        transform: translateX(-50%);
+        bottom: calc(max(16px, env(safe-area-inset-bottom)) + 72px);
+        transform: translate(-50%, 8px) scale(0.98);
         margin: 0;
-        padding: 10px 16px;
-        border-radius: 12px;
-        background: var(--glass);
+        padding: 10px 18px;
+        border-radius: 22px;
+        background: var(--glass-strong);
         border: 1px solid var(--edge);
+        border-top-color: var(--edge-top);
+        backdrop-filter: var(--blur);
+        -webkit-backdrop-filter: var(--blur);
+        box-shadow: var(--shadow);
         font-size: 14px;
+        font-weight: 500;
         white-space: nowrap;
         opacity: 0;
-        transition: opacity 200ms ease;
+        transition:
+          opacity var(--quick) var(--ease),
+          transform var(--gentle) var(--ease);
         pointer-events: none;
       }
       .toast.shown {
         opacity: 1;
+        transform: translate(-50%, 0);
       }
       /* Flying, the hint says how to steer — once, fading after a few
          seconds, because it is only news the first time. */
@@ -1015,10 +1035,13 @@
         top: calc(max(16px, env(safe-area-inset-top)) + 84px);
         transform: translateX(-50%);
         margin: 0;
-        padding: 8px 14px;
-        border-radius: 12px;
-        background: var(--glass);
+        padding: 8px 16px;
+        border-radius: 20px;
+        background: var(--glass-strong);
         border: 1px solid var(--edge);
+        border-top-color: var(--edge-top);
+        backdrop-filter: var(--blur);
+        -webkit-backdrop-filter: var(--blur);
         font-size: 13px;
         color: var(--dim);
         white-space: nowrap;
@@ -1045,6 +1068,84 @@
         }
       }
 
+      /* The first world's wait: a word and a moving line over black, gone
+         as the planet arrives, so a first visit never looks like a blank page. */
+      .splash {
+        position: fixed;
+        inset: 0;
+        z-index: 30;
+        display: grid;
+        place-content: center;
+        justify-items: center;
+        gap: 18px;
+        background: radial-gradient(ellipse at center, #0b1020, #05060a 70%);
+        opacity: 0;
+        visibility: hidden;
+        pointer-events: none;
+        transition:
+          opacity 900ms var(--ease),
+          visibility 0s 900ms;
+      }
+      .booting .splash {
+        opacity: 1;
+        visibility: visible;
+        transition: none;
+      }
+      .splash-word {
+        margin: 0;
+        font-family: var(--display);
+        font-size: 13px;
+        font-weight: 600;
+        letter-spacing: 0.32em;
+        text-transform: uppercase;
+        color: var(--dim);
+      }
+      /* Not a measure of progress — the build does not report one — only
+         a sign that it is working. */
+      .splash-line,
+      .title::after {
+        display: block;
+        width: 120px;
+        height: 1px;
+        background: linear-gradient(90deg, transparent, var(--accent), transparent) no-repeat;
+        background-size: 40% 100%;
+        animation: seek 1.4s var(--ease) infinite;
+      }
+      @keyframes seek {
+        from {
+          background-position: -60% 0;
+        }
+        to {
+          background-position: 160% 0;
+        }
+      }
+      /* A later world's wait: the same line under its name. */
+      .title::after {
+        content: '';
+        margin-top: 10px;
+        opacity: 0;
+        transition: opacity var(--gentle) var(--ease);
+      }
+      .forming .title::after {
+        opacity: 1;
+      }
+      .booting .title,
+      .booting .dock,
+      .booting .rail {
+        opacity: 0;
+      }
+      .title,
+      .dock,
+      .rail {
+        transition: opacity 900ms var(--ease);
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .splash-line,
+        .title::after {
+          animation: none;
+          background-size: 100% 100%;
+        }
+      }
       /* While a world is being made, its name breathes so the wait reads as
          work rather than as a frozen page. */
       .forming .title h1 {
@@ -1065,7 +1166,11 @@
       }
     </style>
   </head>
-  <body>
+  <body class="booting">
+    <div class="splash" aria-hidden="true">
+      <p class="splash-word">Planet Generator</p>
+      <span class="splash-line"></span>
+    </div>
     <header class="title">
       <h1 id="name">&nbsp;</h1>
       <p><span id="kind"></span><span class="dot">·</span><span class="seed" id="seed"></span></p>
