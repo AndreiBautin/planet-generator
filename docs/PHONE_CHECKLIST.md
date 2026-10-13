@@ -22,6 +22,31 @@ Base: <https://andreibautin.github.io/planet-generator/>
 - [ ] **Sound**: press the speaker. Wind while gliding, surf along a coast.
 - [ ] **Install**: Add to Home Screen, open it from there. Full screen?
 
+## The controls (restyled 2026-10-13)
+
+- [ ] **Splash**: the first open shows "Planet Generator" and a moving line,
+      then fades into the planet being born. Any blank or black moment?
+- [ ] **Dock and rail**: the bottom pill and the right-hand capsule. Easy to
+      hit with a thumb? Anything under the notch or the home bar?
+- [ ] **Controls fade away**: fly and leave the screen alone for four
+      seconds; the buttons fade. One touch brings them back?
+- [ ] **Sliders**: Tune, then drag each dial. Smooth, and the lit track
+      follows the thumb?
+- [ ] **Sheets**: open and close the atlas and the map. They rise in and fade
+      out; does either stutter?
+- [ ] **Share**: does the share sheet open, and does the link it sends open
+      the same planet?
+- [ ] **Journey**: open the star system and choose a world. Its name comes up
+      large in the middle as it arrives?
+
+## From orbit (round two and three)
+
+- [ ] **Clouds** run in fronts and swirls rather than round puffs.
+- [ ] **Night side** is dark, with the towns' lights standing out:
+      [open](https://andreibautin.github.io/planet-generator/?seed=83tzj46&shot=o,15,40,3.4,18.30)
+- [ ] **Lava sea** shows dark crust and glowing rivers from orbit:
+      [open](https://andreibautin.github.io/planet-generator/?seed=h999999)
+
 ## Things to look at
 
 | What                  | Link                                                                                                                       | Look for                                                                                                                           |
