@@ -2453,3 +2453,23 @@ Left unverified from the series, for whoever picks it up: the water's
 crest glow with the sun ahead, the crease shading on a cliff close up,
 the rings from below the plane and from a glide beneath them, moonlight
 on water and snow, and everything on a phone (`docs/PHONE_CHECKLIST.md`).
+
+## The chrome, restyled (2026-10-13)
+
+- **Tokens at the top of `index.html`'s style** (`--glass`, `--blur`,
+  `--ease`, `--display`, …): a new control takes them rather than its own
+  numbers. No web font — the app is offline-first and precached, so the
+  display face is a system stack (Segoe UI Variable, SF Pro).
+- **The rail is one `<nav class="rail">`**, a flex column: a mode hides a
+  button with `display: none` and the rest close up. There are no per-mode
+  `top` offsets any more; do not add one back. Its tooltips are
+  `data-tip`.
+- **Sheets animate in only.** They hide by the `hidden` attribute, so a
+  fade out would need each panel to wait for it.
+- **`booting` on the body** holds the splash until the first world is
+  shown, and a 15 s timer lifts it whatever happens. **`idle`**
+  (`ui/idle.ts`, from the Clock) fades the chrome while flying or touring
+  untouched; a `.click()` from a script fires no pointer event, so in
+  record mode it goes idle at once — that is the harness, not a bug.
+- Phone at 375: the flying dock (with "Land") is exactly gutter to gutter.
+  A sixth dock button needs a different layout.
