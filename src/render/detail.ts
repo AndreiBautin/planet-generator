@@ -1353,7 +1353,21 @@ export function withLavaDetail(material: THREE.Material): THREE.Material {
         // static: faded to the sea's average glow once a pixel spans a
         // good share of a plate, as every noise in these shaders is.
         float seamSeen = 1.0 - smoothstep(0.08, 0.3, length(fwidth(vDetailPosition)) * 70.0);
-        glowing = mix(0.3, glowing, seamSeen);
+        // In their place, the sea's own large pattern: broad rafts of dark
+        // crust with glowing rivers between, ridged noise at two scales
+        // drifting on the current. A flat average read from orbit as
+        // orange paint. Each scale fades by its own span, so none sparkles.
+        float span = length(fwidth(vDetailPosition));
+        vec3 drift = vDetailPosition + vec3(detailTime * 0.0012, 0.0, -detailTime * 0.0008);
+        float riverA = 1.0 - smoothstep(0.0, 0.07, abs(detailNoise(drift * 7.0) - 0.5));
+        float riverB = 1.0 - smoothstep(0.0, 0.09, abs(detailNoise(drift * 19.0 + 5.0) - 0.5));
+        riverA = mix(0.25, riverA, 1.0 - smoothstep(0.1, 0.4, span * 7.0 * 8.0));
+        riverB = mix(0.25, riverB, 1.0 - smoothstep(0.1, 0.4, span * 19.0 * 8.0));
+        float rafts = smoothstep(0.35, 0.7, detailNoise(drift * 3.0 + 11.0));
+        float fromAfar = clamp(riverA * 0.75 + riverB * 0.4 * (1.0 - rafts * 0.6), 0.0, 0.9);
+        // Squared, so the crust between the rivers is truly dark.
+        fromAfar = 0.015 + fromAfar * fromAfar;
+        glowing = mix(fromAfar, glowing, seamSeen);
         // The crust is black basalt, its glow only in the seams and where
         // a plate has boiled open; lit as a pale rock with a glow of its
         // own everywhere, the sea read as pink coral.
