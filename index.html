@@ -18,11 +18,25 @@
     <meta name="apple-mobile-web-app-title" content="Planets" />
     <style>
       :root {
-        --ink: #e8eaf0;
-        --dim: #9aa3b5;
-        --glass: rgba(14, 18, 28, 0.62);
-        --edge: rgba(255, 255, 255, 0.12);
-        --accent: #7cc4ff;
+        --ink: #eef1f7;
+        --dim: #98a2b6;
+        --faint: rgba(238, 241, 247, 0.5);
+        --glass: rgba(16, 20, 32, 0.5);
+        --glass-strong: rgba(12, 15, 24, 0.78);
+        --edge: rgba(255, 255, 255, 0.1);
+        --edge-top: rgba(255, 255, 255, 0.22);
+        --accent: #8fd0ff;
+        --accent-soft: rgba(143, 208, 255, 0.16);
+        --blur: blur(18px) saturate(1.4);
+        --shadow: 0 8px 28px rgba(0, 0, 0, 0.35), 0 1px 2px rgba(0, 0, 0, 0.3);
+        --radius: 16px;
+        --radius-small: 12px;
+        --ease: cubic-bezier(0.22, 1, 0.36, 1);
+        --quick: 160ms;
+        --gentle: 420ms;
+        --display:
+          'Segoe UI Variable Display', 'SF Pro Display', system-ui, -apple-system, sans-serif;
+        --mono: ui-monospace, 'Cascadia Mono', 'SF Mono', Menlo, monospace;
         --gutter: max(16px, env(safe-area-inset-left));
       }
       html,
@@ -32,10 +46,12 @@
         background: #05060a;
         color: var(--ink);
         font-family:
+          'Segoe UI Variable Text',
+          'SF Pro Text',
           system-ui,
           -apple-system,
-          'Segoe UI',
           sans-serif;
+        -webkit-font-smoothing: antialiased;
         overflow: hidden;
         -webkit-tap-highlight-color: transparent;
       }
@@ -58,43 +74,72 @@
         top: max(16px, env(safe-area-inset-top));
         left: var(--gutter);
         right: var(--gutter);
-        /* Clear of the sound and picture buttons in the top-right corner. */
-        padding-right: 114px;
+        /* Clear of the rail down the right-hand side. */
+        padding-right: 64px;
         pointer-events: none;
-        text-shadow: 0 1px 12px rgba(0, 0, 0, 0.8);
+        text-shadow: 0 1px 14px rgba(0, 0, 0, 0.7);
+        transition: opacity var(--gentle) var(--ease);
       }
       .title h1 {
         margin: 0;
-        font-size: clamp(26px, 6vw, 40px);
-        font-weight: 650;
-        letter-spacing: 0.02em;
+        font-family: var(--display);
+        font-size: clamp(30px, 6.5vw, 46px);
+        font-weight: 600;
+        line-height: 1.05;
+        letter-spacing: -0.015em;
+      }
+      /* A new world's name arrives rather than being swapped in. */
+      .title h1.arrived {
+        animation: arrive 900ms var(--ease) both;
+      }
+      @keyframes arrive {
+        from {
+          opacity: 0;
+          letter-spacing: 0.08em;
+          filter: blur(6px);
+        }
       }
       .title p {
-        margin: 4px 0 0;
-        font-size: 13px;
+        margin: 6px 0 0;
+        font-size: 11px;
+        font-weight: 600;
         color: var(--dim);
-        letter-spacing: 0.06em;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
       }
-      /* Which build is running: small, out of the way, there to be read when asked. */
+      /* Which build is running: shown in development or with ?stats only. */
       .title .build {
-        margin-top: 0.15rem;
-        font-family: ui-monospace, 'Cascadia Mono', Menlo, monospace;
-        font-size: 0.65rem;
+        margin-top: 4px;
+        font-family: var(--mono);
+        font-weight: 400;
+        text-transform: none;
+        letter-spacing: 0;
+        font-size: 10px;
         opacity: 0.45;
       }
+      .title .build[hidden] {
+        display: none;
+      }
       .title .seed {
-        font-family: ui-monospace, 'Cascadia Mono', Menlo, monospace;
+        font-family: var(--mono);
+        font-weight: 500;
+        text-transform: none;
+        letter-spacing: 0.04em;
         color: var(--ink);
-        opacity: 0.85;
+        opacity: 0.8;
+      }
+      .title .dot {
+        margin: 0 0.5em;
+        opacity: 0.5;
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .title h1.arrived {
+          animation: none;
+        }
       }
 
       /* The picture button sits apart, top right, out of the dock's crowd. */
       .photo {
-        position: fixed;
-        top: max(16px, env(safe-area-inset-top));
-        right: var(--gutter);
-        width: 48px;
-        padding: 0;
         display: grid;
         place-items: center;
       }
@@ -135,11 +180,6 @@
       }
       /* Sound sits beside the picture button: off until pressed. */
       .sound {
-        position: fixed;
-        top: max(16px, env(safe-area-inset-top));
-        right: calc(var(--gutter) + 58px);
-        width: 48px;
-        padding: 0;
         display: grid;
         place-items: center;
       }
@@ -176,11 +216,6 @@
       }
       /* The atlas button sits under the picture button; the sheet covers the view. */
       .atlas-button {
-        position: fixed;
-        top: calc(max(16px, env(safe-area-inset-top)) + 58px);
-        right: var(--gutter);
-        width: 48px;
-        padding: 0;
         display: grid;
         place-items: center;
       }
@@ -285,11 +320,6 @@
       }
       /* The map: under the clip's button; the sheet covers the view, the world laid flat. */
       .map-button {
-        position: fixed;
-        top: calc(max(16px, env(safe-area-inset-top)) + 232px);
-        right: var(--gutter);
-        width: 48px;
-        padding: 0;
         display: grid;
         place-items: center;
       }
@@ -386,16 +416,8 @@
         font-size: 13px;
         color: var(--dim);
       }
-      .flying .dive {
-        top: calc(max(16px, env(safe-area-inset-top)) + 290px);
-      }
       /* A clip: below the system's button, red and counting down while it records. */
       .clip {
-        position: fixed;
-        top: calc(max(16px, env(safe-area-inset-top)) + 174px);
-        right: var(--gutter);
-        width: 48px;
-        padding: 0;
         display: grid;
         place-items: center;
       }
@@ -411,8 +433,8 @@
         display: inline;
       }
       .clip[data-state='recording'] {
-        border-color: #ff5a5a;
-        color: #ff8a8a;
+        background: rgba(255, 90, 90, 0.18);
+        color: #ff9a9a;
       }
       .clip-count {
         font-size: 15px;
@@ -420,11 +442,8 @@
         font-variant-numeric: tabular-nums;
       }
       .clip[data-state='ready'] {
-        border-color: var(--accent);
-      }
-      /* Touring, it moves up into the places the atlas and the system left. */
-      .touring .clip {
-        top: calc(max(16px, env(safe-area-inset-top)) + 58px);
+        background: var(--accent-soft);
+        color: var(--accent);
       }
       .postcarding .clip,
       .systeming .clip {
@@ -432,23 +451,11 @@
       }
       /* Under the sea: only while flying, below the clip. */
       .dive {
-        position: fixed;
-        top: calc(max(16px, env(safe-area-inset-top)) + 232px);
-        right: var(--gutter);
-        width: 48px;
-        padding: 0;
         display: none;
         place-items: center;
       }
       .flying .dive {
         display: grid;
-      }
-      .touring .dive {
-        top: calc(max(16px, env(safe-area-inset-top)) + 116px);
-      }
-      .dive[aria-pressed='true'] {
-        border-color: var(--accent);
-        color: var(--accent);
       }
       .postcarding .dive,
       .systeming .dive {
@@ -462,11 +469,6 @@
       }
       /* The system: the star and its worlds, over a dimmed view that stays visible behind. */
       .system-button {
-        position: fixed;
-        top: calc(max(16px, env(safe-area-inset-top)) + 116px);
-        right: var(--gutter);
-        width: 48px;
-        padding: 0;
         display: grid;
         place-items: center;
       }
@@ -684,10 +686,8 @@
       }
       /* Touring, the chrome steps back so the view is the show. */
       .touring .title,
-      .touring .sound,
-      .touring .photo {
-        opacity: 0.35;
-        transition: opacity 0.6s;
+      .touring .rail {
+        opacity: 0.4;
       }
 
       .dock {
@@ -706,28 +706,149 @@
       }
       .actions {
         display: flex;
-        gap: 10px;
-        width: 100%;
-        max-width: 420px;
+        gap: 2px;
+        padding: 4px;
+        border-radius: 22px;
+        border: 1px solid var(--edge);
+        border-top-color: var(--edge-top);
+        background: var(--glass);
+        backdrop-filter: var(--blur);
+        -webkit-backdrop-filter: var(--blur);
+        box-shadow: var(--shadow);
+      }
+      .actions button {
+        min-height: 44px;
+        border-radius: 18px;
+        border-color: transparent;
+        background: transparent;
+        backdrop-filter: none;
+        -webkit-backdrop-filter: none;
+        box-shadow: none;
+        color: rgba(238, 241, 247, 0.86);
+      }
+      @media (hover: hover) {
+        .actions button:hover {
+          background: rgba(255, 255, 255, 0.08);
+          color: var(--ink);
+        }
+      }
+      .actions button[aria-pressed='true'] {
+        background: var(--accent-soft);
+        color: var(--accent);
       }
       button {
         font: inherit;
         color: var(--ink);
         min-height: 48px;
         padding: 0 16px;
-        border-radius: 14px;
+        border-radius: var(--radius-small);
         border: 1px solid var(--edge);
+        border-top-color: var(--edge-top);
         background: var(--glass);
-        backdrop-filter: blur(12px);
-        -webkit-backdrop-filter: blur(12px);
+        backdrop-filter: var(--blur);
+        -webkit-backdrop-filter: var(--blur);
+        box-shadow: var(--shadow);
         cursor: pointer;
         font-size: 15px;
+        font-weight: 500;
+        letter-spacing: 0.005em;
         transition:
-          transform 120ms ease,
-          background 120ms ease;
+          transform var(--quick) var(--ease),
+          background var(--quick) var(--ease),
+          border-color var(--quick) var(--ease),
+          color var(--quick) var(--ease);
+      }
+      @media (hover: hover) {
+        button:hover {
+          background: rgba(36, 44, 64, 0.62);
+        }
       }
       button:active {
-        transform: scale(0.96);
+        transform: scale(0.95);
+      }
+
+      /* The rail: every view button in one capsule down the right. A button
+         a mode hides is display: none, so the rest close up beneath it. */
+      .rail {
+        position: fixed;
+        top: max(16px, env(safe-area-inset-top));
+        right: var(--gutter);
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        padding: 4px;
+        border-radius: 26px;
+        border: 1px solid var(--edge);
+        border-top-color: var(--edge-top);
+        background: var(--glass);
+        backdrop-filter: var(--blur);
+        -webkit-backdrop-filter: var(--blur);
+        box-shadow: var(--shadow);
+        transition: opacity var(--gentle) var(--ease);
+      }
+      .rail button {
+        position: relative;
+        width: 44px;
+        min-height: 44px;
+        padding: 0;
+        border-radius: 50%;
+        border-color: transparent;
+        background: transparent;
+        backdrop-filter: none;
+        -webkit-backdrop-filter: none;
+        box-shadow: none;
+        color: rgba(238, 241, 247, 0.82);
+      }
+      .rail svg {
+        width: 21px;
+        height: 21px;
+      }
+      @media (hover: hover) {
+        .rail button:hover {
+          background: rgba(255, 255, 255, 0.08);
+          color: var(--ink);
+        }
+        /* A name, and the key for it, beside the icon. */
+        .rail button[data-tip]:hover::after {
+          opacity: 1;
+          transform: translate(0, -50%);
+        }
+      }
+      .rail button[data-tip]::after {
+        content: attr(data-tip);
+        position: absolute;
+        right: calc(100% + 12px);
+        top: 50%;
+        transform: translate(6px, -50%);
+        padding: 6px 10px;
+        border-radius: 8px;
+        background: var(--glass-strong);
+        border: 1px solid var(--edge);
+        font-size: 12px;
+        font-weight: 500;
+        white-space: nowrap;
+        color: var(--ink);
+        opacity: 0;
+        pointer-events: none;
+        transition:
+          opacity var(--quick) var(--ease),
+          transform var(--quick) var(--ease);
+      }
+      .rail button[aria-pressed='true'] {
+        background: var(--accent-soft);
+        color: var(--accent);
+      }
+      .rail-rule {
+        height: 1px;
+        margin: 2px 10px;
+        background: var(--edge);
+      }
+      .systeming .rail,
+      .postcarding .rail {
+        display: none;
+      }
+      .touring .rail-rule {
+        display: none;
       }
       button:focus-visible,
       input:focus-visible {
@@ -746,30 +867,40 @@
       /* Five buttons across a phone: closer together, so the bar fits a
          375-pixel screen without scrolling sideways. */
       @media (max-width: 420px) {
-        .actions {
-          gap: 6px;
-        }
         .actions button {
-          padding: 0 9px;
+          padding: 0 10px;
         }
       }
-      .primary {
-        flex: 1;
+      .primary,
+      .actions .primary {
         font-weight: 600;
-        background: linear-gradient(180deg, rgba(124, 196, 255, 0.32), rgba(124, 196, 255, 0.14));
-        border-color: rgba(124, 196, 255, 0.5);
+        color: #06121f;
+        background: linear-gradient(180deg, #b4e0ff, #7cc4ff);
+        border-color: transparent;
+        box-shadow:
+          0 0 0 1px rgba(255, 255, 255, 0.25) inset,
+          0 6px 20px rgba(124, 196, 255, 0.28);
+      }
+      @media (hover: hover) {
+        .primary:hover,
+        .actions .primary:hover {
+          background: linear-gradient(180deg, #c8e8ff, #8fd0ff);
+          color: #06121f;
+        }
       }
 
       .dials {
         width: 100%;
         max-width: 420px;
         box-sizing: border-box;
-        padding: 14px 16px 6px;
-        border-radius: 16px;
+        padding: 14px 18px 6px;
+        border-radius: var(--radius);
         border: 1px solid var(--edge);
+        border-top-color: var(--edge-top);
         background: var(--glass);
-        backdrop-filter: blur(12px);
-        -webkit-backdrop-filter: blur(12px);
+        backdrop-filter: var(--blur);
+        -webkit-backdrop-filter: var(--blur);
+        box-shadow: var(--shadow);
       }
       .dials[hidden] {
         display: none;
@@ -869,8 +1000,8 @@
   <body>
     <header class="title">
       <h1 id="name">&nbsp;</h1>
-      <p><span id="kind"></span> · seed <span class="seed" id="seed"></span></p>
-      <p class="build" id="build"></p>
+      <p><span id="kind"></span><span class="dot">·</span><span class="seed" id="seed"></span></p>
+      <p class="build" id="build" hidden></p>
     </header>
 
     <div class="dock">
@@ -901,89 +1032,6 @@
       </nav>
     </div>
 
-    <button type="button" class="atlas-button" id="atlas-button" aria-label="Atlas of worlds">
-      <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
-        <circle cx="12" cy="12" r="7.5" fill="none" stroke="currentColor" stroke-width="1.6" />
-        <path
-          d="M4.5 12h15M12 4.5c2.3 2.2 2.3 12.8 0 15M12 4.5c-2.3 2.2-2.3 12.8 0 15"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="1.3"
-        />
-      </svg>
-    </button>
-    <button type="button" class="clip" id="clip" aria-label="Record a clip" data-state="idle">
-      <svg class="clip-record" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
-        <rect
-          x="3.5"
-          y="6.5"
-          width="12"
-          height="11"
-          rx="2"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="1.6"
-        />
-        <path
-          d="M15.5 10.5l5-3v9l-5-3z"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="1.6"
-          stroke-linejoin="round"
-        />
-      </svg>
-      <svg class="clip-save" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
-        <path
-          d="M12 4.5v10M7.5 10.5l4.5 4.5 4.5-4.5M5 19.5h14"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="1.6"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-        />
-      </svg>
-      <span class="clip-count" id="clip-count" aria-live="off"></span>
-    </button>
-    <button
-      type="button"
-      class="dive"
-      id="dive"
-      aria-pressed="false"
-      aria-label="Dive under the sea"
-    >
-      <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
-        <path
-          d="M3 8.5c2-1.6 4-1.6 6 0s4 1.6 6 0 4-1.6 6 0"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="1.6"
-          stroke-linecap="round"
-        />
-        <path
-          d="M12 11v8.5M8.5 16l3.5 3.5 3.5-3.5"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="1.6"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-        />
-      </svg>
-    </button>
-    <button type="button" class="system-button" id="system-button" aria-label="The star system">
-      <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
-        <circle cx="12" cy="12" r="2.6" fill="currentColor" />
-        <ellipse
-          cx="12"
-          cy="12"
-          rx="9"
-          ry="4"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="1.3"
-        />
-        <circle cx="19.5" cy="10.2" r="1.6" fill="currentColor" />
-      </svg>
-    </button>
     <section class="system" id="system" hidden aria-label="The star system">
       <header class="atlas-head">
         <h2 id="system-title">System</h2>
@@ -992,17 +1040,6 @@
       <svg class="system-map" id="system-map" viewBox="-100 -48 200 96" aria-hidden="true"></svg>
       <ul class="system-list" id="system-list"></ul>
     </section>
-    <button type="button" class="map-button" id="map-button" aria-label="Map of this world">
-      <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
-        <path
-          d="M3.5 6.5l5.5-2 6 2 5.5-2v13l-5.5 2-6-2-5.5 2z M9 4.5v13 M15 6.5v13"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="1.5"
-          stroke-linejoin="round"
-        />
-      </svg>
-    </button>
     <section class="map" id="map" hidden aria-label="Map of this world">
       <header class="map-head">
         <h2 id="map-title">Map</h2>
@@ -1041,45 +1078,182 @@
       <h3>Visited</h3>
       <ul class="atlas-list" id="atlas-recent"></ul>
     </section>
-    <button type="button" class="photo" id="photo" aria-label="Make a postcard">
-      <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
-        <path
-          d="M4 8h3l2-2.5h6L17 8h3v11H4z"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="1.6"
-          stroke-linejoin="round"
-        />
-        <circle cx="12" cy="13" r="3.6" fill="none" stroke="currentColor" stroke-width="1.6" />
-      </svg>
-    </button>
-    <button type="button" class="sound" id="sound" aria-pressed="false" aria-label="Sound on">
-      <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
-        <path
-          d="M4 9.5h3.5L12 6v12l-4.5-3.5H4z"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="1.6"
-          stroke-linejoin="round"
-        />
-        <path
-          class="waves"
-          d="M15.5 9a4 4 0 0 1 0 6M18 7a7 7 0 0 1 0 10"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="1.6"
-          stroke-linecap="round"
-        />
-        <path
-          class="mute"
-          d="M15.5 9.5l5 5M20.5 9.5l-5 5"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="1.6"
-          stroke-linecap="round"
-        />
-      </svg>
-    </button>
+    <nav class="rail" aria-label="Views">
+      <button
+        type="button"
+        class="sound"
+        id="sound"
+        data-tip="Sound"
+        aria-pressed="false"
+        aria-label="Sound on"
+      >
+        <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
+          <path
+            d="M4 9.5h3.5L12 6v12l-4.5-3.5H4z"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.6"
+            stroke-linejoin="round"
+          />
+          <path
+            class="waves"
+            d="M15.5 9a4 4 0 0 1 0 6M18 7a7 7 0 0 1 0 10"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.6"
+            stroke-linecap="round"
+          />
+          <path
+            class="mute"
+            d="M15.5 9.5l5 5M20.5 9.5l-5 5"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.6"
+            stroke-linecap="round"
+          />
+        </svg>
+      </button>
+      <button
+        type="button"
+        class="photo"
+        id="photo"
+        data-tip="Postcard"
+        aria-label="Make a postcard"
+      >
+        <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
+          <path
+            d="M4 8h3l2-2.5h6L17 8h3v11H4z"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.6"
+            stroke-linejoin="round"
+          />
+          <circle cx="12" cy="13" r="3.6" fill="none" stroke="currentColor" stroke-width="1.6" />
+        </svg>
+      </button>
+      <span class="rail-rule" aria-hidden="true"></span>
+      <button
+        type="button"
+        class="atlas-button"
+        id="atlas-button"
+        data-tip="Atlas"
+        aria-label="Atlas of worlds"
+      >
+        <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
+          <circle cx="12" cy="12" r="7.5" fill="none" stroke="currentColor" stroke-width="1.6" />
+          <path
+            d="M4.5 12h15M12 4.5c2.3 2.2 2.3 12.8 0 15M12 4.5c-2.3 2.2-2.3 12.8 0 15"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.3"
+          />
+        </svg>
+      </button>
+      <button
+        type="button"
+        class="system-button"
+        id="system-button"
+        data-tip="Star system"
+        aria-label="The star system"
+      >
+        <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
+          <circle cx="12" cy="12" r="2.6" fill="currentColor" />
+          <ellipse
+            cx="12"
+            cy="12"
+            rx="9"
+            ry="4"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.3"
+          />
+          <circle cx="19.5" cy="10.2" r="1.6" fill="currentColor" />
+        </svg>
+      </button>
+      <button
+        type="button"
+        class="map-button"
+        id="map-button"
+        data-tip="Map · M"
+        aria-label="Map of this world"
+      >
+        <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
+          <path
+            d="M3.5 6.5l5.5-2 6 2 5.5-2v13l-5.5 2-6-2-5.5 2z M9 4.5v13 M15 6.5v13"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.5"
+            stroke-linejoin="round"
+          />
+        </svg>
+      </button>
+      <span class="rail-rule" aria-hidden="true"></span>
+      <button
+        type="button"
+        class="clip"
+        id="clip"
+        data-tip="Record a clip"
+        aria-label="Record a clip"
+        data-state="idle"
+      >
+        <svg class="clip-record" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
+          <rect
+            x="3.5"
+            y="6.5"
+            width="12"
+            height="11"
+            rx="2"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.6"
+          />
+          <path
+            d="M15.5 10.5l5-3v9l-5-3z"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.6"
+            stroke-linejoin="round"
+          />
+        </svg>
+        <svg class="clip-save" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
+          <path
+            d="M12 4.5v10M7.5 10.5l4.5 4.5 4.5-4.5M5 19.5h14"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.6"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          />
+        </svg>
+        <span class="clip-count" id="clip-count" aria-live="off"></span>
+      </button>
+      <button
+        type="button"
+        class="dive"
+        id="dive"
+        data-tip="Dive"
+        aria-pressed="false"
+        aria-label="Dive under the sea"
+      >
+        <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
+          <path
+            d="M3 8.5c2-1.6 4-1.6 6 0s4 1.6 6 0 4-1.6 6 0"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.6"
+            stroke-linecap="round"
+          />
+          <path
+            d="M12 11v8.5M8.5 16l3.5 3.5 3.5-3.5"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.6"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          />
+        </svg>
+      </button>
+    </nav>
     <div class="postcard" id="postcard" hidden>
       <div class="postcard-frame" id="postcard-frame" aria-hidden="true">
         <div class="postcard-grain" id="postcard-grain"></div>

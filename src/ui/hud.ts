@@ -93,7 +93,14 @@ export function attachHud(handlers: HudHandlers): Hud {
 
   return {
     render: (planet) => {
-      name.textContent = planet.name
+      // A new name plays its arrival again (the layout read restarts the
+      // animation); the same one, a dial moved, does not.
+      if (name.textContent !== planet.name) {
+        name.textContent = planet.name
+        name.classList.remove('arrived')
+        name.getBoundingClientRect()
+        name.classList.add('arrived')
+      }
       kind.textContent = KINDS[planet.kind].label
       seed.textContent = planet.seed
       document.title = `${planet.name} · Planet Generator`

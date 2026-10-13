@@ -46,7 +46,11 @@ import { loadAtlas, saveAtlas } from '@/ui/atlas-store'
  */
 const { config, warnings } = readConfig()
 const buildLabel = document.getElementById('build')
-if (buildLabel !== null) buildLabel.textContent = `build ${config.build}`
+// Shown in development and with ?stats; a visitor has no use for it.
+if (buildLabel !== null) {
+  buildLabel.textContent = `build ${config.build}`
+  buildLabel.hidden = !config.developer
+}
 setLogLevel(config.logLevel)
 for (const warning of warnings) logger.warn('config.invalid', { warning })
 
@@ -592,6 +596,7 @@ if (config.serviceWorker && 'serviceWorker' in navigator) {
 }
 
 if (showStats && buildLabel !== null) {
+  buildLabel.hidden = false
   window.setInterval(() => {
     const s = scene.stats()
     buildLabel.textContent = `build ${config.build} · ${String(Math.round(s.frameMs))} ms (slow ${String(Math.round(s.slowFrameMs))}) · ${String(window.innerWidth)}×${String(window.innerHeight)} @${String(s.pixelRatio)} · ${String(s.calls)} calls · ${s.gpu}`
