@@ -168,6 +168,11 @@ export function forestFor(
       const coarse = patch.coarsePattern[v * 4] ?? 0
       // Out of the wood at this level and the parent's: nothing to draw.
       if (Math.max(fine, coarse) * 1.15 < chance) continue
+      // Never under water. This level's canopy is cleared under a lake, but
+      // the parent's at the same point need not be, and with the blend
+      // leaning to the parent's a little way off, trees stood up through
+      // the middle of a lake.
+      if ((patch.water[v] ?? 0) > Math.hypot(x, y, z)) continue
       // A vertex the parent does not have shrinks away as the parent nears;
       // one it shares grows to the parent's size. At the coarsest level,
       // with no parent drawing trees, all of them shrink away.
