@@ -140,7 +140,12 @@ export function buildHeavens(sky: Satellites): Heavens {
           // dense enough to hide it, and fine grooves across the width —
           // without them the ring was one flat beige sheet.
           float grooves = 0.94 + 0.06 * sin(t * 1400.0) * sin(t * 310.0 + 1.3);
-          vec3 colour = tint * (0.05 + shine + 1.1 * shade * (0.75 + forward * 0.8)) * (0.72 + 0.45 * solid) * grooves;
+          // Colour across the width: some bands dustier and warmer, some
+          // cleaner ice and cooler, and the whole a little dimmer, so the
+          // ring is not one sheet of white that the bloom blows out.
+          float drift = 0.5 + 0.5 * sin(t * 23.0) * sin(t * 7.3 + 1.0);
+          vec3 hue = mix(vec3(1.08, 0.97, 0.84), vec3(0.88, 0.95, 1.07), drift);
+          vec3 colour = tint * hue * 0.84 * (0.05 + shine + 1.1 * shade * (0.75 + forward * 0.8)) * (0.62 + 0.55 * solid) * grooves;
           // Dense where the bands are: at 0.85 of the bands' own value the
           // planet showed through the whole ring as through a veil, and
           // its rim's glow with it. The thin bands stay see-through.
