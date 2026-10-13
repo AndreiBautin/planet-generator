@@ -67,6 +67,9 @@ export interface Card {
   readonly line: string
 }
 
+/** How dark the vignette's corners go; the preview's CSS uses the same. */
+export const VIGNETTE = 0.38
+
 /** Cut, grain and caption a picture of the whole view into a postcard. */
 export async function composePostcard(picture: Blob, card: Card): Promise<Blob | null> {
   const bitmap = await createImageBitmap(picture)
@@ -94,6 +97,23 @@ export async function composePostcard(picture: Blob, card: Card): Promise<Blob |
     context.fillStyle = pattern
     context.fillRect(0, 0, width, height)
     context.restore()
+  }
+
+  // A soft vignette, the same as the preview's (.postcard-vignette in
+  // index.html): the corners settle and the eye goes to the middle.
+  {
+    const vignette = context.createRadialGradient(
+      width / 2,
+      height / 2,
+      Math.min(width, height) * 0.35,
+      width / 2,
+      height / 2,
+      Math.hypot(width, height) * 0.55,
+    )
+    vignette.addColorStop(0, 'rgba(0, 0, 0, 0)')
+    vignette.addColorStop(1, `rgba(0, 0, 0, ${VIGNETTE.toFixed(2)})`)
+    context.fillStyle = vignette
+    context.fillRect(0, 0, width, height)
   }
 
   const words = wordsFor(card.frame.width)
