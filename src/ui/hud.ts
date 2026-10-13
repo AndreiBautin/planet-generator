@@ -1,3 +1,4 @@
+import { refreshSliders } from './sliders'
 import { KINDS } from '@/generation/kinds'
 import type { Dials, Planet } from '@/generation/planet'
 
@@ -31,6 +32,8 @@ export interface Hud {
   readonly sounding: (on: boolean) => void
   /** Name a sight as a guided tour reaches it: a name, and what it is. */
   readonly caption: (name: string, title: string) => void
+  /** A world's name, large and centred, as a journey reaches it. */
+  readonly arrival: (name: string, kind: string) => void
 }
 
 const element = <T extends HTMLElement>(id: string, type: new () => T): T => {
@@ -89,6 +92,9 @@ export function attachHud(handlers: HudHandlers): Hud {
 
   let hideToast: ReturnType<typeof setTimeout> | undefined
   const captionBox = element('caption', HTMLElement)
+  const arrivalBox = element('arrival', HTMLElement)
+  const arrivalName = element('arrival-name', HTMLElement)
+  const arrivalKind = element('arrival-kind', HTMLElement)
   let hideCaption: ReturnType<typeof setTimeout> | undefined
 
   return {
@@ -108,6 +114,7 @@ export function attachHud(handlers: HudHandlers): Hud {
       dials.temperature.value = String(Math.round(planet.dials.temperature * 100))
       dials.roughness.value = String(Math.round(planet.dials.roughness * 100))
       dials.season.value = String(Math.round(planet.dials.season * 100))
+      refreshSliders()
     },
     flying: (flying) => {
       fly.textContent = flying ? 'Land' : 'Fly'
@@ -127,6 +134,13 @@ export function attachHud(handlers: HudHandlers): Hud {
         captionBox.classList.remove('shown')
       }, 6500)
     },
+    arrival: (place, title) => {
+      arrivalName.textContent = place
+      arrivalKind.textContent = title
+      arrivalBox.classList.remove('shown')
+      arrivalBox.getBoundingClientRect()
+      arrivalBox.classList.add('shown')
+    },
     sounding: (on) => {
       soundButton.setAttribute('aria-pressed', String(on))
       soundButton.setAttribute('aria-label', on ? 'Sound off' : 'Sound on')
@@ -137,6 +151,8 @@ export function attachHud(handlers: HudHandlers): Hud {
     },
     toast: (message) => {
       toastLine.textContent = message
+      // Something done carries a tick (index.html, .toast.done).
+      toastLine.classList.toggle('done', /\b(copied|saved|sent)\b/i.test(message))
       toastLine.classList.add('shown')
       if (hideToast !== undefined) clearTimeout(hideToast)
       hideToast = setTimeout(() => {

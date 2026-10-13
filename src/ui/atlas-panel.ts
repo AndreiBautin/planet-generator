@@ -1,5 +1,6 @@
 import { shelves, type AtlasEntry } from '@/app/atlas'
 import type { Seed } from '@/generation/seed'
+import { hideSheet, showSheet } from './sheet'
 
 /**
  * The atlas sheet: the worlds kept, then the worlds visited, each a card
@@ -80,7 +81,7 @@ export function attachAtlas(handlers: AtlasHandlers): AtlasPanel {
   }
 
   element('atlas-close', HTMLButtonElement).addEventListener('click', () => {
-    sheet.hidden = true
+    hideSheet(sheet)
     open = false
   })
 
@@ -88,11 +89,11 @@ export function attachAtlas(handlers: AtlasHandlers): AtlasPanel {
     show: (atlas, current) => {
       last = { atlas, current }
       render()
-      sheet.hidden = false
+      showSheet(sheet)
       open = true
     },
     hide: () => {
-      sheet.hidden = true
+      hideSheet(sheet)
       open = false
     },
     isOpen: () => open,

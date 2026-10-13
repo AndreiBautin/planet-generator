@@ -1,5 +1,6 @@
 import type { Vec3 } from '@/generation/cube'
 import { mapDirection, mapPoint, type WorldMap } from '@/generation/world-map'
+import { hideSheet, showSheet } from './sheet'
 
 /**
  * The map sheet: the world laid flat (generation/world-map.ts), with its
@@ -59,7 +60,7 @@ export function attachMap(handlers: MapHandlers): MapPanel {
   }
 
   const close = (): void => {
-    sheet.hidden = true
+    hideSheet(sheet)
     open = false
     if (frame !== undefined) cancelAnimationFrame(frame)
     frame = undefined
@@ -82,7 +83,7 @@ export function attachMap(handlers: MapHandlers): MapPanel {
       const asked = shown
       title.textContent = name
       eyeOf = eye
-      sheet.hidden = false
+      showSheet(sheet)
       open = true
       waiting.hidden = false
       marker.hidden = true

@@ -1,4 +1,4 @@
-import type { ClipFormat } from './clip'
+import { CLIP_SECONDS, type ClipFormat } from './clip'
 import type { ClipRecording } from './clip-recorder'
 
 /**
@@ -34,6 +34,7 @@ export function attachClipButton(handlers: ClipButtonHandlers): void {
   const show = (next: State): void => {
     state = next
     button.dataset.state = next.kind
+    if (next.kind !== 'recording') button.style.removeProperty('--clip-left')
     if (next.kind === 'idle') {
       button.setAttribute('aria-label', 'Record a clip')
       count.textContent = ''
@@ -61,6 +62,8 @@ export function attachClipButton(handlers: ClipButtonHandlers): void {
     const started = handlers.start({
       onTick: (remaining) => {
         count.textContent = String(remaining)
+        // The ring (index.html) runs down with it, eased over each second.
+        button.style.setProperty('--clip-left', String(Math.max(0, remaining - 1) / CLIP_SECONDS))
       },
       onDone: (clip) => {
         if (clip === undefined) {

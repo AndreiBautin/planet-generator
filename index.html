@@ -481,6 +481,26 @@
         font-weight: 650;
         font-variant-numeric: tabular-nums;
       }
+      /* While recording, a ring round the button runs down with the time. */
+      .clip[data-state='recording']::before {
+        content: '';
+        position: absolute;
+        inset: 2px;
+        border-radius: 50%;
+        background: conic-gradient(#ff7a7a calc(var(--clip-left) * 360deg), transparent 0);
+        -webkit-mask: radial-gradient(
+          farthest-side,
+          transparent calc(100% - 2px),
+          #000 calc(100% - 2px)
+        );
+        mask: radial-gradient(farthest-side, transparent calc(100% - 2px), #000 calc(100% - 2px));
+        transition: --clip-left 1s linear;
+      }
+      @property --clip-left {
+        syntax: '<number>';
+        inherits: true;
+        initial-value: 1;
+      }
       .clip[data-state='ready'] {
         background: var(--accent-soft);
         color: var(--accent);
@@ -535,6 +555,18 @@
         background: radial-gradient(ellipse at center, rgba(5, 6, 10, 0.35), rgba(5, 6, 10, 0.8));
         transition: opacity 0.6s;
         animation: sheet-in var(--gentle) var(--ease) both;
+      }
+      .atlas.closing,
+      .map.closing,
+      .system.closing {
+        animation: sheet-out 220ms var(--ease) both;
+        pointer-events: none;
+      }
+      @keyframes sheet-out {
+        to {
+          opacity: 0;
+          transform: translateY(10px) scale(0.99);
+        }
       }
       /* A sheet rises into place as it opens: shown again, it plays again. */
       @keyframes sheet-in {
@@ -993,10 +1025,63 @@
         font-size: 14px;
         color: var(--dim);
       }
-      .dial input {
+      /* Sliders drawn here, not the browser's: a hairline track lit up to
+         a glowing thumb. --fill is set as the value moves (ui/hud.ts). */
+      input[type='range'] {
+        -webkit-appearance: none;
+        appearance: none;
         width: 100%;
         height: 36px;
-        accent-color: var(--accent);
+        margin: 0;
+        background: transparent;
+        cursor: pointer;
+      }
+      input[type='range']::-webkit-slider-runnable-track {
+        height: 4px;
+        border-radius: 2px;
+        background: linear-gradient(
+          90deg,
+          var(--accent) var(--fill, 50%),
+          rgba(255, 255, 255, 0.14) var(--fill, 50%)
+        );
+      }
+      input[type='range']::-moz-range-track {
+        height: 4px;
+        border-radius: 2px;
+        background: rgba(255, 255, 255, 0.14);
+      }
+      input[type='range']::-moz-range-progress {
+        height: 4px;
+        border-radius: 2px;
+        background: var(--accent);
+      }
+      input[type='range']::-webkit-slider-thumb {
+        -webkit-appearance: none;
+        width: 18px;
+        height: 18px;
+        margin-top: -7px;
+        border-radius: 50%;
+        border: 0;
+        background: #fff;
+        box-shadow:
+          0 0 0 4px rgba(143, 208, 255, 0.22),
+          0 2px 8px rgba(0, 0, 0, 0.4);
+        transition: box-shadow var(--quick) var(--ease);
+      }
+      input[type='range']::-moz-range-thumb {
+        width: 18px;
+        height: 18px;
+        border-radius: 50%;
+        border: 0;
+        background: #fff;
+        box-shadow:
+          0 0 0 4px rgba(143, 208, 255, 0.22),
+          0 2px 8px rgba(0, 0, 0, 0.4);
+      }
+      input[type='range']:active::-webkit-slider-thumb {
+        box-shadow:
+          0 0 0 7px rgba(143, 208, 255, 0.3),
+          0 2px 8px rgba(0, 0, 0, 0.4);
       }
 
       /* One look for every passing word: a glass pill above the dock. */
@@ -1026,6 +1111,126 @@
       .toast.shown {
         opacity: 1;
         transform: translate(-50%, 0);
+      }
+      /* Something done (copied, saved, sent) carries a tick. */
+      .toast.done::before {
+        content: '\2713';
+        display: inline-grid;
+        place-items: center;
+        width: 18px;
+        height: 18px;
+        margin-right: 8px;
+        border-radius: 50%;
+        font-size: 11px;
+        font-weight: 700;
+        color: #06121f;
+        background: var(--accent);
+      }
+      /* A world's name, large and centred, as the journey reaches it. */
+      .arrival {
+        position: fixed;
+        inset: 0;
+        z-index: 25;
+        margin: 0;
+        display: grid;
+        place-content: center;
+        justify-items: center;
+        gap: 8px;
+        pointer-events: none;
+        text-shadow: 0 2px 24px rgba(0, 0, 0, 0.7);
+        opacity: 0;
+      }
+      .arrival.shown {
+        animation: arrival 3.2s var(--ease) both;
+      }
+      @keyframes arrival {
+        0% {
+          opacity: 0;
+          letter-spacing: 0.12em;
+          filter: blur(8px);
+        }
+        25%,
+        70% {
+          opacity: 1;
+          letter-spacing: -0.01em;
+          filter: none;
+        }
+        100% {
+          opacity: 0;
+        }
+      }
+      .arrival span {
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.3em;
+        text-transform: uppercase;
+        color: var(--dim);
+      }
+      .arrival strong {
+        font-family: var(--display);
+        font-size: clamp(40px, 9vw, 84px);
+        font-weight: 600;
+        line-height: 1;
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .arrival.shown {
+          animation: none;
+          opacity: 1;
+        }
+      }
+      /* The keys, on ?: a glass card in the middle of the view. */
+      .keys[hidden] {
+        display: none;
+      }
+      .keys {
+        position: fixed;
+        left: 50%;
+        top: 50%;
+        z-index: 26;
+        transform: translate(-50%, -50%);
+        width: min(380px, calc(100vw - 32px));
+        box-sizing: border-box;
+        padding: 18px 20px;
+        border-radius: var(--radius);
+        border: 1px solid var(--edge);
+        border-top-color: var(--edge-top);
+        background: var(--glass-strong);
+        backdrop-filter: var(--blur);
+        -webkit-backdrop-filter: var(--blur);
+        box-shadow: var(--shadow);
+      }
+      .keys h2 {
+        margin: 0 0 12px;
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: var(--dim);
+      }
+      .keys dl {
+        margin: 0;
+        display: grid;
+        grid-template-columns: auto 1fr;
+        gap: 10px 14px;
+        font-size: 14px;
+      }
+      .keys dt {
+        justify-self: end;
+      }
+      .keys dd {
+        margin: 0;
+        color: var(--dim);
+      }
+      kbd {
+        display: inline-block;
+        min-width: 22px;
+        padding: 2px 6px;
+        border-radius: 6px;
+        border: 1px solid var(--edge);
+        border-bottom-width: 2px;
+        background: rgba(255, 255, 255, 0.06);
+        font: 600 12px var(--mono);
+        text-align: center;
       }
       /* Flying, the hint says how to steer — once, fading after a few
          seconds, because it is only news the first time. */
@@ -1473,6 +1678,24 @@
     <div class="flash" id="flash" aria-hidden="true"></div>
     <p class="hint" id="hint">Drag to steer and climb · pinch to change height</p>
     <p class="toast" id="toast" role="status" aria-live="polite"></p>
+    <p class="arrival" id="arrival" aria-hidden="true">
+      <span id="arrival-kind"></span><strong id="arrival-name"></strong>
+    </p>
+    <section class="keys" id="keys" hidden aria-label="Keys">
+      <h2>Keys</h2>
+      <dl>
+        <dt><kbd>WASD</kbd> <kbd>Arrows</kbd></dt>
+        <dd>Steer and climb</dd>
+        <dt><kbd>P</kbd></dt>
+        <dd>Take a picture</dd>
+        <dt><kbd>M</kbd></dt>
+        <dd>Map of this world</dd>
+        <dt><kbd>Esc</kbd></dt>
+        <dd>Close what is open</dd>
+        <dt><kbd>?</kbd></dt>
+        <dd>These keys</dd>
+      </dl>
+    </section>
     <p class="caption" id="caption" role="status" aria-live="polite"></p>
     <script type="module" src="/src/main.ts"></script>
   </body>

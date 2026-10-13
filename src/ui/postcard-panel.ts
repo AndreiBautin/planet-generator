@@ -1,3 +1,4 @@
+import { refreshSliders } from './sliders'
 import { grainAlpha, grainTile, wordsFor } from './postcard-card'
 import { clockLabel, FRAMINGS, frameIn, type Framing, type Rect } from './postcard'
 
@@ -143,6 +144,7 @@ export function attachPostcard(handlers: PostcardHandlers): PostcardPanel {
       hourInput.value = String(Math.round(opening.hour * 60))
       heightInput.value = String(Math.round(opening.height * 1000))
       text.value = opening.caption
+      refreshSliders()
       root.hidden = false
       document.body.classList.add('postcarding')
       choose(framing)
@@ -160,6 +162,7 @@ export function attachPostcard(handlers: PostcardHandlers): PostcardPanel {
       const minutes = Math.round(next * 60) % 1440
       if (Math.abs(minutes - Number(hourInput.value)) < 1) return
       hourInput.value = String(minutes)
+      refreshSliders()
       words()
     },
     card: () => ({

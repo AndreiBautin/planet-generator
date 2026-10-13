@@ -2473,3 +2473,14 @@ on water and snow, and everything on a phone (`docs/PHONE_CHECKLIST.md`).
   record mode it goes idle at once — that is the harness, not a bug.
 - Phone at 375: the flying dock (with "Land") is exactly gutter to gutter.
   A sixth dock button needs a different layout.
+- **Sheets fade out too** (`ui/sheet.ts`): `hideSheet` plays `closing`
+  for 220 ms before setting `hidden`; a panel's own `open` flag changes at
+  once. Use `showSheet`/`hideSheet` for a new sheet, never `hidden` directly.
+- **Sliders are drawn in CSS**; their lit track is `--fill`, which only
+  `ui/sliders.ts` sets. Code that sets a range input's value must call
+  `refreshSliders()` — a programmatic value fires no event.
+- **From orbit, round two**: clouds are warped into fronts in
+  `generation/clouds.ts` (not pinned; the ground is untouched), the air
+  thins faster with height when seen from outside, and the terminator's
+  warm band is in the ground and cloud shaders — the air's shader cannot
+  paint on the disc, the planet's depth hides the shell's far side there.

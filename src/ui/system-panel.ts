@@ -2,6 +2,7 @@ import { KINDS } from '@/generation/kinds'
 import type { Rgb } from '@/generation/kinds'
 import type { Seed } from '@/generation/seed'
 import type { StarSystem, SystemWorld } from '@/generation/system'
+import { hideSheet, showSheet } from './sheet'
 
 /**
  * The system sheet: the star, the worlds' orbits seen at a slant, and each
@@ -145,7 +146,8 @@ export function attachSystem(onTravel: (world: SystemWorld) => void): SystemPane
 
   // The view's own controls step aside while the system is up.
   const setOpen = (on: boolean): void => {
-    sheet.hidden = !on
+    if (on) showSheet(sheet)
+    else hideSheet(sheet)
     open = on
     document.body.classList.toggle('systeming', on)
   }

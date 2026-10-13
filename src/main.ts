@@ -13,6 +13,7 @@ import { logger, setLogLevel } from '@/shared/logger'
 import { attachGestures } from '@/ui/controls'
 import { attachHud } from '@/ui/hud'
 import { attachIdle } from '@/ui/idle'
+import { attachSliders } from '@/ui/sliders'
 import { TERRAIN_STATS } from '@/render/patches/terrain'
 import { landmarksOf, tourOrder } from '@/generation/landmarks'
 import { createRig } from '@/ui/rig'
@@ -111,6 +112,17 @@ const recordStart = Number(new URLSearchParams(window.location.search).get('reco
 const recordClock = fixedClock(Number.isFinite(recordStart) && recordStart > 0 ? recordStart : 1000)
 const clock = recording ? recordClock : systemClock
 attachIdle(document.body, clock)
+attachSliders()
+// ? shows the keys; any other key, or a press, puts the card away.
+const keysCard = document.getElementById('keys')
+window.addEventListener('keydown', (event) => {
+  if (keysCard === null) return
+  if (event.key === '?') keysCard.hidden = !keysCard.hidden
+  else keysCard.hidden = true
+})
+window.addEventListener('pointerdown', () => {
+  if (keysCard !== null) keysCard.hidden = true
+})
 // Recording is for looking at the planet; the splash would only sit in front of it.
 if (recording) document.body.classList.remove('booting')
 // Over the trees as well as the ground: at its lowest the glide flew through the pines.
@@ -491,6 +503,7 @@ async function travel(world: SystemWorld): Promise<void> {
   dials = DEFAULT_DIALS
   window.history.pushState(null, '', linkFor(seed, dials, undefined, home))
   await show(true)
+  hud.arrival(planet.name, KINDS[planet.kind].label)
   systemPanel.hide()
   rig.dolly(3.2, 2800)
   journeying = false
