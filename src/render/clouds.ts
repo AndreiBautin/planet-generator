@@ -186,6 +186,8 @@ function layerMaterial(planet: Planet, texture: THREE.Texture, layer: Layer): TH
             float dawnLine = (dot(normalize(vCloudUp), directionalLights[0].direction) - 0.03) / 0.07;
             float farSeen = smoothstep(0.15, 0.6, length(vViewPosition));
             reflectedLight.directDiffuse *= mix(vec3(1.0), vec3(1.3, 0.6, 0.32), exp(-dawnLine * dawnLine) * farSeen);
+            float nightSide = 1.0 - smoothstep(-0.25, 0.05, dot(normalize(vCloudUp), directionalLights[0].direction));
+            reflectedLight.indirectDiffuse *= 1.0 - 0.8 * nightSide * farSeen;
           }
           // Light through the thin edges, against the sun: the silver
           // lining, and a brighter underside where the deck is thin.

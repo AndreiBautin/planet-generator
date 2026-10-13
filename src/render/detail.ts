@@ -888,6 +888,11 @@ export function withGroundDetail(
             float farSeen = smoothstep(0.15, 0.6, length(vViewPosition));
             vec3 warm = mix(vec3(1.0), vec3(1.25, 0.62, 0.34), exp(-dawnLine * dawnLine) * farSeen);
             reflectedLight.directDiffuse *= warm;
+            // From afar the sky's light is one fill over the whole planet,
+            // and it lit the night side blue-grey: dimmed where the sun is
+            // down, so the night is dark and the towns' lights carry it.
+            float nightSide = 1.0 - smoothstep(-0.25, 0.05, dot(groundUp, directionalLights[0].direction));
+            reflectedLight.indirectDiffuse *= 1.0 - 0.8 * nightSide * farSeen;
           }
           // Seen from under the sea, the sun through the moving surface
           // draws a net of light on the sea bed: two drifting fields, bright
@@ -1236,6 +1241,17 @@ export function withWaterDetail(material: THREE.Material): THREE.Material {
           float ringDim = (1.0 - ringShadowFrom(vDetailPosition, detailCloudSun)) * (1.0 - moonShadowFrom(vDetailPosition, detailCloudSun));
           reflectedLight.directDiffuse *= ringDim;
           reflectedLight.directSpecular *= ringDim;
+          // From afar the night side's sea is dark too, as the ground is:
+          // the sky's one fill and its mirror both dimmed where the sun is down.
+          #if NUM_DIR_LIGHTS > 0
+          {
+            vec3 seaUp = normalize(detailNormalMatrix * normalize(vDetailPosition));
+            float nightSide = 1.0 - smoothstep(-0.25, 0.05, dot(seaUp, directionalLights[0].direction));
+            float dim = 1.0 - 0.8 * nightSide * smoothstep(0.15, 0.6, length(vViewPosition));
+            reflectedLight.indirectDiffuse *= dim;
+            reflectedLight.indirectSpecular *= dim;
+          }
+          #endif
           // From under the sea the surface is a bright, moving ceiling: the
           // sky let through, rippled. Its underside faces away from the sun
           // and would otherwise be drawn dark.
