@@ -33,6 +33,15 @@ const element = <T extends HTMLElement>(id: string, type: new () => T): T => {
   return found
 }
 
+/** Where a point of the map is, as a person reads it: "12.3° N · 45.6° E". */
+export function placeLabel(across: number, down: number): string {
+  const latitude = (0.5 - down) * 180
+  const longitude = (across - 0.5) * 360
+  const north = `${Math.abs(latitude).toFixed(1)}° ${latitude < 0 ? 'S' : 'N'}`
+  const east = `${Math.abs(longitude).toFixed(1)}° ${longitude < 0 ? 'W' : 'E'}`
+  return `${north} · ${east}`
+}
+
 export function attachMap(handlers: MapHandlers): MapPanel {
   const sheet = element('map', HTMLElement)
   const title = element('map-title', HTMLElement)
@@ -66,6 +75,20 @@ export function attachMap(handlers: MapHandlers): MapPanel {
     frame = undefined
   }
   element('map-close', HTMLButtonElement).addEventListener('click', close)
+
+  // Under a pointer, where it is; elsewhere, the hint.
+  const where = element('map-where', HTMLElement)
+  canvas.addEventListener('pointermove', (event) => {
+    if (!waiting.hidden) return
+    const box = canvas.getBoundingClientRect()
+    where.textContent = placeLabel(
+      Math.min(1, Math.max(0, (event.clientX - box.left) / box.width)),
+      Math.min(1, Math.max(0, (event.clientY - box.top) / box.height)),
+    )
+  })
+  canvas.addEventListener('pointerleave', () => {
+    where.textContent = ''
+  })
 
   canvas.addEventListener('click', (event) => {
     if (!waiting.hidden) return

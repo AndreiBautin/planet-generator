@@ -450,7 +450,16 @@
       .map-marker[data-flying='true'] .map-ring {
         display: none;
       }
+      .map-where {
+        font-family: var(--mono);
+        font-size: 12px;
+        color: var(--ink);
+        font-variant-numeric: tabular-nums;
+      }
       .map-hint {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
         max-width: 1100px;
         margin: 10px auto 0;
         font-size: 13px;
@@ -1443,7 +1452,10 @@
           </span>
         </div>
       </div>
-      <p class="map-hint">Press anywhere on the map to fly there. M opens and closes it.</p>
+      <p class="map-hint">
+        <span>Press anywhere on the map to fly there. M opens and closes it.</span>
+        <span class="map-where" id="map-where"></span>
+      </p>
     </section>
     <section class="atlas" id="atlas" hidden aria-label="Atlas of worlds">
       <header class="atlas-head">
