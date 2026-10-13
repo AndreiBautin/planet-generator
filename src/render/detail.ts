@@ -1221,6 +1221,10 @@ export function withWaterDetail(material: THREE.Material): THREE.Material {
           float sparkle = detailNoise(vDetailPosition * 3000.0 + vec3(detailTime * 1.1, -detailTime * 0.8, detailTime * 0.5) * 0.004);
           float glassy = seaNear * (1.0 - smoothstep(0.9, 1.0, v_ice));
           roughnessFactor = mix(roughnessFactor, 0.11 + 0.2 * sparkle, glassy * 0.85);
+          // From afar a pixel spans many waves facing every way, so the sea
+          // is rougher there: the sun's glint is a broad soft sheen, as it
+          // is on a real ocean from orbit, not a hard white spot.
+          roughnessFactor = max(roughnessFactor, 0.36 * smoothstep(0.4, 1.8, length(vViewPosition)));
         }`,
       )
       .replace(
