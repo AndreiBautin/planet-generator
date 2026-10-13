@@ -246,10 +246,15 @@ checks nothing. The pre-push hook runs `pnpm verify`; CI runs the same.
   height was 20–80 pixels tall. Now a tree stands on a vertex of the
   `TREE_LEVEL` grid; finer ground shows its ancestor's trees, which stand
   exactly on it; coarser patches carry a quarter as many trees a level up,
-  each twice the size. Over the ground's own blend distance, the trees a
-  parent lacks shrink to nothing and the ones it shares grow to its size,
-  so a change of level draws the same picture — coverage is constant and
-  nothing appears. No worker time: the ground already holds the vertices.
+  **each the same size**. Over the ground's own blend distance, the trees a
+  parent lacks dissolve (an ordered dither, `vTreeKeep`), each over its own
+  short stretch of the blend, and the ones it shares stay. **No tree ever
+  changes size**: growing the shared ones to twice the height kept the
+  cover constant, and was reported as trees growing and shrinking as the
+  glide changed height. Dithered all through the blend, the woods read as
+  a screen door. The distance cap on a tree's height went with it (it too
+  shrank trees as the eye came down). No worker time: the ground already
+  holds the vertices.
   **The instanced geometry needs the model's index copied too**: without
   it every frame with a tree in it came out empty, with no error anywhere.
   Culled by each patch's bounds, as the model's own know nothing of where

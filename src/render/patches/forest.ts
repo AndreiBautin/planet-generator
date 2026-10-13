@@ -16,16 +16,18 @@ import type { PatchData } from './patch-data'
  * that level (terrain.ts), whose vertices are its own every second or
  * fourth one — so a tree stands exactly on the ground whatever level is
  * drawn under it. Coarser patches have a quarter as many vertices a level
- * up, and each stands for the four trees it replaces: drawn twice the
- * size, a clump rather than a tree.
+ * up, and so a quarter as many trees, each the same size as ever: far
+ * off, the painted canopy carries the wood.
  *
  * The change between levels is the ground's own blend. Over the distance
  * where a patch gives way to its parent, the trees on its odd vertices —
- * the ones the parent does not have — shrink to nothing, and the trees on
- * the vertices it shares with the parent grow to the parent's size; the
- * parent then draws exactly what was drawn. So nothing appears: a wood
- * thins and coarsens with distance continuously, and nothing waits on a
- * worker, as the ground already holds every vertex the trees need.
+ * the ones the parent does not have — dissolve one by one, each over a
+ * short stretch of the blend of its own; the ones it shares stay as they
+ * are, and the parent then draws exactly those. No tree ever changes
+ * size: an earlier scheme grew the shared trees to twice their height to
+ * keep the cover constant, and as the eye's height moved the blend every
+ * tree swelled and dwindled. Nothing waits on a worker, as the ground
+ * already holds every vertex the trees need.
  *
  * Which vertices hold a tree is the painted canopy (`pattern.x`, which the
  * ground draws its woods from) against a hash of where the vertex is, so a
@@ -153,8 +155,8 @@ export function forestFor(
   if (level < TREE_COARSEST || level > TREE_LEVEL) return []
   const side = segments + 1
   const found: number[] = []
-  // Each vertex stands for 4^(TREE_LEVEL − level) trees, so is drawn that much bigger in area.
-  const scale = 2 ** (TREE_LEVEL - level)
+  // A coarser patch carries fewer trees, each the same size as a fine
+  // patch's: far off, the painted canopy (detail.ts) carries the wood.
   for (let j = 0; j < side; j += 1) {
     for (let i = 0; i < side; i += 1) {
       const v = j * side + i
@@ -188,7 +190,7 @@ export function forestFor(
         chance,
         fine,
         coarse,
-        (0.6 + roll * 0.8) * scale,
+        0.6 + roll * 0.8,
         // The colour packed into one float, three bytes' worth of shade.
         Math.floor(Math.min(1, tint.r * shade) * 255) * 65536 +
           Math.floor(Math.min(1, tint.g * shade) * 255) * 256 +
@@ -202,7 +204,7 @@ export function forestFor(
       new THREE.BufferAttribute(patch.positions.subarray(0, side * side * 3), 3),
     )
     .getBoundingSphere(new THREE.Sphere())
-  bounds.radius += TREE_HEIGHT * 1.5 * scale * 2
+  bounds.radius += TREE_HEIGHT * 1.5 * 2
   const count = found.length / STRIDE
   if (count === 0) return []
   const geometry = new THREE.InstancedBufferGeometry()
@@ -242,6 +244,7 @@ attribute vec3 broadleaf;
 attribute vec3 broadleafNormal;
 attribute vec3 treeWood;
 attribute vec2 treeLook;
+varying float vTreeKeep;
 varying vec3 vTreeTint;
 varying float vTreeHeight;
 varying float vTreeLeaf;
@@ -271,18 +274,19 @@ const TREE_PLACE = /* glsl */ `
   // In the wood at the blend between this level and the parent's.
   float wood = mix(treeWood.y, treeWood.z, morph) * 1.15;
   float present = smoothstep(treeWood.x, treeWood.x + 0.08, wood);
-  // Shared with the parent: grows to its size. Not: shrinks away.
-  float fate = treeFate.y > 0.5 ? mix(1.0, 2.0, morph) : 1.0 - morph;
-  float size = treeLook.x * ${TREE_HEIGHT.toFixed(6)} * fate * present;
-  // A coarse patch's trees stand for many and are drawn for its distance;
-  // stood in close to the eye while the finer patches load, they were
-  // drawn there at four times a tree's height, and the glide passed a
-  // single pine filling half the view. Never taller than a share of their
-  // distance — and never shorter than the finest level's tallest, so the
-  // trees the eye flies among are untouched.
-  float treeScale = length((modelMatrix * vec4(1.0, 0.0, 0.0, 0.0)).xyz);
-  float treeAway = length((modelViewMatrix * vec4(ground, 1.0)).xyz) / max(treeScale, 1e-6);
-  size = min(size, max(${(TREE_HEIGHT * 1.4).toFixed(6)}, treeAway * 0.35));
+  // A tree is always its own size. Shared with the parent it simply
+  // stays; not, it dissolves (vTreeKeep, a dither in the fragment shader)
+  // rather than shrinking. Growing the shared ones to twice their height
+  // and shrinking the rest, with the blend following the eye's distance,
+  // made every tree swell and dwindle as the glide changed height:
+  // reported as trees growing and shrinking in a way nothing natural does.
+  // Each goes at its own point in the blend, over a short stretch of it,
+  // so a wood thins tree by tree and any one tree is dithered only
+  // briefly: dithered all through the blend, the woods read as a screen.
+  float leaves = fract(treeWood.x * 71.37);
+  vTreeKeep = treeFate.y > 0.5 ? 1.0 : smoothstep(leaves * 0.84, leaves * 0.84 + 0.16, 1.0 - morph);
+  // The wood's own edge as before, by size: it follows the painted canopy.
+  float size = treeLook.x * ${TREE_HEIGHT.toFixed(6)} * present;
   vec3 up = normalize(ground);
   mat3 frame = treeFrame(up, treeWood.x * 40.0);
   // Set a little into the ground, so a trunk on a slope is not floating.
@@ -309,6 +313,15 @@ const TREE_PLACE = /* glsl */ `
   vec2 lean = vec2(cos(treeOwn.y * 6.2832), sin(treeOwn.y * 6.2832));
   shape.xz += lean * shape.y * shape.y * (treeOwn.z - 0.3) * 0.14;
   transformed = ground - up * size * 0.08 + frame * (shape * size);
+`
+
+const TREE_DITHER = /* glsl */ `
+varying float vTreeKeep;
+// Dissolving, not shrinking: a fragment is kept while an ordered dither
+// across the screen is under the tree's share (vTreeKeep, TREE_PLACE).
+float treeDither() {
+  return fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));
+}
 `
 
 export function treeMaterial(): THREE.MeshStandardMaterial {
@@ -360,6 +373,7 @@ export function treeMaterial(): THREE.MeshStandardMaterial {
         vTreePlanet = transformed;`,
       )
     shader.fragmentShader =
+      TREE_DITHER +
       'varying vec3 vTreeTint;\nvarying float vTreeHeight;\nvarying float vTreeLeaf;\nvarying vec3 vTreeUp;\nvarying vec3 vTreePlanet;\nuniform vec4 detailMoons[2];\nuniform vec3 treeSun;\n' +
       MOON_SHADOW +
       TOWN_GLOW_GLSL +
@@ -374,6 +388,7 @@ export function treeMaterial(): THREE.MeshStandardMaterial {
           /* glsl */ `#include <color_fragment>
         // The model is white where the tint shows and dark at the trunk; a
         // crown is darker underneath, which is most of what makes it solid.
+        if (treeDither() >= vTreeKeep) discard;
         diffuseColor.rgb *= mix(vec3(1.0), vTreeTint, step(0.5, diffuseColor.g));
         diffuseColor.rgb *= 0.55 + 0.45 * smoothstep(0.0, 0.9, vTreeHeight);`,
         )
@@ -427,6 +442,11 @@ export function treeDepthMaterial(): THREE.MeshDepthMaterial {
     shader.vertexShader = (TREE_VERTEX + shader.vertexShader).replace(
       '#include <begin_vertex>',
       `#include <begin_vertex>\n${TREE_PLACE}`,
+    )
+    // The shadow dissolves with the tree.
+    shader.fragmentShader = (TREE_DITHER + shader.fragmentShader).replace(
+      'void main() {',
+      'void main() {\n  if (treeDither() >= vTreeKeep) discard;',
     )
   }
   material.customProgramCacheKey = () => 'planet-trees-depth'
