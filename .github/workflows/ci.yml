@@ -35,3 +35,11 @@ jobs:
       # What ships to the browser is three.js alone; a known hole in it
       # fails the build. Dev tools never reach a user, so are not audited here.
       - run: pnpm audit --prod
+      # Every package comes from the registry with an integrity hash. A git
+      # or tarball resolution skips the registry's checks and can change
+      # under the same lockfile; refuse one rather than notice it later.
+      - name: Lockfile resolves from the registry only
+        run: |
+          if grep -n 'resolution:' pnpm-lock.yaml | grep -v 'resolution: {integrity: sha512-'; then
+            echo "A dependency resolves outside the npm registry."; exit 1
+          fi

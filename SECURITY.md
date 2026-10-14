@@ -31,8 +31,16 @@ seed link from leaking to any page reached from it.
 
 One runtime dependency, three.js. CI runs `pnpm audit --prod`; Dependabot
 proposes npm and Actions updates weekly; every action is pinned to a commit;
-checkout keeps no token. The deploy needs `pages: write` and `id-token:
+checkout keeps no token; CI refuses a lockfile entry that is not a registry package with a sha512 integrity hash, and the pre-push hook runs the same audit. The deploy needs `pages: write` and `id-token:
 write` and nothing else.
+
+## Sharing an origin
+
+Every Pages project of an account is served from one `github.io` origin and
+shares its storage. The service worker's caches are `planet-generator-*` and
+it deletes only those (and its own pre-prefix `planet-<12 hex>` names); the
+atlas key is `planet-generator.atlas.v1`, and whatever is under it is parsed
+as hostile. The worker's scope is the project's base path.
 
 ## Deliberately not done, and why
 
