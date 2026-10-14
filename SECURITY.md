@@ -34,6 +34,17 @@ proposes npm and Actions updates weekly; every action is pinned to a commit;
 checkout keeps no token; CI refuses a lockfile entry that is not a registry package with a sha512 integrity hash, and the pre-push hook runs the same audit. The deploy needs `pages: write` and `id-token:
 write` and nothing else.
 
+## On GitHub
+
+CodeQL (`security-extended`) runs on every push, every PR and weekly; its
+one finding, the build worker's `onmessage` without an origin check, is
+dismissed as a false positive for the reason under "Deliberately not done".
+Secret scanning with push protection, Dependabot alerts and security
+updates, and private vulnerability reporting are on. `main` requires the
+CI `Verify` check, refuses force-pushes and deletion; the owner can still
+push directly (admins are not enforced), so the pre-push hook is the gate
+there.
+
 ## Sharing an origin
 
 Every Pages project of an account is served from one `github.io` origin and
