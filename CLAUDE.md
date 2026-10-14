@@ -2522,3 +2522,28 @@ compare a change by the part it touched, not the frame's total.
 - **A record-mode screenshot can show the splash long after the planet
   is up**: draw `canvas.toDataURL()` into an overlay `<img>` to see the
   frame.
+
+### Round two
+
+- **Patch arrivals are outside the frame the bench times** (they land in
+  the worker's message handler). Measured separately they were 11 ms a
+  frame of a tour, 83% the water sheet; `waterSheetOf`
+  (patches/water-sheet.ts) runs in the worker now. Time a new per-arrival
+  step the same way, with a probe round `nodeFor`, not with the bench.
+- **The shadow map is drawn every other frame** (`SHADOW_EVERY`): it is
+  sampled through the matrix it was drawn with, so a skipped frame is a
+  frame stale, never misplaced. It was a third of a held glide's GPU time.
+- **Trees past `TREE_DETAIL_REACH` (0.05) use a 60-triangle model**
+  (`setTreeDetail`, forest.ts): trees were 84% of the phone profile's
+  triangles.
+- **Nothing that reads the drainage map runs on the page**: the map
+  itself (`hydrology` job, every world), the tour's sights and the
+  volcanoes (`sights` job). Anything new that reads it goes in a job.
+- **Phone profile, after** (`?record&cores=4`, 375 × 812, tour): 0.94M
+  triangles, 180 calls, GPU 9.5 ms median, script 10.8 ms median.
+- **Left**: batching the ground and water (330 + 199 draws in a glide;
+  needs `BatchedMesh` or multi-draw, a rewrite of how patches are held),
+  and the stitch in the shader. Both need on-screen checking.
+- **A hidden pane left for long throttles its timers to seconds**; a run
+  of `await sleep` steps then crawls and `javascript_tool` times out. A
+  reload does not cure it; showing the pane does.
