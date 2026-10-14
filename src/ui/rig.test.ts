@@ -82,3 +82,95 @@ describe('under the sea', () => {
     expect(Math.max(...steps)).toBeLessThan(0.003)
   })
 })
+
+describe('the rig between orbit and flight', () => {
+  const GROUND = 1.01
+  const start = (): {
+    rig: ReturnType<typeof createRig>
+    clock: ReturnType<typeof fixedClock>
+  } => {
+    const clock = fixedClock(0)
+    return { rig: createRig(clock, () => () => GROUND), clock }
+  }
+  const over = (): { yaw: number; pitch: number } => ({ yaw: 0.3, pitch: 0.2 })
+
+  it('flies after Fly and is back in orbit once it has landed', () => {
+    const { rig, clock } = start()
+    expect(rig.flying()).toBe(false)
+    expect(rig.height().kind).toBe('orbit')
+    rig.fly({ position: [0, 0, 1], heading: [1, 0, 0] })
+    flyFor(rig, clock, 4)
+    expect(rig.flying()).toBe(true)
+    expect(rig.height().kind).toBe('glide')
+    expect(rig.viewpoint()).toBeDefined()
+    rig.land(over)
+    expect(rig.flying()).toBe(false)
+    flyFor(rig, clock, 6)
+    expect(rig.view().blend).toBe(0)
+    expect(rig.viewpoint()).toBeUndefined()
+  })
+
+  it('holds a dive as a glide at once, and drops a rise straight to the orbit', () => {
+    const diving = start()
+    diving.rig.fly({ position: [0, 0, 1], heading: [1, 0, 0] })
+    diving.rig.hold('frame')
+    expect(diving.rig.flying()).toBe(true)
+    expect(diving.rig.view().blend).toBe(1)
+
+    const rising = start()
+    rising.rig.fly({ position: [0, 0, 1], heading: [1, 0, 0] })
+    flyFor(rising.rig, rising.clock, 4)
+    rising.rig.land(over)
+    rising.rig.hold('frame')
+    expect(rising.rig.view().blend).toBe(0)
+    expect(rising.rig.viewpoint()).toBeUndefined()
+  })
+
+  it('places a held glide with its eye exactly the asked height over the ground', () => {
+    // What lets a shot link reproduce the picture (postcard.ts).
+    const { rig } = start()
+    rig.hold('still')
+    rig.place({ kind: 'glide', position: [0, 1, 0], heading: [1, 0, 0], altitude: 0.02, tilt: 0.1 })
+    const eye = rig.view().surface?.eye
+    expect(eye).toBeDefined()
+    expect(Math.hypot(...(eye ?? [0, 0, 0]))).toBeCloseTo(GROUND + 0.02, 9)
+    expect(rig.viewpoint()?.tilt).toBeCloseTo(0.1, 9)
+  })
+
+  it('keeps an orbit placed or set within its distances', () => {
+    const { rig } = start()
+    rig.place({ kind: 'orbit', yaw: 0, pitch: 9, distance: 99 })
+    expect(rig.height().value).toBe(6)
+    rig.setHeight(0.5)
+    expect(rig.height().value).toBe(1.9)
+  })
+
+  it('opens the system only on a deliberate push past the farthest orbit', () => {
+    const { rig } = start()
+    let opened = 0
+    rig.onBeyond(() => (opened += 1))
+    rig.gestures.wheel(400)
+    expect(opened).toBe(0)
+    rig.setHeight(6)
+    rig.gestures.wheel(200)
+    expect(opened).toBe(0)
+    rig.gestures.wheel(300)
+    expect(opened).toBe(1)
+  })
+
+  it('stops the tour when a hand takes over, and cut drops everything', () => {
+    const { rig, clock } = start()
+    const said: boolean[] = []
+    rig.onTour((on) => said.push(on))
+    rig.fly({ position: [0, 0, 1], heading: [1, 0, 0] })
+    flyFor(rig, clock, 4)
+    rig.tour(true)
+    expect(rig.touring()).toBe(true)
+    rig.nudge(0.04, 0)
+    expect(rig.touring()).toBe(false)
+    expect(said).toEqual([true, false])
+    rig.cut()
+    expect(rig.flying()).toBe(false)
+    expect(rig.view().blend).toBe(0)
+  })
+})
