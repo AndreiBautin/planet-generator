@@ -2556,10 +2556,14 @@ compare a change by the part it touched, not the frame's total.
   shader version needs four weights a patch on the GPU — a texture the
   ground's phone texture budget cannot spare, or a per-patch uniform that
   makes three upload every ground uniform on each of ~330 draws.
-- **Left**: batching the ground and water (330 + 199 draws in a glide;
-  needs `BatchedMesh` or multi-draw, a rewrite of how patches are held),
-  and a frame of ~400 ms on 83tzj46 after arrival as the towns and the
-  rest are added and compile.
+- **Batching the ground was prototyped and not adopted** — it is on the
+  `batch-prototype` branch, behind `?batch`. It drew correctly and halved
+  the draw calls, but saved only 0.7 ms of render script over a tour and
+  cost ~30 ms more GPU, for reasons not found (see that commit). **The
+  ground's vertex shader is at WebGL's sixteen attributes**: any new
+  per-vertex attribute on the ground must replace one.
+- **Left**: a frame of ~400 ms on 83tzj46 after arrival as the towns and
+  the rest are added and compile.
 - **A hidden pane left for long throttles its timers to seconds**; a run
   of `await sleep` steps then crawls and `javascript_tool` times out. A
   reload does not cure it; showing the pane does.
