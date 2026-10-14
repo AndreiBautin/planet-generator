@@ -236,6 +236,8 @@ interface Coming {
   readonly keepClouds: boolean
   readonly born: boolean
   readonly resolve: (shown: boolean) => void
+  /** Its ground's and clouds' programs: being made (false), made (true), or not asked yet. */
+  compiled?: boolean
 }
 
 /**
@@ -772,6 +774,28 @@ export function startScene(
   }
 
   const isMaterial = (value: unknown): value is THREE.Material => value instanceof THREE.Material
+  /**
+   * Make a coming world's ground and cloud programs before it is shown,
+   * for the target the frame is drawn into and with the scene's lights
+   * (warm.ts says why the target matters). What `arrive` builds — the air,
+   * the sky, the heavens — is small and still compiles on first draw.
+   */
+  const precompile = async (next: Coming): Promise<void> => {
+    const batch = new THREE.Group()
+    const parts: THREE.Object3D[] = [next.terrain.group, ...next.terrain.warmers()]
+    if (next.clouds !== undefined) parts.push(next.clouds)
+    const parents = parts.map((part) => part.parent)
+    for (const part of parts) batch.add(part)
+    const held = renderer.getRenderTarget()
+    renderer.setRenderTarget(composer?.readBuffer ?? null)
+    const made = renderer.compileAsync(batch, camera, scene)
+    renderer.setRenderTarget(held)
+    parts.forEach((part, k) => {
+      batch.remove(part)
+      parents[k]?.add(part)
+    })
+    await made.catch(() => undefined)
+  }
   /** When to warm the shaders next, soonest first. */
   let warmDue: number[] = []
   const warm = (): void => {
@@ -1200,8 +1224,18 @@ export function startScene(
       coming.terrain.update(inPlanetFrame(camera.position, turn, 1), viewCone(turn))
       if (coming.terrain.ready && (coming.keepClouds || coming.clouds !== undefined)) {
         const next = coming
-        coming = undefined
-        arrive(next)
+        // Its programs made first, without blocking (`precompile`): drawn
+        // at once, the first frame of a world compiled them all — 1.2 s on
+        // a temperate world, 2.9 s on a molten one.
+        if (next.compiled === undefined) {
+          next.compiled = false
+          void precompile(next).then(() => {
+            next.compiled = true
+          })
+        } else if (next.compiled) {
+          coming = undefined
+          arrive(next)
+        }
       }
     }
     if (shown !== undefined) {
