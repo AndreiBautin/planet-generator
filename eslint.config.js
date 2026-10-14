@@ -39,6 +39,25 @@ const renderBoundary = {
   ],
 }
 
+const appBoundary = {
+  patterns: [
+    {
+      group: ['three', 'three/*', '@/render/*', '@/ui/*', '../render/*', '../ui/*'],
+      message:
+        'app/ is the link, config, clock and atlas model: pure, tested in Node. It may use generation/ and shared/, not the renderer or the controls.',
+    },
+  ],
+}
+
+const sharedBoundary = {
+  patterns: [
+    {
+      group: ['@/*', '../*', 'three', 'three/*'],
+      message: 'shared/ is the bottom layer: everything may import it, so it imports nothing.',
+    },
+  ],
+}
+
 /** Randomness and time are taken as parameters, never read from the world. */
 const ambient = [
   {
@@ -80,7 +99,15 @@ export default tseslint.config(
     rules: {
       '@typescript-eslint/switch-exhaustiveness-check': 'error',
       'no-console': ['error'],
-      'no-restricted-syntax': ['error', ...ambient],
+      'no-restricted-syntax': [
+        'error',
+        ...ambient,
+        {
+          selector: "NewExpression[callee.name='Worker']",
+          message:
+            'Workers are made in one place, render/builder.ts, which keeps only the newest build and caps the queue.',
+        },
+      ],
       'no-restricted-globals': [
         'error',
         {
@@ -105,6 +132,14 @@ export default tseslint.config(
   {
     files: ['src/render/**/*.ts'],
     rules: { 'no-restricted-imports': ['error', renderBoundary] },
+  },
+  {
+    files: ['src/app/**/*.ts'],
+    rules: { 'no-restricted-imports': ['error', appBoundary] },
+  },
+  {
+    files: ['src/shared/**/*.ts'],
+    rules: { 'no-restricted-imports': ['error', sharedBoundary] },
   },
   // The one place each forbidden thing is allowed to live.
   {

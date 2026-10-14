@@ -89,6 +89,7 @@ export function createBuilder(cores: number): Builder {
   const lanes: Lane[] = []
   try {
     for (let at = 0; at < count; at += 1) {
+      // eslint-disable-next-line no-restricted-syntax -- the one place a worker is made
       const worker = new Worker(new URL('./build.worker.ts', import.meta.url), { type: 'module' })
       const lane: Lane = { worker, held: 0 }
       worker.onmessage = (event: MessageEvent<WorkResult>) => {
