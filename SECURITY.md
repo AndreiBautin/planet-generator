@@ -22,9 +22,10 @@ Names and text go in by `textContent`.
 `index.html` carries a Content-Security-Policy: script, workers, styles,
 images and media from the site itself (plus `data:` and `blob:` for the
 atlas pictures and the clips), no plugins, no `<base>`, no form targets.
-`connect-src` is `'self'` in a build; the dev server's `ws:` is stripped by
-the `planet-strict-csp` plugin in `vite.config.ts`, which fails the build if
-it cannot find it. `<meta name="referrer" content="no-referrer">` keeps a
+`connect-src` and `worker-src` are `'self'` in a build; the dev server's
+`ws:` and `blob:` workers (its hot reload and its reconnect after a restart)
+are stripped by the `planet-strict-csp` plugin in `vite.config.ts`, which
+fails the build if it cannot find them. `<meta name="referrer" content="no-referrer">` keeps a
 seed link from leaking to any page reached from it.
 
 ## Supply chain

@@ -66,18 +66,25 @@ function serviceWorker(): Plugin {
 }
 
 /**
- * The page's Content-Security-Policy allows `ws:` so the dev server's hot
- * reload can connect; a built page needs no socket, so the build takes it
- * out. A policy that let any socket host through is an exfiltration path.
+ * The page's Content-Security-Policy allows `ws:` and `blob:` workers so the
+ * dev server's hot reload can connect and reconnect; a built page needs
+ * neither, so the build takes them out. A policy that let any socket host through is an exfiltration path.
  */
 function strictPolicy(): Plugin {
   return {
     name: 'planet-strict-csp',
     apply: 'build',
     transformIndexHtml(html) {
-      const strict = html.replace("connect-src 'self' ws: wss:", "connect-src 'self'")
-      if (strict === html) throw new Error('index.html CSP: dev connect-src not found')
-      return strict
+      // The dev server's hot reload: its socket, and the blob worker its
+      // client reconnects through after a restart.
+      const loosened: readonly (readonly [string, string])[] = [
+        ["connect-src 'self' ws: wss:", "connect-src 'self'"],
+        ["worker-src 'self' blob:", "worker-src 'self'"],
+      ]
+      return loosened.reduce((page, [dev, built]) => {
+        if (!page.includes(dev)) throw new Error(`index.html CSP: dev "${dev}" not found`)
+        return page.replace(dev, built)
+      }, html)
     },
   }
 }

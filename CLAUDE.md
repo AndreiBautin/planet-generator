@@ -194,7 +194,8 @@ decision, in the commit message.
 
 - **The page has a CSP** (`index.html`): anything from another origin, or a
   new `blob:`/`data:` use outside images and media, is blocked silently.
-  The build strips the dev `ws:` and fails if it cannot find it.
+  The build strips the dev server's `ws:` and `blob:` workers (its
+  reconnect after a restart) and fails if it cannot find them.
 - **Pages shares one origin across the account**: the service worker's
   caches are `planet-generator-*` and it deletes only those.
 - **The service worker matches with `ignoreVary`**, and its version hashes
