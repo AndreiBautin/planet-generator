@@ -58,8 +58,7 @@ describe('forestFor', () => {
     const below = childrenOf(key)[0]
     expect(treesOf(above).size).toBe(0)
     if (below !== undefined) expect(treesOf(below).size).toBe(0)
-    // Samples four levels of patches: slow when the machine is loaded.
-  }, 20_000)
+  })
 
   it('makes the same decision about a tree in a patch and in its parent', () => {
     // What keeps a change of level from changing the picture: a tree the

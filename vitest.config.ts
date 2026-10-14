@@ -10,6 +10,10 @@ export default defineConfig({
     // Generation is pure math and runs in Node: no DOM, no WebGL, which is
     // also what keeps it honest about not reaching for either.
     environment: 'node',
+    // Many tests build a planet's drainage map, settlements or patches:
+    // seconds each, and past the default 5 s whenever the machine is busy
+    // (the pre-push gate failed on that, not on a wrong number).
+    testTimeout: 30_000,
     include: ['src/**/*.test.ts'],
     coverage: {
       provider: 'v8',

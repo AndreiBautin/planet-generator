@@ -27,7 +27,5 @@ describe('the hydrology job', () => {
     const again = answer({ id: 2, kind: 'hydrology', seed, dials: DEFAULT_DIALS })
     if (again.kind !== 'hydrology') throw new Error('wrong kind')
     for (const buffer of transferables(result)) expect(transferables(again)).not.toContain(buffer)
-    // Two drainage maps built (the worker's, memoised, and the page's own):
-    // seconds, and more under a loaded machine.
-  }, 20_000)
+  })
 })
