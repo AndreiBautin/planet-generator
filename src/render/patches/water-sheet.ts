@@ -1,3 +1,4 @@
+import { edgeOrder } from './patch-data'
 import { SEA_RADIUS } from '../water'
 
 /**
@@ -33,18 +34,17 @@ export function waterSheetOf(patch: {
   const depth = new Float32Array(count)
   const coarseDepth = new Float32Array(count)
   const inland = new Float32Array(count)
-  const edgeCoarse = new Map<string, number>()
   // The skirt's vertices sit under the edge's, lowered: read as their own
   // depth they made every patch boundary a line of deeper, darker water.
-  // A skirt vertex shares its edge vertex's direction, so it takes that
-  // vertex's depth.
+  // A skirt vertex takes its edge vertex's depth, found by the order the
+  // skirt was laid in (`edgeOrder`). Matched by direction through string
+  // keys this was most of the sheet's cost — and the sheet, moved into the
+  // worker, made the ground arrive measurably later.
   const side = Math.round(-2 + Math.sqrt(4 + count))
   const grid = side * side
-  const edgeDepth = new Map<string, number>()
-  const keyOf = (x: number, y: number, z: number): string => {
-    const l = Math.hypot(x, y, z) || 1
-    return `${(x / l).toFixed(6)},${(y / l).toFixed(6)},${(z / l).toFixed(6)}`
-  }
+  const hangs = new Int32Array(count - grid)
+  let at = 0
+  for (const edge of edgeOrder(side - 1)) for (const vertex of edge) hangs[at++] = vertex
   for (let vertex = 0; vertex < count; vertex += 1) {
     const x = patch.positions[vertex * 3] ?? 0
     const y = patch.positions[vertex * 3 + 1] ?? 0
@@ -68,11 +68,10 @@ export function waterSheetOf(patch: {
     if (vertex < grid) {
       depth[vertex] = surface - length
       coarseDepth[vertex] = coarse
-      edgeDepth.set(keyOf(x, y, z), depth[vertex] ?? 0)
-      edgeCoarse.set(keyOf(x, y, z), coarse)
     } else {
-      depth[vertex] = edgeDepth.get(keyOf(x, y, z)) ?? surface - length
-      coarseDepth[vertex] = edgeCoarse.get(keyOf(x, y, z)) ?? coarse
+      const from = hangs[vertex - grid] ?? 0
+      depth[vertex] = depth[from] ?? surface - length
+      coarseDepth[vertex] = coarseDepth[from] ?? coarse
     }
     normals[vertex * 3] = x / length
     normals[vertex * 3 + 1] = y / length
@@ -105,16 +104,8 @@ export function waterSheetOf(patch: {
     settled[vertex] = lake
   }
   // The skirt follows the edge vertex it hangs from.
-  const edgeInland = new Map<string, number>()
-  for (let vertex = 0; vertex < count; vertex += 1) {
-    const key = keyOf(
-      patch.positions[vertex * 3] ?? 0,
-      patch.positions[vertex * 3 + 1] ?? 0,
-      patch.positions[vertex * 3 + 2] ?? 1,
-    )
-    if (vertex < grid) edgeInland.set(key, settled[vertex] ?? 0)
-    else settled[vertex] = edgeInland.get(key) ?? 0
-  }
+  for (let vertex = grid; vertex < count; vertex += 1)
+    settled[vertex] = settled[hangs[vertex - grid] ?? 0] ?? 0
   inland.set(settled)
   return { positions, normals, depth, coarseDepth, inland }
 }

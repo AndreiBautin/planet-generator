@@ -756,7 +756,7 @@ const smoothRange = (from: number, to: number, value: number): number => {
 }
 
 /** The grid vertices along each edge, in order: bottom, top, left, right. */
-function edgeOrder(segments: number): readonly (readonly number[])[] {
+export function edgeOrder(segments: number): readonly (readonly number[])[] {
   const side = segments + 1
   const along = Array.from({ length: side }, (_, k) => k)
   return [
