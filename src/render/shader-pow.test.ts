@@ -43,6 +43,21 @@ const REASONED: readonly { file: string; base: string; why: string }[] = [
   },
 ]
 
+/** The same for `sqrt`, undefined below nought too. */
+const REASONED_SQRT: readonly { file: string; base: string; why: string }[] = [
+  { file: 'atmosphere.ts', base: 'h', why: 'returns on h < 0.0 the line above' },
+  { file: 'detail.ts', base: 'f1', why: 'a smallest dot(r, r), 0 or more' },
+  { file: 'detail.ts', base: 'f2', why: 'a second smallest dot(r, r), 0 or more' },
+  { file: 'waterfalls.ts', base: 'age', why: 'a fract, 0 to 1' },
+]
+
+/**
+ * `log` is undefined at nought as well as below it, so no guard in the call
+ * is enough by itself (`max(x, 0.0)` can be nought): every one is reasoned.
+ * There are none today; this keeps it that way until one is thought about.
+ */
+const REASONED_LOG: readonly { file: string; base: string; why: string }[] = []
+
 const GUARDED = /^(max|abs|clamp|acos)\(/
 
 /** Every renderer's source, as text, keyed by its path under render/. */
@@ -90,10 +105,10 @@ interface Site {
   base: string
 }
 
-function powSites(): Site[] {
+function callSites(name: string): Site[] {
   const sites: Site[] = []
   for (const [file, text] of Object.entries(SOURCES)) {
-    const call = /(?<![\w.])pow\(/g
+    const call = new RegExp(`(?<![\\w.])${name}\\(`, 'g')
     let found: RegExpExecArray | null
     while ((found = call.exec(text)) !== null) {
       const open = found.index + found[0].length - 1
@@ -105,7 +120,7 @@ function powSites(): Site[] {
 }
 
 describe('every pow in a shader has a base that cannot go negative', () => {
-  const sites = powSites()
+  const sites = callSites('pow')
 
   it('finds the shaders at all', () => {
     expect(sites.length).toBeGreaterThan(10)
@@ -123,5 +138,37 @@ describe('every pow in a shader has a base that cannot go negative', () => {
   it('keeps no reason for a pow that is gone', () => {
     const stale = REASONED.filter((r) => !sites.some((s) => s.file === r.file && s.base === r.base))
     expect(stale).toEqual([])
+  })
+})
+
+describe('every sqrt and log in a shader has an argument it is defined for', () => {
+  const unreasoned = (
+    sites: Site[],
+    reasoned: readonly { file: string; base: string }[],
+    guarded: boolean,
+  ): Site[] =>
+    sites.filter(
+      ({ file, base }) =>
+        !(guarded && GUARDED.test(base) && isWholeCall(base)) &&
+        !reasoned.some((r) => r.file === file && r.base === base),
+    )
+
+  it('finds the sqrt sites at all', () => {
+    expect(callSites('sqrt').length).toBeGreaterThan(3)
+  })
+
+  it('refuses a sqrt of anything neither guarded nor reasoned about', () => {
+    expect(unreasoned(callSites('sqrt'), REASONED_SQRT, true)).toEqual([])
+  })
+
+  it('refuses any log not reasoned about', () => {
+    expect(unreasoned(callSites('log'), REASONED_LOG, false)).toEqual([])
+  })
+
+  it('keeps no reason for a sqrt that is gone', () => {
+    const sites = callSites('sqrt')
+    expect(
+      REASONED_SQRT.filter((r) => !sites.some((s) => s.file === r.file && s.base === r.base)),
+    ).toEqual([])
   })
 })

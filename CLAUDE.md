@@ -2002,8 +2002,9 @@ about its base — which is the whole point, after the comet, the aurora
 and the galaxy lane each blacked out the frame the same way and each was
 found by eye. The first run caught one site the hand audit had missed
 listing (the lightning's acos in `weather.ts`, safe as it happens).
-`sqrt`, `log` and `normalize` are not covered: they were read once and
-their inputs are guarded, but nothing holds that.
+`sqrt` and `log` are held the same way (`REASONED_SQRT`, `REASONED_LOG`;
+a `log` is never guarded by its call, since `max(x, 0.0)` can be nought).
+`normalize` is not: 183 sites, most of fixed or unit vectors.
 
 ## The rings' shadow, and the stall at the start of a dive
 
