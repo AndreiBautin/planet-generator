@@ -1,7 +1,7 @@
 # Testing
 
-`pnpm verify` runs typecheck, lint, the format check, the tests and the
-build. It gates the pre-push hook (`.githooks/pre-push`) and CI
+`pnpm verify` runs typecheck, lint, the dead-code check (`knip`), the format
+check, the tests with coverage, and the build. It gates the pre-push hook (`.githooks/pre-push`) and CI
 (`.github/workflows/ci.yml`), which run the same one command so they cannot
 disagree.
 
@@ -62,6 +62,18 @@ shared. Nothing else would notice. So:
   fall, a finger that paused does not fling the planet, the birth lands
   exactly on the finished planet, the governor never steps back up.
 
+- **The trust boundaries are total** (`app/parse.fuzz.test.ts`): thousands
+  of seeded junk query strings, hostile JSON shapes in storage and one-piece
+  mutations of a real link each come out as a valid link, atlas or config,
+  and nothing turns the developer tools on in a build.
+- **No shader can black out the frame** (`render/shader-pow.test.ts`):
+  every GLSL `pow` and `sqrt` base is guarded in the call or listed with
+  the reason it cannot go negative, and every `log` is reasoned. One NaN
+  pixel is a black screen; three were found by eye before this held them.
+- **The keyboard and the profiler** (`ui/keys.test.ts`,
+  `render/profiler.test.ts`): an open sheet takes keys before the flight,
+  a caption being typed never sends on P, and part timings by frame.
+
 Generation tests run in Node — no DOM, no WebGL — which also keeps the layer
 honest about not reaching for either.
 
@@ -95,5 +107,13 @@ honest about not reaching for either.
 - **The birth animation on screen.** The agent's preview pane does not run
   animation frames while hidden, so the animation was not watched; its
   curve is tested, and it is applied in one small function (`pose`).
-- **A coverage percentage.** Coverage is reported (`pnpm test:coverage`) but
-  not gated; a target produces tests written to raise a number.
+- **Most of `render/` and `ui/`, by coverage.** Coverage is gated with
+  floors a little under today's figures (`vitest.config.ts`), so it can
+  only fall by a deliberate change: generation 93% of lines, app 96%,
+  shared 95%, and 58% for the render and ui files that have tests of their
+  own. The rest of those folders, WebGL and DOM glue, is outside the count
+  on purpose: a floor over it would be met by tests asserting three.js was
+  called. The floors are a ratchet, not a target.
+- **Wall-clock budgets.** No test asserts how long something takes: one
+  that did (hydrology under 3 s) failed on a busy machine, not a slow map.
+  Cost is measured with `recorder.bench` and `recorder.profile`.
