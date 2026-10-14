@@ -3,7 +3,16 @@ import { describe, expect, it } from 'vitest'
 import { DEFAULT_DIALS } from '@/generation/planet'
 import { parseSeed, type Seed } from '@/generation/seed'
 
-import { keep, parseAtlas, picture, RECENT_LIMIT, shelves, visit, type AtlasEntry } from './atlas'
+import {
+  keep,
+  parseAtlas,
+  PICTURE_MAX,
+  picture,
+  RECENT_LIMIT,
+  shelves,
+  visit,
+  type AtlasEntry,
+} from './atlas'
 
 const seedOf = (raw: string): Seed => {
   const seed = parseSeed(raw)
@@ -71,6 +80,24 @@ describe('the atlas', () => {
     expect(back[1]?.picture).toBeUndefined()
     // Written before systems were kept: its own system's home.
     expect(back[0]?.home).toBe(seeds[0])
+  })
+
+  it('reads back only its own JPEG pictures, and none too large to be one', () => {
+    const jpeg = 'data:image/jpeg;base64,/9j/4AAQSkZJRg=='
+    const hostile = [
+      'data:image/svg+xml;base64,PHN2Zz48L3N2Zz4=',
+      'data:image/jpeg;base64,abc") ; background:url(https://x.test/',
+      'data:image/jpeg,raw',
+      `data:image/jpeg;base64,${'A'.repeat(PICTURE_MAX)}`,
+    ]
+    const back = parseAtlas([jpeg, ...hostile].map((p, i) => ({ seed: seeds[i], picture: p })))
+    expect(back.map((e) => e.picture)).toEqual([jpeg, undefined, undefined, undefined, undefined])
+  })
+
+  it('does not read past what an atlas can hold', () => {
+    const many = Array.from({ length: 1000 }, (_, i) => ({ seed: seeds[i % seeds.length] }))
+    expect(parseAtlas(many).length).toBeLessThanOrEqual(seeds.length)
+    expect(parseAtlas(Array.from({ length: 5000 }, () => 1))).toEqual([])
   })
 
   it('keeps the system a world was reached in', () => {

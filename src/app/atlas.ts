@@ -100,6 +100,22 @@ function parseDials(raw: unknown): Dials {
   }
 }
 
+/**
+ * The atlas only ever stores its own 160 px JPEGs (about 9 kB). Storage is
+ * this origin's, but whatever else ran on it could have written there, so a
+ * picture must be exactly that shape — base64 JPEG, nothing that could be
+ * SVG or close a quote — and no larger than a picture ever is.
+ */
+export const PICTURE_MAX = 64 * 1024
+const PICTURE = /^data:image\/jpeg;base64,[A-Za-z0-9+/]+={0,2}$/
+
+function isPicture(value: unknown): value is string {
+  return typeof value === 'string' && value.length <= PICTURE_MAX && PICTURE.test(value)
+}
+
+/** More entries than an atlas can hold are not read at all. */
+const READ_LIMIT = 200
+
 function parseEntry(raw: unknown): AtlasEntry | undefined {
   if (typeof raw !== 'object' || raw === null) return undefined
   const r = raw as Record<string, unknown>
@@ -107,10 +123,7 @@ function parseEntry(raw: unknown): AtlasEntry | undefined {
   if (seed === undefined) return undefined
   const name = typeof r['name'] === 'string' ? r['name'].slice(0, 40) : seed
   const kind = typeof r['kind'] === 'string' ? r['kind'].slice(0, 20) : ''
-  const picture =
-    typeof r['picture'] === 'string' && r['picture'].startsWith('data:image/')
-      ? r['picture']
-      : undefined
+  const picture = isPicture(r['picture']) ? r['picture'] : undefined
   return {
     seed,
     name,
@@ -129,7 +142,7 @@ export function parseAtlas(raw: unknown): readonly AtlasEntry[] {
   if (!Array.isArray(raw)) return []
   const seen = new Set<string>()
   const out: AtlasEntry[] = []
-  for (const item of raw) {
+  for (const item of raw.slice(0, READ_LIMIT)) {
     const entry = parseEntry(item)
     if (entry === undefined || seen.has(entry.seed)) continue
     seen.add(entry.seed)
