@@ -1052,14 +1052,8 @@ export function startScene(
   }
   let shadowFrame = 0
   let shadowWasLow = false
-  const tick = (): void => {
-    profiler?.startFrame()
-    renderer.info.reset()
-    const now = clock.now()
-    if (warmDue.length > 0 && now >= (warmDue[0] ?? Infinity)) {
-      warmDue = warmDue.slice(1)
-      warm()
-    }
+  /** The governor (quality.ts): judge the device on a window of frames and step the pixel ratio. */
+  const governFrameRate = (now: number): void => {
     frames.push(now - lastFrameAt)
     lastFrameAt = now
     // Not while recording: frames there take whatever time they are told to.
@@ -1075,12 +1069,10 @@ export function startScene(
         composer?.setSize(window.innerWidth, window.innerHeight)
       }
     }
+  }
 
-    // Advanced by the clock, not per frame, so a dropped frame does not
-    // slow the planet down.
-    mark('frame start')
-    const seen = view()
-    mark('flight')
+  /** Turn the planet by the clock and set the sun, the winds and what reads them; returns the turn. */
+  const turnAndSun = (now: number, seen: CameraView): number => {
     const turnMs = ORBIT_TURN_MS + (GLIDE_TURN_MS - ORBIT_TURN_MS) * seen.blend
     if (!holding) turned += ((now - turnedAt) / turnMs) * Math.PI * 2
     turnedAt = now
@@ -1115,9 +1107,11 @@ export function startScene(
     DETAIL_CLOUD_SPIN.value = -0.15 * turn
     DETAIL_CLOUD_SUN.value.set(...inPlanetFrame(sunDirection, turn, 1))
     DETAIL_CLOUD_LAYER_SUN.value.set(...inPlanetFrame(sunDirection, turn * 1.15, 1))
-    mark('sun and winds')
-    place(seen, turn)
-    mark('place')
+    return turn
+  }
+
+  /** Stream the coming planet's ground, and swap it in once it is ready and compiled. */
+  const advanceComing = (turn: number): void => {
     if (coming !== undefined) {
       coming.terrain.update(inPlanetFrame(camera.position, turn, 1), viewCone(turn))
       if (coming.terrain.ready && (coming.keepClouds || coming.clouds !== undefined)) {
@@ -1136,6 +1130,195 @@ export function startScene(
         }
       }
     }
+  }
+
+  /** Where the moons are for their eclipse shadows, and the day dimmed under one (eclipse.ts). */
+  const eclipses = (planet: Shown, stage: Birth, turn: number): void => {
+    // Where the moons are, in the ground's frame and the clouds', for the
+    // shadows they throw when one passes before the sun (eclipse.ts).
+    const discs: MoonDisc[] = []
+    for (let k = 0; k < 2; k += 1) {
+      const moon = planet.heavens.moons[k]
+      const ground = DETAIL_MOONS.value[k]
+      const cloud = DETAIL_CLOUD_MOONS.value[k]
+      if (moon === undefined) {
+        ground?.setW(0)
+        cloud?.setW(0)
+        continue
+      }
+      const at = inPlanetFrame(moon.mesh.position, turn, 1)
+      ground?.set(at[0], at[1], at[2], moon.radius)
+      cloud?.set(...inPlanetFrame(moon.mesh.position, turn * 1.15, 1), moon.radius)
+      discs.push([at[0], at[1], at[2], moon.radius])
+    }
+    // Under the shadow the whole day dims, sky and all, not the ground alone.
+    {
+      const eye = inPlanetFrame(camera.position, turn, stage.scale)
+      const reach = Math.hypot(...eye) || 1
+      const under: Vec3 = [eye[0] / reach, eye[1] / reach, eye[2] / reach]
+      const near = 1 - smooth(0.05, 0.4, reach - 1)
+      const taken = moonShadow(under, inPlanetFrame(sunDirection, turn, 1), discs)
+      renderer.toneMappingExposure = EXPOSURE * (1 - 0.7 * taken * near)
+    }
+  }
+
+  /** The uniforms the ground reads this frame: valley fog, its normal matrix, the cloud fade. */
+  const groundUniforms = (planet: Shown, stage: Birth): void => {
+    VALLEY_FOG.shape.value.z = stage.scale
+    VALLEY_FOG.shape.value.w = planet.world.molten ? 0 : 1
+    VALLEY_FOG.sun.value.copy(sunDirection)
+    // Planet frame to view space for the ground's normal maps, from the
+    // matrices as they will be this frame.
+    planet.terrain.group.updateMatrixWorld()
+    camera.updateMatrixWorld()
+    modelView.copy(camera.matrixWorld).invert().multiply(planet.terrain.group.matrixWorld)
+    DETAIL_NORMAL_MATRIX.value.getNormalMatrix(modelView)
+    cloudsSeenFrom(planet.clouds, camera.position.length(), stage.scale, stage.clouds)
+  }
+
+  /** Rain, the rainbow, plumes and shooting stars round the eye; returns how hard it rains. */
+  const skyAndRain = (planet: Shown, stage: Birth, turn: number): number => {
+    const shower = rainOver(camera.position, planet.clouds, turn)
+    rain.update(rainEye.copy(camera.position), shower, camera.near)
+    rainbow.update(
+      camera.position,
+      awayFromSun.copy(sunDirection).negate(),
+      bowFor(camera.position, sunDirection, planet.clouds, turn, stage.scale),
+      stage.scale,
+      DETAIL_TIME.value,
+    )
+    PLUME_SUN.value.copy(sunDirection)
+    // Shooting stars on the night side, seen from low enough for the sky
+    // to be a sky rather than space.
+    meteorUp.copy(camera.position).normalize()
+    meteors.update(
+      meteorUp,
+      (1 - smooth(-0.15, -0.03, meteorUp.dot(sunDirection))) *
+        (1 - smooth(0.04, 0.12, camera.position.length() / stage.scale - 1)),
+      stage.scale,
+    )
+    return shower
+  }
+
+  /** The built world near the eye: towns, ships, lighthouses, ruins and the carts on the roads. */
+  const townsNear = (stage: Birth, eye: Vec3, turn: number): void => {
+    towns?.update(eye, stage.scale)
+    ships?.update(DETAIL_TIME.value, eye)
+    lighthouses?.update(sunInGround.set(...inPlanetFrame(sunDirection, turn, 1)), DETAIL_TIME.value)
+    ruins?.update(eye)
+    traffic?.update(eye, sunInGround, DETAIL_TIME.value)
+  }
+
+  /** What lives and flies near the eye, each from the eye in the planet's frame. */
+  const lifeNear = (planet: Shown, stage: Birth, eye: Vec3, turn: number): void => {
+    fish.update(
+      eye,
+      planet.terrain.group.matrixWorld,
+      stage.scale,
+      DETAIL_UNDER.value,
+      fog.color,
+      fog.density,
+    )
+    kelp.update(
+      eye,
+      planet.terrain.group.matrixWorld,
+      stage.scale,
+      DETAIL_UNDER.value,
+      fog.color,
+      fog.density,
+    )
+    birds.update(eye, planet.terrain.group.matrixWorld, stage.scale)
+    deserts.update(
+      eye,
+      planet.terrain.group.matrixWorld,
+      sunInGround.set(...inPlanetFrame(sunDirection, turn, 1)),
+      DETAIL_TIME.value,
+    )
+    aircraft.update(
+      eye,
+      planet.terrain.group.matrixWorld,
+      sunInGround.set(...inPlanetFrame(sunDirection, turn, 1)),
+      DETAIL_TIME.value,
+    )
+    rocks.update(eye, planet.terrain.group.matrixWorld)
+    herds.update(eye, planet.terrain.group.matrixWorld, DETAIL_TIME.value)
+  }
+
+  /** Embers, lightning and its bolt, and the soundscape. */
+  const weatherAndSound = (
+    planet: Shown,
+    stage: Birth,
+    turn: number,
+    shower: number,
+    now: number,
+  ): void => {
+    embers.update(
+      rainEye,
+      planet.world.molten ? 1 - smooth(0.012, 0.05, camera.position.length() / stage.scale - 1) : 0,
+    )
+    // Lightning in a storm near the eye, lighting the land a moment.
+    const held = cloudDataOf(planet.clouds)
+    const above = camera.position.length() / stage.scale - 1
+    const flash = lightning.update(
+      now / 1000,
+      inPlanetFrame(camera.position, turn * 1.15, 1),
+      1 - smooth(0.06, 0.14, above),
+      held?.data,
+      held?.width ?? 0,
+    )
+    skylight.intensity += flash * 2.5
+    if (flash > 0.01) {
+      // The channel from the cloud base to the ground under the strike
+      // (bolt.ts): the strike is in the cloud layer's frame, the ground
+      // in the planet's.
+      const at = lightning.at
+      const [rx, ry, rz] = intoRoom(at, turn * 1.15)
+      const foot = groundRadiusAt(planet.world, inPlanetFrame({ x: rx, y: ry, z: rz }, turn, 1))
+      bolt.update(
+        lightning.strikes,
+        [at[0] * CLOUD_RADIUS, at[1] * CLOUD_RADIUS, at[2] * CLOUD_RADIUS],
+        [at[0] * foot, at[1] * foot, at[2] * foot],
+        flash,
+      )
+    } else bolt.update(lightning.strikes, [0, 1, 0], [0, 1, 0], 0)
+    if (sound.playing) {
+      // How fast the eye goes, smoothed, and how much coast is under it,
+      // read every few frames: sea and land both within a short way.
+      const dt = Math.max(1e-3, (now - lastEyeAt) / 1000)
+      const moved = camera.position.distanceTo(lastEye) / stage.scale / dt
+      speed += (Math.min(moved, 0.2) - speed) * Math.min(1, dt * 3)
+      lastEye.copy(camera.position)
+      lastEyeAt = now
+      soundFrame += 1
+      if (soundFrame % 12 === 0)
+        coast = coastAround(planet.world, inPlanetFrame(camera.position, turn, 1))
+      sound.update({ speed, above, coast, rain: shower }, now / 1000)
+      if (lightning.strikes !== heardStrikes) {
+        heardStrikes = lightning.strikes
+        sound.thunder(lightning.lastAngle)
+      }
+    }
+  }
+
+  const tick = (): void => {
+    profiler?.startFrame()
+    renderer.info.reset()
+    const now = clock.now()
+    if (warmDue.length > 0 && now >= (warmDue[0] ?? Infinity)) {
+      warmDue = warmDue.slice(1)
+      warm()
+    }
+    governFrameRate(now)
+    // Advanced by the clock, not per frame, so a dropped frame does not
+    // slow the planet down.
+    mark('frame start')
+    const seen = view()
+    mark('flight')
+    const turn = turnAndSun(now, seen)
+    mark('sun and winds')
+    place(seen, turn)
+    mark('place')
+    advanceComing(turn)
     if (shown !== undefined) {
       const stage = stageOf(shown)
       shown.terrain.group.rotation.y = turn
@@ -1144,169 +1327,20 @@ export function startScene(
       mark('coming')
       shown.heavens.update(now / 1000, sunDirection, stage.scale)
       mark('heavens')
-      // Where the moons are, in the ground's frame and the clouds', for the
-      // shadows they throw when one passes before the sun (eclipse.ts).
-      const discs: MoonDisc[] = []
-      for (let k = 0; k < 2; k += 1) {
-        const moon = shown.heavens.moons[k]
-        const ground = DETAIL_MOONS.value[k]
-        const cloud = DETAIL_CLOUD_MOONS.value[k]
-        if (moon === undefined) {
-          ground?.setW(0)
-          cloud?.setW(0)
-          continue
-        }
-        const at = inPlanetFrame(moon.mesh.position, turn, 1)
-        ground?.set(at[0], at[1], at[2], moon.radius)
-        cloud?.set(...inPlanetFrame(moon.mesh.position, turn * 1.15, 1), moon.radius)
-        discs.push([at[0], at[1], at[2], moon.radius])
-      }
-      // Under the shadow the whole day dims, sky and all, not the ground alone.
-      {
-        const eye = inPlanetFrame(camera.position, turn, stage.scale)
-        const reach = Math.hypot(...eye) || 1
-        const under: Vec3 = [eye[0] / reach, eye[1] / reach, eye[2] / reach]
-        const near = 1 - smooth(0.05, 0.4, reach - 1)
-        const taken = moonShadow(under, inPlanetFrame(sunDirection, turn, 1), discs)
-        renderer.toneMappingExposure = EXPOSURE * (1 - 0.7 * taken * near)
-      }
-      VALLEY_FOG.shape.value.z = stage.scale
-      VALLEY_FOG.shape.value.w = shown.world.molten ? 0 : 1
-      VALLEY_FOG.sun.value.copy(sunDirection)
-      // Planet frame to view space for the ground's normal maps, from the
-      // matrices as they will be this frame.
-      shown.terrain.group.updateMatrixWorld()
-      camera.updateMatrixWorld()
-      modelView.copy(camera.matrixWorld).invert().multiply(shown.terrain.group.matrixWorld)
-      DETAIL_NORMAL_MATRIX.value.getNormalMatrix(modelView)
-      cloudsSeenFrom(shown.clouds, camera.position.length(), stage.scale, stage.clouds)
+      eclipses(shown, stage, turn)
+      groundUniforms(shown, stage)
       mark('setup')
-      shown.terrain.update(inPlanetFrame(camera.position, turn, stage.scale), viewCone(turn))
+      // The eye in the planet's own frame, which everything near it reads.
+      const eye = inPlanetFrame(camera.position, turn, stage.scale)
+      shown.terrain.update(eye, viewCone(turn))
       mark('terrain')
-      const shower = rainOver(camera.position, shown.clouds, turn)
-      rain.update(rainEye.copy(camera.position), shower, camera.near)
-      rainbow.update(
-        camera.position,
-        awayFromSun.copy(sunDirection).negate(),
-        bowFor(camera.position, sunDirection, shown.clouds, turn, stage.scale),
-        stage.scale,
-        DETAIL_TIME.value,
-      )
-      PLUME_SUN.value.copy(sunDirection)
-      // Shooting stars on the night side, seen from low enough for the sky
-      // to be a sky rather than space.
-      meteorUp.copy(camera.position).normalize()
-      meteors.update(
-        meteorUp,
-        (1 - smooth(-0.15, -0.03, meteorUp.dot(sunDirection))) *
-          (1 - smooth(0.04, 0.12, camera.position.length() / stage.scale - 1)),
-        stage.scale,
-      )
+      const shower = skyAndRain(shown, stage, turn)
       mark('sky and rain')
-      towns?.update(inPlanetFrame(camera.position, turn, stage.scale), stage.scale)
-      ships?.update(DETAIL_TIME.value, inPlanetFrame(camera.position, turn, stage.scale))
-      lighthouses?.update(
-        sunInGround.set(...inPlanetFrame(sunDirection, turn, 1)),
-        DETAIL_TIME.value,
-      )
-      ruins?.update(inPlanetFrame(camera.position, turn, stage.scale))
-      traffic?.update(
-        inPlanetFrame(camera.position, turn, stage.scale),
-        sunInGround,
-        DETAIL_TIME.value,
-      )
+      townsNear(stage, eye, turn)
       mark('towns and ships')
-      fish.update(
-        inPlanetFrame(camera.position, turn, stage.scale),
-        shown.terrain.group.matrixWorld,
-        stage.scale,
-        DETAIL_UNDER.value,
-        fog.color,
-        fog.density,
-      )
-      kelp.update(
-        inPlanetFrame(camera.position, turn, stage.scale),
-        shown.terrain.group.matrixWorld,
-        stage.scale,
-        DETAIL_UNDER.value,
-        fog.color,
-        fog.density,
-      )
-      birds.update(
-        inPlanetFrame(camera.position, turn, stage.scale),
-        shown.terrain.group.matrixWorld,
-        stage.scale,
-      )
-      deserts.update(
-        inPlanetFrame(camera.position, turn, stage.scale),
-        shown.terrain.group.matrixWorld,
-        sunInGround.set(...inPlanetFrame(sunDirection, turn, 1)),
-        DETAIL_TIME.value,
-      )
-      aircraft.update(
-        inPlanetFrame(camera.position, turn, stage.scale),
-        shown.terrain.group.matrixWorld,
-        sunInGround.set(...inPlanetFrame(sunDirection, turn, 1)),
-        DETAIL_TIME.value,
-      )
-      rocks.update(
-        inPlanetFrame(camera.position, turn, stage.scale),
-        shown.terrain.group.matrixWorld,
-      )
-      herds.update(
-        inPlanetFrame(camera.position, turn, stage.scale),
-        shown.terrain.group.matrixWorld,
-        DETAIL_TIME.value,
-      )
+      lifeNear(shown, stage, eye, turn)
       mark('creatures and craft')
-      embers.update(
-        rainEye,
-        shown.world.molten
-          ? 1 - smooth(0.012, 0.05, camera.position.length() / stage.scale - 1)
-          : 0,
-      )
-      // Lightning in a storm near the eye, lighting the land a moment.
-      const held = cloudDataOf(shown.clouds)
-      const above = camera.position.length() / stage.scale - 1
-      const flash = lightning.update(
-        now / 1000,
-        inPlanetFrame(camera.position, turn * 1.15, 1),
-        1 - smooth(0.06, 0.14, above),
-        held?.data,
-        held?.width ?? 0,
-      )
-      skylight.intensity += flash * 2.5
-      if (flash > 0.01) {
-        // The channel from the cloud base to the ground under the strike
-        // (bolt.ts): the strike is in the cloud layer's frame, the ground
-        // in the planet's.
-        const at = lightning.at
-        const [rx, ry, rz] = intoRoom(at, turn * 1.15)
-        const foot = groundRadiusAt(shown.world, inPlanetFrame({ x: rx, y: ry, z: rz }, turn, 1))
-        bolt.update(
-          lightning.strikes,
-          [at[0] * CLOUD_RADIUS, at[1] * CLOUD_RADIUS, at[2] * CLOUD_RADIUS],
-          [at[0] * foot, at[1] * foot, at[2] * foot],
-          flash,
-        )
-      } else bolt.update(lightning.strikes, [0, 1, 0], [0, 1, 0], 0)
-      if (sound.playing) {
-        // How fast the eye goes, smoothed, and how much coast is under it,
-        // read every few frames: sea and land both within a short way.
-        const dt = Math.max(1e-3, (now - lastEyeAt) / 1000)
-        const moved = camera.position.distanceTo(lastEye) / stage.scale / dt
-        speed += (Math.min(moved, 0.2) - speed) * Math.min(1, dt * 3)
-        lastEye.copy(camera.position)
-        lastEyeAt = now
-        soundFrame += 1
-        if (soundFrame % 12 === 0)
-          coast = coastAround(shown.world, inPlanetFrame(camera.position, turn, 1))
-        sound.update({ speed, above, coast, rain: shower }, now / 1000)
-        if (lightning.strikes !== heardStrikes) {
-          heardStrikes = lightning.strikes
-          sound.thunder(lightning.lastAngle)
-        }
-      }
+      weatherAndSound(shown, stage, turn, shower, now)
     }
     mark('weather and sound')
     underTheSea()
