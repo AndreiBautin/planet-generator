@@ -50,7 +50,13 @@ export const ROOTS: readonly PatchKey[] = ([0, 1, 2, 3, 4, 5] as const).map((fac
   y: 0,
 }))
 
-export const keyOf = (key: PatchKey): string => [key.face, key.level, key.x, key.y].join('/')
+/**
+ * A patch as one number, for map keys: built every frame thousands of times
+ * by the terrain's ancestor walks, where a joined string cost an array and a
+ * string each. Exact to level 20 (x and y under 2^20), far past any drawn.
+ */
+export const keyOf = (key: PatchKey): number =>
+  ((key.level * 6 + key.face) * 1048576 + key.x) * 1048576 + key.y
 
 export function childrenOf(key: PatchKey): readonly PatchKey[] {
   const level = key.level + 1
