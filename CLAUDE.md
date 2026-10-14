@@ -2541,9 +2541,25 @@ compare a change by the part it touched, not the frame's total.
   volcanoes (`sights` job). Anything new that reads it goes in a job.
 - **Phone profile, after** (`?record&cores=4`, 375 × 812, tour): 0.94M
   triangles, 180 calls, GPU 9.5 ms median, script 10.8 ms median.
+- **A world's programs are made before it is shown** (`precompile` in
+  scene.ts, `compileAsync` on the coming terrain and clouds): its first
+  frame compiled them all, 1.2 s on a temperate world, 2.9 s molten.
+- **The water sheet's skirt follows its edge by index** (`edgeOrder`):
+  string keys there made the sheet slow enough, once in the worker, to
+  make the ground arrive measurably later.
+- **The far tree model is visible at 3× magnification** — plain cones on
+  a distant ridge where the near model has ragged tiers — and at native
+  size differs in 1.4 pixels per thousand (`shot=g,-9.55,8.738,272,4.0,11.00,-8`).
+  Raise `TREE_DETAIL_REACH` if it is ever noticed.
+- **The stitch stays on the CPU, on purpose**: a moving glide eases ~146
+  patches' edges a frame (1.2 ms, and as many small uploads), but the
+  shader version needs four weights a patch on the GPU — a texture the
+  ground's phone texture budget cannot spare, or a per-patch uniform that
+  makes three upload every ground uniform on each of ~330 draws.
 - **Left**: batching the ground and water (330 + 199 draws in a glide;
   needs `BatchedMesh` or multi-draw, a rewrite of how patches are held),
-  and the stitch in the shader. Both need on-screen checking.
+  and a frame of ~400 ms on 83tzj46 after arrival as the towns and the
+  rest are added and compile.
 - **A hidden pane left for long throttles its timers to seconds**; a run
   of `await sleep` steps then crawls and `javascript_tool` times out. A
   reload does not cure it; showing the pane does.
