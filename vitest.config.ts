@@ -42,13 +42,13 @@ export default defineConfig({
         ...testedFilesIn(['src/render', 'src/ui']),
       ],
       exclude: ['**/*.test.ts', '**/*.fuzz.test.ts'],
-      // Floors a little under where each stands (2026-10-14), so coverage
+      // Floors a little under where each stands (2026-10-14; render and ui raised after the rig tests), so coverage
       // can only fall by a deliberate change here, never by drift.
       thresholds: {
         'src/generation/**': { lines: 93, functions: 94, branches: 75 },
         'src/app/**': { lines: 96, functions: 92, branches: 94 },
         'src/shared/**': { lines: 95, functions: 95 },
-        'src/{render,ui}/**': { lines: 58, functions: 55 },
+        'src/{render,ui}/**': { lines: 65, functions: 63 },
       },
     },
   },
