@@ -87,14 +87,31 @@ const BROADLEAF: readonly (readonly [number, number])[] = [
  */
 const AROUND = 7
 
-const MODEL = (() => {
+/**
+ * The far model: five sides and three tiers, 60 triangles. Trees were 84%
+ * of a phone's triangles over a glide (2.1M of 2.5M); past
+ * `TREE_DETAIL_REACH` a tree is a few pixels tall and the near model's
+ * ragged tiers are not seen. The same points of both outlines are kept, so
+ * the two kinds still pair point for point.
+ */
+const AROUND_FAR = 5
+const FAR_POINTS = [0, 1, 2, 4, 6, 9, 10]
+
+/** Past this far from the eye, in radii, a patch's trees use the far model. */
+export const TREE_DETAIL_REACH = 0.05
+
+const modelOf = (
+  conifer: readonly (readonly [number, number])[],
+  broadleaf: readonly (readonly [number, number])[],
+  around: number,
+): THREE.BufferGeometry => {
   const lathe = (outline: readonly (readonly [number, number])[]): THREE.LatheGeometry =>
     new THREE.LatheGeometry(
       outline.map(([r, y]) => new THREE.Vector2(r, y)),
-      AROUND,
+      around,
     )
-  const tree = lathe(CONIFER)
-  const crown = lathe(BROADLEAF)
+  const tree = lathe(conifer)
+  const crown = lathe(broadleaf)
   // A broadleaf's crown is lumpy rather than turned: each of its points
   // pushed in or out a little, by where it is.
   const round = crown.getAttribute('position')
@@ -112,7 +129,7 @@ const MODEL = (() => {
   // Bark below, leaf above: the lathe's points go round each ring in turn.
   const count = tree.getAttribute('position').count
   const colours = new Float32Array(count * 3)
-  const rings = CONIFER.length
+  const rings = conifer.length
   for (let k = 0; k < count; k += 1) {
     const ring = k % rings
     const bark = ring < 2
@@ -123,7 +140,33 @@ const MODEL = (() => {
   tree.setAttribute('color', new THREE.BufferAttribute(colours, 3))
   tree.deleteAttribute('uv')
   return tree
-})()
+}
+const MODEL = modelOf(CONIFER, BROADLEAF, AROUND)
+const pick = (outline: readonly (readonly [number, number])[]): (readonly [number, number])[] =>
+  FAR_POINTS.map((k) => outline[k] ?? [0, 0])
+const MODEL_FAR = modelOf(pick(CONIFER), pick(BROADLEAF), AROUND_FAR)
+
+/** Draw a patch's trees with the near model or the far one (`TREE_DETAIL_REACH`). */
+export function setTreeDetail(mesh: THREE.Mesh, near: boolean): void {
+  const both = details.get(mesh)
+  if (both === undefined) return
+  const wanted = near ? both.near : both.far
+  if (mesh.geometry !== wanted) mesh.geometry = wanted
+}
+
+/** Free both of a patch's tree geometries; the models they share stay. */
+export function disposeTrees(mesh: THREE.Mesh): void {
+  const both = details.get(mesh)
+  both?.near.dispose()
+  both?.far.dispose()
+  mesh.geometry.dispose()
+}
+
+/** Each patch's tree mesh's two geometries, near and far, over the same instances. */
+const details = new WeakMap<
+  THREE.Mesh,
+  { readonly near: THREE.InstancedBufferGeometry; readonly far: THREE.InstancedBufferGeometry }
+>()
 
 /** A hash of a direction, 0 to 1, the same whichever patch holds the vertex. */
 function hashOf(x: number, y: number, z: number, salt: number): number {
@@ -212,22 +255,28 @@ export function forestFor(
   bounds.radius += TREE_HEIGHT * 1.5 * 2
   const count = found.length / STRIDE
   if (count === 0) return []
-  const geometry = new THREE.InstancedBufferGeometry()
-  for (const [name, attribute] of Object.entries(MODEL.attributes))
-    geometry.setAttribute(name, attribute)
-  geometry.setIndex(MODEL.index)
   const buffer = new THREE.InstancedInterleavedBuffer(Float32Array.from(found), STRIDE, 1)
-  geometry.setAttribute('treeFine', new THREE.InterleavedBufferAttribute(buffer, 3, 0))
-  geometry.setAttribute('treeCoarse', new THREE.InterleavedBufferAttribute(buffer, 3, 3))
-  geometry.setAttribute('treeFate', new THREE.InterleavedBufferAttribute(buffer, 3, 6))
-  geometry.setAttribute('treeWood', new THREE.InterleavedBufferAttribute(buffer, 3, 9))
-  geometry.setAttribute('treeLook', new THREE.InterleavedBufferAttribute(buffer, 2, 12))
-  geometry.setAttribute('treeMist', new THREE.InterleavedBufferAttribute(buffer, 1, 14))
-  geometry.instanceCount = count
-  // Culled by the patch's own bounds, grown by the tallest a tree here
-  // can stand: the model's own bounds know nothing of where instances go.
-  geometry.boundingSphere = bounds
+  // The near and the far model over the same instances (`setTreeDetail`).
+  const geometryOf = (model: THREE.BufferGeometry): THREE.InstancedBufferGeometry => {
+    const geometry = new THREE.InstancedBufferGeometry()
+    for (const [name, attribute] of Object.entries(model.attributes))
+      geometry.setAttribute(name, attribute)
+    geometry.setIndex(model.index)
+    geometry.setAttribute('treeFine', new THREE.InterleavedBufferAttribute(buffer, 3, 0))
+    geometry.setAttribute('treeCoarse', new THREE.InterleavedBufferAttribute(buffer, 3, 3))
+    geometry.setAttribute('treeFate', new THREE.InterleavedBufferAttribute(buffer, 3, 6))
+    geometry.setAttribute('treeWood', new THREE.InterleavedBufferAttribute(buffer, 3, 9))
+    geometry.setAttribute('treeLook', new THREE.InterleavedBufferAttribute(buffer, 2, 12))
+    geometry.setAttribute('treeMist', new THREE.InterleavedBufferAttribute(buffer, 1, 14))
+    geometry.instanceCount = count
+    // Culled by the patch's own bounds, grown by the tallest a tree here
+    // can stand: the model's own bounds know nothing of where instances go.
+    geometry.boundingSphere = bounds
+    return geometry
+  }
+  const geometry = geometryOf(MODEL)
   const mesh = new THREE.Mesh(geometry, material)
+  details.set(mesh, { near: geometry, far: geometryOf(MODEL_FAR) })
   mesh.castShadow = true
   mesh.receiveShadow = true
   mesh.customDepthMaterial = depth

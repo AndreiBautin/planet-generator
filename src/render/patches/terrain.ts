@@ -16,7 +16,10 @@ import {
 } from './cube'
 import { aheadOf, ancestorAt, centreOf, selectLeaves, type LodParams, type ViewCone } from './lod'
 import {
+  disposeTrees,
   forestFor,
+  setTreeDetail,
+  TREE_DETAIL_REACH,
   forestWarmers,
   TREE_COARSEST,
   TREE_LEVEL,
@@ -339,10 +342,12 @@ export class Terrain {
       // Only the woods near the eye cast: the shadow box is a fifth of a
       // radius across, and every tree in it went through the shadow pass
       // too — 40% of a glide's triangles — for shadows a few pixels long.
-      const casts = on && entry.trees.length > 0 && gapTo(entry.key, camera) < TREE_SHADOW_REACH
+      const gap = on && entry.trees.length > 0 ? gapTo(entry.key, camera) : Infinity
+      const casts = gap < TREE_SHADOW_REACH
       for (const mesh of entry.trees) {
         mesh.visible = on
         mesh.castShadow = casts
+        if (on) setTreeDetail(mesh, gap < TREE_DETAIL_REACH)
       }
     }
     this.lastShown = shown
@@ -483,7 +488,7 @@ export class Terrain {
     this.disposed = true
     for (const entry of this.entries.values()) {
       if (entry.node !== undefined) free(entry.node)
-      for (const mesh of entry.trees) mesh.geometry.dispose()
+      for (const mesh of entry.trees) disposeTrees(mesh)
     }
     this.entries.clear()
     this.materials.ground.dispose()
@@ -732,7 +737,7 @@ export class Terrain {
       }
       for (const mesh of entry.trees) {
         this.forest.remove(mesh)
-        mesh.geometry.dispose()
+        disposeTrees(mesh)
       }
       this.entries.delete(keyOf(entry.key))
       this.sliding.delete(entry)
