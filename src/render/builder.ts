@@ -1,5 +1,6 @@
 import type { Dials } from '@/generation/planet'
 import type { Seed } from '@/generation/seed'
+import type { Hydrology } from '@/generation/hydrology'
 import { logger } from '@/shared/logger'
 import type { Harbours } from '@/generation/harbours'
 import type { Ruin } from '@/generation/ruins'
@@ -29,6 +30,8 @@ export interface Builder {
   readonly map: (seed: Seed, dials: Dials, width: number) => Promise<WorldMap>
   /** A world's waterfalls (generation/waterfalls.ts), five numbers each (build-protocol.ts). */
   readonly falls: (seed: Seed, dials: Dials) => Promise<Float32Array>
+  /** A world's drainage map, made off the page (generation/hydrology.ts, `adoptHydrology`). */
+  readonly hydrology: (seed: Seed, dials: Dials) => Promise<Hydrology>
   /** A lived-on world's lights (generation/settlements.ts), placed on its ground. */
   readonly lights: (
     seed: Seed,
@@ -167,6 +170,15 @@ export function createBuilder(cores: number): Builder {
       const result = await run({ id: next, kind: 'falls', seed, dials }, -2)
       if (result.kind !== 'falls') throw new Error('builder answered falls with something else')
       return result.falls
+    },
+    hydrology: async (seed, dials) => {
+      next += 1
+      // Before the patches: the worker needs the map for them anyway, and
+      // the page wants it before anything asks where the ground is.
+      const result = await run({ id: next, kind: 'hydrology', seed, dials }, -3)
+      if (result.kind !== 'hydrology')
+        throw new Error('builder answered hydrology with something else')
+      return result.hydrology
     },
     patch: async (seed, dials, key, segments, urgency = 0) => {
       next += 1

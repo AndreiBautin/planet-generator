@@ -1,6 +1,7 @@
 import type { Dials } from '@/generation/planet'
 import type { Seed } from '@/generation/seed'
 import type { Harbours } from '@/generation/harbours'
+import type { Hydrology } from '@/generation/hydrology'
 import type { Ruin } from '@/generation/ruins'
 import type { WorldMap } from '@/generation/world-map'
 
@@ -24,6 +25,7 @@ export type WorkRequest =
   | (Planned & { readonly kind: 'patch'; readonly key: PatchKey; readonly segments: number })
   | (Planned & { readonly kind: 'lights' })
   | (Planned & { readonly kind: 'falls' })
+  | (Planned & { readonly kind: 'hydrology' })
   | (Planned & { readonly kind: 'map'; readonly width: number })
 
 export type WorkResult =
@@ -33,6 +35,8 @@ export type WorkResult =
   | { readonly id: number; readonly kind: 'map'; readonly map: WorldMap }
   /** Waterfalls, five numbers each: the foot's direction, its ground radius, and how far it drops. */
   | { readonly id: number; readonly kind: 'falls'; readonly falls: Float32Array }
+  /** The drainage map (generation/hydrology.ts), copied out of the worker's own. */
+  | { readonly id: number; readonly kind: 'hydrology'; readonly hydrology: Hydrology }
   /** Towns' lights, five numbers each: a position on the ground, brightness and warmth. */
   | {
       readonly id: number

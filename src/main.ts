@@ -4,6 +4,7 @@ import { fixedClock, systemClock } from '@/app/clock'
 import { readConfig } from '@/app/config'
 import { linkFor, parseLink, type Shot } from '@/app/link'
 import { KINDS } from '@/generation/kinds'
+import { adoptHydrology } from '@/generation/hydrology'
 import { createPlanet, DEFAULT_DIALS, type Dials, type Planet } from '@/generation/planet'
 import { newSeed, type Seed } from '@/generation/seed'
 import { createBuilder } from '@/render/builder'
@@ -147,6 +148,13 @@ const scene = startScene(canvas, clock, rig.view, {
 const show = async (born: boolean): Promise<void> => {
   const next = createPlanet(seed, dials)
   planet = next
+  // The drainage map from a worker, so the first question of where the
+  // ground is (a dive, a glide) does not freeze the page for most of a second.
+  if (!next.molten) {
+    void builder.hydrology(seed, dials).then((made) => {
+      adoptHydrology(next, made)
+    })
+  }
   hud.render(next)
   document.body.classList.add('forming')
   // False when a later planet was asked for first; that one will clear the

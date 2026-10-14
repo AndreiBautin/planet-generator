@@ -1,4 +1,5 @@
 import { createPlanet, type Planet } from '@/generation/planet'
+import { hydrologyOf } from '@/generation/hydrology'
 
 import type { WorkRequest, WorkResult } from './build-protocol'
 import { settlementsOf, townGlow } from '@/generation/settlements'
@@ -60,6 +61,22 @@ export function answer(request: WorkRequest): WorkResult {
       }
     case 'falls':
       return { id: request.id, kind: 'falls', falls: placedFalls(planet) }
+    case 'hydrology': {
+      // Copies: the worker keeps its own for the patches it builds, and
+      // the buffers sent are given up.
+      const made = hydrologyOf(planet)
+      return {
+        id: request.id,
+        kind: 'hydrology',
+        hydrology: {
+          height: made.height.slice(),
+          lake: made.lake.slice(),
+          flow: made.flow.slice(),
+          receiver: made.receiver.slice(),
+          centres: made.centres.slice(),
+        },
+      }
+    }
     case 'map':
       return { id: request.id, kind: 'map', map: bakeMap(planet, request.width) }
   }
@@ -113,6 +130,14 @@ export function transferables(result: WorkResult): Transferable[] {
       return [result.lights.buffer, result.glow.buffer, result.bridges.buffer]
     case 'falls':
       return [result.falls.buffer]
+    case 'hydrology':
+      return [
+        result.hydrology.height.buffer,
+        result.hydrology.lake.buffer,
+        result.hydrology.flow.buffer,
+        result.hydrology.receiver.buffer,
+        result.hydrology.centres.buffer,
+      ]
     case 'map':
       return [result.map.pixels.buffer, result.map.towns.buffer]
     case 'patch':

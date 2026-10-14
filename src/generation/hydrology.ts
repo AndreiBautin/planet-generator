@@ -186,6 +186,19 @@ class Queue {
 
 const made = new WeakMap<Planet, Hydrology>()
 
+/**
+ * Take a drainage map made elsewhere — a build worker, from the same seed
+ * and dials, so by the seed promise the same map — rather than making it
+ * here: it is most of a second, and on the page that was a freeze the
+ * first time anything asked where the ground is. Says whether it was taken
+ * (not if this planet already has one).
+ */
+export function adoptHydrology(planet: Planet, hydrology: Hydrology): boolean {
+  if (made.has(planet)) return false
+  made.set(planet, hydrology)
+  return true
+}
+
 export function hydrologyOf(planet: Planet): Hydrology {
   const known = made.get(planet)
   if (known !== undefined) return known
