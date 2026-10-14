@@ -77,6 +77,8 @@ export class Terrain {
   private frame = 0
   private disposed = false
   private lastShown: ReadonlySet<number> = new Set<number>()
+  private lastWooded: ReadonlySet<number> = new Set<number>()
+  private readonly touched = new Set<number>()
   private readonly sliding = new Set<Entry>()
   private lastCamera: Vec3 | undefined
   /** How much looser than asked the detail threshold is right now, 1 and up. */
@@ -84,6 +86,9 @@ export class Terrain {
   private lateness = 0
   private governedAt = 0
   private stitchedAt = 0
+  /** The ground drawn last frame, and whether every edge then sat at its goal (`stitch`). */
+  private lastDrawn: ReadonlyMap<number, number> | undefined
+  private stitchSettled = false
 
   private readonly world: Planet
   private readonly builder: Builder
@@ -199,13 +204,16 @@ export class Terrain {
     // asked for after everything needed now: on a phone the builder runs
     // behind a glide, and ground asked for only once it was needed arrived
     // after the eye did, sharpening in front of it.
+    // Every fourth frame: a second and a half ahead barely moves between
+    // frames, and the second selection was the update's largest part after
+    // the stitch. The eye's pace is taken over the same four frames.
     const last = this.lastCamera
-    this.lastCamera = camera
-    if (last !== undefined) {
+    if (this.frame % AHEAD_EVERY === 0) this.lastCamera = camera
+    if (last !== undefined && this.frame % AHEAD_EVERY === 0) {
       const ahead: Vec3 = [
-        camera[0] + (camera[0] - last[0]) * PREFETCH_FRAMES,
-        camera[1] + (camera[1] - last[1]) * PREFETCH_FRAMES,
-        camera[2] + (camera[2] - last[2]) * PREFETCH_FRAMES,
+        camera[0] + ((camera[0] - last[0]) * PREFETCH_FRAMES) / AHEAD_EVERY,
+        camera[1] + ((camera[1] - last[1]) * PREFETCH_FRAMES) / AHEAD_EVERY,
+        camera[2] + ((camera[2] - last[2]) * PREFETCH_FRAMES) / AHEAD_EVERY,
       ]
       const moved = Math.hypot(ahead[0] - camera[0], ahead[1] - camera[1], ahead[2] - camera[2])
       if (moved > 1e-4 && moved < 0.2) {
@@ -285,8 +293,15 @@ export class Terrain {
       }
     }
 
-    for (const [name, entry] of this.entries) {
-      if (entry.node === undefined) continue
+    // Only what is drawn now or was last frame can change: a patch arrives
+    // hidden, and the cache is a few times what is drawn.
+    const touched = this.touched
+    touched.clear()
+    for (const name of drawn.keys()) touched.add(name)
+    for (const name of this.lastShown) touched.add(name)
+    for (const name of touched) {
+      const entry = this.entries.get(name)
+      if (entry?.node === undefined) continue
       const quarters = drawn.get(name) ?? 0
       const visible = quarters !== 0
       // Coming in finer than what stood here last frame: start as the
@@ -314,7 +329,12 @@ export class Terrain {
       if (key === undefined || key.level < TREE_COARSEST) continue
       wooded.add(keyOf(key.level > TREE_LEVEL ? ancestorAt(key, TREE_LEVEL) : key))
     }
-    for (const [name, entry] of this.entries) {
+    touched.clear()
+    for (const name of wooded) touched.add(name)
+    for (const name of this.lastWooded) touched.add(name)
+    for (const name of touched) {
+      const entry = this.entries.get(name)
+      if (entry === undefined) continue
       const on = wooded.has(name)
       // Only the woods near the eye cast: the shadow box is a fifth of a
       // radius across, and every tree in it went through the shadow pass
@@ -326,6 +346,7 @@ export class Terrain {
       }
     }
     this.lastShown = shown
+    this.lastWooded = wooded
     for (const entry of this.sliding) {
       const weight = entry.shownAt === undefined ? 0 : arrivalAt(entry.shownAt, DETAIL_TIME.value)
       for (const attribute of entry.arrival) {
@@ -346,6 +367,25 @@ export class Terrain {
    * along a snowline.
    */
   private stitch(drawn: ReadonlyMap<number, number>): void {
+    // Nothing to ease and the same ground drawn as last frame: every edge
+    // already sits at its goal. Most frames of a steady glide are this one,
+    // and the ancestor walks below were the largest part of the update.
+    const last = this.lastDrawn
+    let same = last !== undefined && last.size === drawn.size
+    if (same) {
+      for (const [name, quarters] of drawn) {
+        if (last?.get(name) !== quarters) {
+          same = false
+          break
+        }
+      }
+    }
+    this.lastDrawn = drawn
+    if (same && this.stitchSettled) {
+      this.stitchedAt = DETAIL_TIME.value
+      return
+    }
+    let settled = true
     const coarser = (key: PatchKey): boolean => {
       if (drawn.has(keyOf(key))) return false
       let below = key
@@ -379,6 +419,7 @@ export class Terrain {
         return next
       })
       if (edges.every((weight, edge) => weight === entry.edges[edge])) continue
+      settled = false
       entry.edges = edges
       const values = entry.stitch.array as Float32Array
       const side = this.options.segments + 1
@@ -410,6 +451,7 @@ export class Terrain {
       }
       entry.stitch.needsUpdate = true
     }
+    this.stitchSettled = settled
   }
 
   /**
@@ -719,6 +761,9 @@ function gapTo(key: PatchKey, camera: Vec3): number {
 
 /** How far ahead the ground is asked for, in frames at the eye's present pace (about 1.5 s at 30 fps). */
 const PREFETCH_FRAMES = 45
+
+/** How often, in frames, the ground ahead is looked for. */
+const AHEAD_EVERY = 4
 
 /** How often the governor may move, in seconds, and the lateness it moves at. */
 const GOVERN_EVERY = 0.5
