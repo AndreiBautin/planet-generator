@@ -138,6 +138,13 @@ export interface Scene {
     /** The GPU the browser names, when it will; for a report from a machine that is not this one. */
     readonly gpu: string
   }
+  /**
+   * The frame's parts, mean ms a frame since the last call, by name — empty
+   * without a profile clock. For the development recorder.
+   */
+  readonly profile: () => Readonly<
+    Record<string, { readonly mean: number; readonly median: number; readonly max: number }>
+  >
   /** Sound on or off (sound.ts), from inside a press; says which it is now. */
   readonly toggleSound: () => boolean
   /** The star system this world is in, and which of its worlds it is: for its sisters in the sky (sisters.ts). */
@@ -197,6 +204,8 @@ export interface SceneOptions {
   readonly reducedMotion: boolean
   /** Where `public/` is served from, for the ground's photographs. */
   readonly assetBase: string
+  /** A real clock to time the frame's parts by, for the recorder's profile; none in the app. */
+  readonly profileClock?: Clock
   /**
    * Draw only when `step` is called, never on the display's own beat: the
    * development recorder's way of rendering an exact run of frames.
@@ -1091,7 +1100,24 @@ export function startScene(
     comet.update(camera.position, camera.far * 0.86, sunDirection, starsSeen)
   }
 
+  // The frame's parts, timed when there is a profile clock: ms summed by name.
+  const profiled = new Map<string, number[]>()
+  let profiledFrames = 0
+  let markedAt = 0
+  const mark = (name: string): void => {
+    const real = options.profileClock
+    if (real === undefined) return
+    const at = real.now()
+    let times = profiled.get(name)
+    if (times === undefined) profiled.set(name, (times = []))
+    times[profiledFrames - 1] = (times[profiledFrames - 1] ?? 0) + at - markedAt
+    markedAt = at
+  }
   const tick = (): void => {
+    if (options.profileClock !== undefined) {
+      markedAt = options.profileClock.now()
+      profiledFrames += 1
+    }
     renderer.info.reset()
     const now = clock.now()
     if (warmDue.length > 0 && now >= (warmDue[0] ?? Infinity)) {
@@ -1116,7 +1142,9 @@ export function startScene(
 
     // Advanced by the clock, not per frame, so a dropped frame does not
     // slow the planet down.
+    mark('frame start')
     const seen = view()
+    mark('flight')
     const turnMs = ORBIT_TURN_MS + (GLIDE_TURN_MS - ORBIT_TURN_MS) * seen.blend
     if (!holding) turned += ((now - turnedAt) / turnMs) * Math.PI * 2
     turnedAt = now
@@ -1151,7 +1179,9 @@ export function startScene(
     DETAIL_CLOUD_SPIN.value = -0.15 * turn
     DETAIL_CLOUD_SUN.value.set(...inPlanetFrame(sunDirection, turn, 1))
     DETAIL_CLOUD_LAYER_SUN.value.set(...inPlanetFrame(sunDirection, turn * 1.15, 1))
+    mark('sun and winds')
     place(seen, turn)
+    mark('place')
     if (coming !== undefined) {
       coming.terrain.update(inPlanetFrame(camera.position, turn, 1), viewCone(turn))
       if (coming.terrain.ready && (coming.keepClouds || coming.clouds !== undefined)) {
@@ -1165,7 +1195,9 @@ export function startScene(
       shown.terrain.group.rotation.y = turn
       shown.clouds.rotation.y = turn * 1.15
       pose(shown, stage)
+      mark('coming')
       shown.heavens.update(now / 1000, sunDirection, stage.scale)
+      mark('heavens')
       // Where the moons are, in the ground's frame and the clouds', for the
       // shadows they throw when one passes before the sun (eclipse.ts).
       const discs: MoonDisc[] = []
@@ -1202,7 +1234,9 @@ export function startScene(
       modelView.copy(camera.matrixWorld).invert().multiply(shown.terrain.group.matrixWorld)
       DETAIL_NORMAL_MATRIX.value.getNormalMatrix(modelView)
       cloudsSeenFrom(shown.clouds, camera.position.length(), stage.scale, stage.clouds)
+      mark('setup')
       shown.terrain.update(inPlanetFrame(camera.position, turn, stage.scale), viewCone(turn))
+      mark('terrain')
       const shower = rainOver(shown.clouds, turn)
       rain.update(rainEye.copy(camera.position), shower, camera.near)
       rainbow.update(
@@ -1222,6 +1256,7 @@ export function startScene(
           (1 - smooth(0.04, 0.12, camera.position.length() / stage.scale - 1)),
         stage.scale,
       )
+      mark('sky and rain')
       towns?.update(inPlanetFrame(camera.position, turn, stage.scale), stage.scale)
       ships?.update(DETAIL_TIME.value, inPlanetFrame(camera.position, turn, stage.scale))
       lighthouses?.update(
@@ -1234,6 +1269,7 @@ export function startScene(
         sunInGround,
         DETAIL_TIME.value,
       )
+      mark('towns and ships')
       fish.update(
         inPlanetFrame(camera.position, turn, stage.scale),
         shown.terrain.group.matrixWorld,
@@ -1276,6 +1312,7 @@ export function startScene(
         shown.terrain.group.matrixWorld,
         DETAIL_TIME.value,
       )
+      mark('creatures and craft')
       embers.update(
         rainEye,
         shown.world.molten
@@ -1325,11 +1362,14 @@ export function startScene(
         }
       }
     }
+    mark('weather and sound')
     underTheSea()
     if (composer !== undefined) aimBeams()
     else fanBeams()
+    mark('beams')
     if (composer === undefined) renderer.render(scene, camera)
     else composer.render()
+    mark('render')
     frameListener?.()
   }
   if (options.manual !== true) renderer.setAnimationLoop(tick)
@@ -1535,6 +1575,22 @@ export function startScene(
         slowFrameMs: recent[Math.floor(recent.length * 0.95)] ?? 0,
         gpu: gpuName(renderer),
       }
+    },
+    profile: () => {
+      const out: Record<string, { mean: number; median: number; max: number }> = {}
+      for (const [name, times] of profiled) {
+        const each = Array.from({ length: profiledFrames }, (_, k) => times[k] ?? 0).sort(
+          (a, b) => a - b,
+        )
+        out[name] = {
+          mean: each.reduce((a, b) => a + b, 0) / Math.max(1, each.length),
+          median: each[Math.floor(each.length / 2)] ?? 0,
+          max: each[each.length - 1] ?? 0,
+        }
+      }
+      profiled.clear()
+      profiledFrames = 0
+      return out
     },
     sunInPlanet: () => inPlanetFrame(sunDirection, lastTurn, 1),
     postPasses: () => composer?.passes ?? [],

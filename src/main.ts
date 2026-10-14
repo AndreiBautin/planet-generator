@@ -132,6 +132,7 @@ attachGestures(canvas, clock, rig.gestures)
 const builder = createBuilder(navigator.hardwareConcurrency)
 const scene = startScene(canvas, clock, rig.view, {
   manual: recording,
+  ...(recording ? { profileClock: systemClock } : {}),
   quality,
   builder,
   reducedMotion: window.matchMedia('(prefers-reduced-motion: reduce)').matches,
@@ -642,6 +643,8 @@ if (recording) {
       root: scene.root,
       /** What the last frame drew, across every pass. */
       stats: () => scene.stats(),
+      /** Mean ms a frame by part of the frame, since the last call. */
+      profile: () => scene.profile(),
       sun: () => scene.sunInPlanet(),
       /** The post pipeline's passes, each with `enabled`. */
       postPasses: () => scene.postPasses(),
@@ -665,6 +668,7 @@ if (recording) {
           TIME_ELAPSED_EXT: number
         } | null
         const taken: BenchFrame[] = []
+        scene.profile()
         for (let i = 0; i < frames; i += 1) {
           const query = gl !== null && timer !== null ? gl.createQuery() : null
           if (gl !== null && timer !== null && query !== null)
@@ -684,7 +688,7 @@ if (recording) {
           const s = scene.stats()
           taken.push({ scriptMs, gpuMs, calls: s.calls, triangles: s.triangles })
         }
-        return summarise(taken)
+        return { ...summarise(taken), parts: scene.profile() }
       },
       /** Start the guided tour, as the Tour button does. */
       tour: () => {
