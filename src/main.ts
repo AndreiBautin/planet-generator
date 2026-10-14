@@ -1,4 +1,5 @@
 import type { Vec3 } from '@/generation/cube'
+import { summarise, type BenchFrame } from '@/app/bench'
 import { fixedClock, systemClock } from '@/app/clock'
 import { readConfig } from '@/app/config'
 import { linkFor, parseLink, type Shot } from '@/app/link'
@@ -653,6 +654,42 @@ if (recording) {
         rig.fly({ position, heading })
       },
       canvas,
+      /**
+       * The benchmark: `frames` frames at real-time pace (a 33 ms sleep per
+       * 33 ms step, so the workers are not starved), summarised. Open a fixed
+       * seed with `?record`, then call it once in orbit and once after `tour`.
+       */
+      bench: async (frames = 300) => {
+        const gl = canvas.getContext('webgl2')
+        const timer = gl?.getExtension('EXT_disjoint_timer_query_webgl2') as {
+          TIME_ELAPSED_EXT: number
+        } | null
+        const taken: BenchFrame[] = []
+        for (let i = 0; i < frames; i += 1) {
+          const query = gl !== null && timer !== null ? gl.createQuery() : null
+          if (gl !== null && timer !== null && query !== null)
+            gl.beginQuery(timer.TIME_ELAPSED_EXT, query)
+          const start = systemClock.now()
+          recordClock.advance(33)
+          scene.step()
+          const scriptMs = systemClock.now() - start
+          if (gl !== null && timer !== null && query !== null) gl.endQuery(timer.TIME_ELAPSED_EXT)
+          await new Promise((resolve) => window.setTimeout(resolve, 33))
+          let gpuMs = Number.NaN
+          if (gl !== null && query !== null) {
+            if (gl.getQueryParameter(query, gl.QUERY_RESULT_AVAILABLE) === true)
+              gpuMs = Number(gl.getQueryParameter(query, gl.QUERY_RESULT)) / 1e6
+            gl.deleteQuery(query)
+          }
+          const s = scene.stats()
+          taken.push({ scriptMs, gpuMs, calls: s.calls, triangles: s.triangles })
+        }
+        return summarise(taken)
+      },
+      /** Start the guided tour, as the Tour button does. */
+      tour: () => {
+        document.querySelector<HTMLButtonElement>('#tour')?.click()
+      },
     },
   })
 }
