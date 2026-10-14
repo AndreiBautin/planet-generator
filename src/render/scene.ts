@@ -45,7 +45,10 @@ import { Herds } from './herds'
 import { Kelp } from './kelp'
 import { SeaLight } from './sea-light'
 import { daylightAt } from './daylight'
+import { withGroundDetail } from './ground-detail'
+import { withLavaDetail } from './lava-detail'
 import { Profiler } from './profiler'
+import { withWaterDetail } from './water-detail'
 import { Rainbow } from './rainbow'
 import { bowFor, rainOver } from './eye-weather'
 import { DETAIL_SEASON, seasonStrength } from './leaves'
@@ -81,10 +84,7 @@ import {
   DETAIL_SKY,
   DETAIL_ZENITH,
   DETAIL_TIME,
-  withGroundDetail,
   terrainDepthMaterial,
-  withLavaDetail,
-  withWaterDetail,
 } from './detail'
 import type { Vec3 } from './patches/cube'
 import type { ViewCone } from './patches/lod'

@@ -26,8 +26,16 @@ const REASONED: readonly { file: string; base: string; why: string }[] = [
   { file: 'atmosphere.ts', base: 'toward', why: 'max(mu, 0.0) on the line above' },
   { file: 'aurora.ts', base: 'rays', why: 'detailNoise, 0 to 1' },
   { file: 'clouds.ts', base: 'struck / 0.035', why: 'an acos, 0 or more' },
-  { file: 'detail.ts', base: '1.0 - abs(ca - cb)', why: 'ca and cb are detailNoise, 0 to 1' },
-  { file: 'detail.ts', base: '1.0 - facing', why: 'facing is clamped to 0–1 on the line above' },
+  {
+    file: 'ground-detail.ts',
+    base: '1.0 - abs(ca - cb)',
+    why: 'ca and cb are detailNoise, 0 to 1',
+  },
+  {
+    file: 'water-detail.ts',
+    base: '1.0 - facing',
+    why: 'facing is clamped to 0–1 on the line above',
+  },
   { file: 'fish.ts', base: 'vAway * fishHazeDensity', why: 'a distance times a density' },
   { file: 'haze.ts', base: 'sunward', why: 'max(…, 0.0) on the line above' },
   { file: 'kelp.ts', base: 'vAway * kelpHazeDensity', why: 'a distance times a density' },
