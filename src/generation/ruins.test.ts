@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import { hydrologyOf, neighboursOf } from './hydrology'
 import { createPlanet, surfaceAt } from './planet'
-import { ruinIn } from './ruins'
+import { ruinIn, ruinsOf } from './ruins'
 import { parseSeed } from './seed'
 import { settlementsOf } from './settlements'
 
@@ -49,5 +49,10 @@ describe('ruins', () => {
     // A frozen world has no towns, so nobody left any stones.
     const frozen = planetOf('9tcwfzj')
     for (let cell = 0; cell < CELLS; cell += 7) expect(ruinIn(frozen, cell)).toBeUndefined()
+  })
+
+  it('ruinsOf is what a look at every cell finds, in cell order', () => {
+    // What the worker sends is exactly what a cell-by-cell look finds.
+    expect(ruinsOf(world)).toEqual(found.map((entry) => entry.ruin))
   })
 })
