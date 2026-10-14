@@ -44,6 +44,7 @@ import { CoastRocks } from './rocks'
 import { Herds } from './herds'
 import { Kelp } from './kelp'
 import { SeaLight } from './sea-light'
+import { daylightAt } from './daylight'
 import { Profiler } from './profiler'
 import { Rainbow } from './rainbow'
 import { bowFor, rainOver } from './eye-weather'
@@ -939,18 +940,17 @@ export function startScene(
   const NIGHT_LIGHT = new THREE.Color(0x1c2a44)
   const moonDir = new THREE.Vector3()
   const airAround = (above: number): void => {
-    const low = 1 - smooth(0.08, 0.35, above)
-    const elevation = camera.position.clone().normalize().dot(sunDirection)
-    const day = smooth(-0.15, 0.3, elevation)
-    // The sky stays lit for a while after the sun has gone — that is what
-    // twilight is — and the ground under it with it. Read off the sun's own
-    // day, the land went black at sunset under a sky still bright.
-    const twilight = smooth(-0.2, 0.1, elevation)
-    // Stars only once the sun is down and the sky is dimming.
-    const starlit = 1 - smooth(-0.2, -0.03, elevation)
-    // Seeing as far as the horizon, about √(2h) away, should leave a far hill
-    // about half visible.
-    fog.density = low * (0.65 / Math.sqrt(2 * Math.max(above, 0.002)))
+    const elevation = moonDir.copy(camera.position).normalize().dot(sunDirection)
+    // How much day is left here (daylight.ts): every light below is set from it.
+    const {
+      low,
+      day,
+      twilight,
+      starsSeen,
+      fogDensity,
+      skylight: skyShare,
+    } = daylightAt(elevation, above)
+    fog.density = fogDensity
     const glow: unknown = shown?.air.material
     if (glow instanceof THREE.ShaderMaterial) {
       const value: unknown = glow.uniforms.glow?.value
@@ -995,7 +995,7 @@ export function startScene(
           .lerp(SKY_LIGHT, 1 - low)
         // And more of it at dusk, when the sun is too low to light much but
         // the sky overhead is still bright: what the land is seen by then.
-        skylight.intensity = 0.18 + 0.47 * twilight + 0.6 * twilight * (1 - day)
+        skylight.intensity = skyShare
         // The shafts of rain in the light the sky gives, with a floor for the night.
         SHAFT_LIGHT.value.copy(airColour).multiplyScalar(0.42).addScalar(0.02)
         // The dawn mist lit by the sun as it reaches the ground, and in shade by the sky.
@@ -1033,7 +1033,6 @@ export function startScene(
       .copy(sunDirection)
       .transformDirection(camera.matrixWorldInverse)
       .multiplyScalar(low * day)
-    const starsSeen = 1 - low * (1 - starlit) * 0.95
     // The stars, the galaxy's band behind them, and the sister worlds.
     shown?.sky.traverse((node) => {
       const material: unknown = (node as THREE.Points).material
