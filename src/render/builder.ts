@@ -1,6 +1,8 @@
 import type { Dials } from '@/generation/planet'
 import type { Seed } from '@/generation/seed'
 import type { Hydrology } from '@/generation/hydrology'
+import type { Landmark } from '@/generation/landmarks'
+import type { Volcano } from '@/generation/volcanoes'
 import { logger } from '@/shared/logger'
 import type { Harbours } from '@/generation/harbours'
 import type { Ruin } from '@/generation/ruins'
@@ -32,6 +34,11 @@ export interface Builder {
   readonly falls: (seed: Seed, dials: Dials) => Promise<Float32Array>
   /** A world's drainage map, made off the page (generation/hydrology.ts, `adoptHydrology`). */
   readonly hydrology: (seed: Seed, dials: Dials) => Promise<Hydrology>
+  /** The tour's sights and the volcanoes (landmarks.ts, volcanoes.ts), made off the page. */
+  readonly sights: (
+    seed: Seed,
+    dials: Dials,
+  ) => Promise<{ readonly landmarks: readonly Landmark[]; readonly volcanoes: readonly Volcano[] }>
   /** A lived-on world's lights (generation/settlements.ts), placed on its ground. */
   readonly lights: (
     seed: Seed,
@@ -179,6 +186,12 @@ export function createBuilder(cores: number): Builder {
       if (result.kind !== 'hydrology')
         throw new Error('builder answered hydrology with something else')
       return result.hydrology
+    },
+    sights: async (seed, dials) => {
+      next += 1
+      const result = await run({ id: next, kind: 'sights', seed, dials }, -2)
+      if (result.kind !== 'sights') throw new Error('builder answered sights with something else')
+      return { landmarks: result.landmarks, volcanoes: result.volcanoes }
     },
     patch: async (seed, dials, key, segments, urgency = 0) => {
       next += 1

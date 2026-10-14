@@ -1,5 +1,7 @@
 import { createPlanet, type Planet } from '@/generation/planet'
 import { hydrologyOf } from '@/generation/hydrology'
+import { landmarksOf } from '@/generation/landmarks'
+import { volcanoesOf } from '@/generation/volcanoes'
 
 import type { WorkRequest, WorkResult } from './build-protocol'
 import { settlementsOf, townGlow } from '@/generation/settlements'
@@ -61,6 +63,13 @@ export function answer(request: WorkRequest): WorkResult {
       }
     case 'falls':
       return { id: request.id, kind: 'falls', falls: placedFalls(planet) }
+    case 'sights':
+      return {
+        id: request.id,
+        kind: 'sights',
+        landmarks: landmarksOf(planet),
+        volcanoes: volcanoesOf(planet),
+      }
     case 'hydrology': {
       // Copies: the worker keeps its own for the patches it builds, and
       // the buffers sent are given up.
@@ -130,6 +139,8 @@ export function transferables(result: WorkResult): Transferable[] {
       return [result.lights.buffer, result.glow.buffer, result.bridges.buffer]
     case 'falls':
       return [result.falls.buffer]
+    case 'sights':
+      return []
     case 'hydrology':
       return [
         result.hydrology.height.buffer,

@@ -17,7 +17,7 @@ import { attachHud } from '@/ui/hud'
 import { attachIdle } from '@/ui/idle'
 import { attachSliders } from '@/ui/sliders'
 import { TERRAIN_STATS } from '@/render/patches/terrain'
-import { landmarksOf, tourOrder } from '@/generation/landmarks'
+import { tourOrder } from '@/generation/landmarks'
 import { createRig } from '@/ui/rig'
 import { saveClip, savePicture, sendPostcard, shareLink } from '@/ui/share'
 import { clipName } from '@/ui/clip'
@@ -150,11 +150,9 @@ const show = async (born: boolean): Promise<void> => {
   planet = next
   // The drainage map from a worker, so the first question of where the
   // ground is (a dive, a glide) does not freeze the page for most of a second.
-  if (!next.molten) {
-    void builder.hydrology(seed, dials).then((made) => {
-      adoptHydrology(next, made)
-    })
-  }
+  void builder.hydrology(seed, dials).then((made) => {
+    adoptHydrology(next, made)
+  })
   hud.render(next)
   document.body.classList.add('forming')
   // False when a later planet was asked for first; that one will clear the
@@ -202,13 +200,20 @@ const hud = attachHud({
       rig.fly(from)
       hud.flying(true)
     }
-    // A round of the planet's sights, nearest first, then a wander.
-    const stops = tourOrder(landmarksOf(planet), from.position).map((sight) => ({
-      name: sight.name,
-      title: sight.title,
-      path: sight.kind === 'river' ? sight.path : [sight.at],
-    }))
-    rig.tour(true, stops)
+    // A round of the planet's sights, nearest first, then a wander. Found
+    // in a worker (636 ms on the page): the tour starts wandering at once
+    // and takes the round up as soon as it is known, if still touring here.
+    rig.tour(true)
+    const touring = planet
+    void builder.sights(touring.seed, touring.dials).then(({ landmarks }) => {
+      if (planet !== touring || !rig.touring()) return
+      const stops = tourOrder(landmarks, from.position).map((sight) => ({
+        name: sight.name,
+        title: sight.title,
+        path: sight.kind === 'river' ? sight.path : [sight.at],
+      }))
+      rig.tour(true, stops)
+    })
   },
   onPhoto: () => {
     openPostcard()

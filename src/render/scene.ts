@@ -57,7 +57,6 @@ import type { Seed } from '@/generation/seed'
 import { SUNBEAM_SHADER, sunbeamStrength } from './sunbeams'
 import { MarineSnow, underwaterAt, WATER_FOG_DENSITY, waterFog } from './underwater'
 import { DETAIL_CLOUD_MOONS, DETAIL_MOONS, moonShadow, type MoonDisc } from './eclipse'
-import { volcanoesOf } from '@/generation/volcanoes'
 import { cityLights } from './city-lights'
 import { CITY_GLOW_WIDTH } from './work'
 import { Lightning, rainShafts, SHAFT_LIGHT } from './weather'
@@ -669,16 +668,22 @@ export function startScene(
     kelp.setWorld(next.world)
     meteors.setWorld(next.world.seed)
     comet.setWorld(next.world.seed)
-    // Smoke from a molten world's peaks, turning with its ground.
-    const volcanoes = volcanoesOf(next.world)
-    const smoke = plumes(next.world, volcanoes)
-    if (smoke !== undefined) {
-      smoke.userData.withGround = true
-      next.terrain.group.add(smoke)
-      // Their eruptions: fountains at the vents and lava down the flanks (eruptions.ts).
-      const fire = new Eruptions(next.world, volcanoes)
-      fire.group.userData.withGround = true
-      next.terrain.group.add(fire.group)
+    // Smoke from a molten world's peaks, turning with its ground: found in
+    // a worker, since they read the drainage map (most of a second on the
+    // page), and added if this ground is still the one on screen.
+    if (next.world.molten) {
+      const ground = next.terrain
+      void options.builder.sights(next.world.seed, next.world.dials).then(({ volcanoes }) => {
+        if (shown?.terrain !== ground) return
+        const smoke = plumes(next.world, volcanoes)
+        if (smoke === undefined) return
+        smoke.userData.withGround = true
+        ground.group.add(smoke)
+        // Their eruptions: fountains at the vents and lava down the flanks (eruptions.ts).
+        const fire = new Eruptions(next.world, volcanoes)
+        fire.group.userData.withGround = true
+        ground.group.add(fire.group)
+      })
     }
     // Spray off the waterfalls: found in a worker, since they need the
     // drainage map, and added if this ground is still the one on screen.
