@@ -667,7 +667,24 @@ if (recording) {
         const timer = gl?.getExtension('EXT_disjoint_timer_query_webgl2') as {
           TIME_ELAPSED_EXT: number
         } | null
-        const taken: BenchFrame[] = []
+        const taken: { -readonly [K in keyof BenchFrame]: BenchFrame[K] }[] = []
+        // A query's answer comes frames later, if ever (a hidden pane may
+        // never finish one): each is read whenever it is ready, and a frame
+        // whose answer never came stays unmeasured.
+        const waiting: { readonly query: WebGLQuery; readonly frame: number }[] = []
+        const collect = (): void => {
+          if (gl === null) return
+          for (let k = waiting.length - 1; k >= 0; k -= 1) {
+            const item = waiting[k]
+            if (item === undefined) continue
+            if (gl.getQueryParameter(item.query, gl.QUERY_RESULT_AVAILABLE) !== true) continue
+            const frame = taken[item.frame]
+            if (frame !== undefined)
+              frame.gpuMs = Number(gl.getQueryParameter(item.query, gl.QUERY_RESULT)) / 1e6
+            gl.deleteQuery(item.query)
+            waiting.splice(k, 1)
+          }
+        }
         scene.profile()
         for (let i = 0; i < frames; i += 1) {
           const query = gl !== null && timer !== null ? gl.createQuery() : null
@@ -677,17 +694,20 @@ if (recording) {
           recordClock.advance(33)
           scene.step()
           const scriptMs = systemClock.now() - start
-          if (gl !== null && timer !== null && query !== null) gl.endQuery(timer.TIME_ELAPSED_EXT)
-          await new Promise((resolve) => window.setTimeout(resolve, 33))
-          let gpuMs = Number.NaN
-          if (gl !== null && query !== null) {
-            if (gl.getQueryParameter(query, gl.QUERY_RESULT_AVAILABLE) === true)
-              gpuMs = Number(gl.getQueryParameter(query, gl.QUERY_RESULT)) / 1e6
-            gl.deleteQuery(query)
+          if (gl !== null && timer !== null && query !== null) {
+            gl.endQuery(timer.TIME_ELAPSED_EXT)
+            waiting.push({ query, frame: i })
           }
           const s = scene.stats()
-          taken.push({ scriptMs, gpuMs, calls: s.calls, triangles: s.triangles })
+          taken.push({ scriptMs, gpuMs: Number.NaN, calls: s.calls, triangles: s.triangles })
+          await new Promise((resolve) => window.setTimeout(resolve, 33))
+          collect()
         }
+        for (let tries = 0; tries < 10 && waiting.length > 0; tries += 1) {
+          await new Promise((resolve) => window.setTimeout(resolve, 50))
+          collect()
+        }
+        for (const item of waiting) gl?.deleteQuery(item.query)
         return { ...summarise(taken), parts: scene.profile() }
       },
       /** Start the guided tour, as the Tour button does. */
