@@ -51,10 +51,13 @@ export interface Shot {
   readonly tilt: number
 }
 
+const SHOT_MAX = 64
+
 const HEIGHTS = { glide: [0.004, 0.12], orbit: [1.9, 6] } as const
 
 function parseShot(raw: string | null): Shot | undefined {
-  if (raw === null) return undefined
+  // Longer than any shot this app writes is not one of its links.
+  if (raw === null || raw.length > SHOT_MAX) return undefined
   const [kind, ...rest] = raw.split(',')
   const numbers = rest.map((part) => (/^-?\d+(\.\d+)?$/.test(part.trim()) ? Number(part) : NaN))
   if (numbers.some((n) => !Number.isFinite(n))) return undefined
@@ -76,7 +79,8 @@ function parseShot(raw: string | null): Shot | undefined {
     shot.hour <= 24 &&
     shot.height >= low &&
     shot.height <= high &&
-    Math.abs(shot.tilt) <= 45
+    Math.abs(shot.tilt) <= 45 &&
+    Math.abs(shot.bearing) <= 360
   return sane ? shot : undefined
 }
 

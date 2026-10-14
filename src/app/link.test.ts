@@ -110,4 +110,12 @@ describe('a postcard link', () => {
   it('leaves the shot out of a plain link', () => {
     expect(parseLink(linkFor(seed, dials)).shot).toBeUndefined()
   })
+
+  it('refuses a shot no link of this app would carry', () => {
+    expect(parseLink('?seed=k3m9xqa&shot=g,10,20,99999,4.0,12.00,0').shot).toBeUndefined()
+    expect(
+      parseLink(`?seed=k3m9xqa&shot=g,10,20,90,4.0,12.${'0'.repeat(80)},0`).shot,
+    ).toBeUndefined()
+    expect(parseLink('?seed=k3m9xqa&shot=g,10,20,-120,4.0,12.00,0').shot?.bearing).toBe(-120)
+  })
 })
