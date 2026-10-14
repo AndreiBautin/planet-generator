@@ -65,6 +65,23 @@ function serviceWorker(): Plugin {
   }
 }
 
+/**
+ * The page's Content-Security-Policy allows `ws:` so the dev server's hot
+ * reload can connect; a built page needs no socket, so the build takes it
+ * out. A policy that let any socket host through is an exfiltration path.
+ */
+function strictPolicy(): Plugin {
+  return {
+    name: 'planet-strict-csp',
+    apply: 'build',
+    transformIndexHtml(html) {
+      const strict = html.replace("connect-src 'self' ws: wss:", "connect-src 'self'")
+      if (strict === html) throw new Error('index.html CSP: dev connect-src not found')
+      return strict
+    },
+  }
+}
+
 export default defineConfig({
   // GitHub Pages serves the app from /planet-generator/; the deploy sets
   // BASE_PATH, and everywhere else it is served from the root.
@@ -90,5 +107,5 @@ export default defineConfig({
     },
   },
   worker: { format: 'es' },
-  plugins: [serviceWorker()],
+  plugins: [serviceWorker(), strictPolicy()],
 })
