@@ -89,8 +89,11 @@ export default defineConfig({
   resolve: {
     alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) },
   },
-  server: { port: PORT, strictPort: true },
-  preview: { port: PORT, strictPort: true },
+  // Loopback only, said rather than inherited: the dev server serves the
+  // source tree, and nothing on the network has any business reading it.
+  // Vite's own allowedHosts check refuses a rebinding Host header on top.
+  server: { host: 'localhost', port: PORT, strictPort: true },
+  preview: { host: 'localhost', port: PORT, strictPort: true },
   // Three.js alone is about 575 kB minified, in a chunk of its own below;
   // the default 500 kB warning would fire on it every build and be learned
   // as noise. Raised to just above it, so a real jump in size still warns —

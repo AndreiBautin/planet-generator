@@ -10,7 +10,13 @@
  */
 const VERSION = '__VERSION__'
 const PRECACHE = __PRECACHE__
-const CACHE = `planet-${VERSION}`
+// GitHub Pages serves every project of an account from one origin, and
+// caches are per origin: a bare `planet-` prefix would let this worker
+// delete another project's caches, or another project delete these.
+const PREFIX = 'planet-generator-'
+const CACHE = `${PREFIX}${VERSION}`
+// Caches named before the prefix was this project's own, exactly this shape.
+const LEGACY = /^planet-[0-9a-f]{12}$/
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -30,7 +36,7 @@ self.addEventListener('activate', (event) => {
       .then((keys) =>
         Promise.all(
           keys
-            .filter((key) => key.startsWith('planet-') && key !== CACHE)
+            .filter((key) => (key.startsWith(PREFIX) || LEGACY.test(key)) && key !== CACHE)
             .map((key) => caches.delete(key)),
         ),
       )
