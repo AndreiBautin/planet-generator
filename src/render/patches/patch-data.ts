@@ -10,6 +10,7 @@ import { fromPalette } from '../colour'
 import { liftOf } from '../surface-data'
 import { SEA_RADIUS } from '../water'
 import { directionOn, patchAngle, patchUv, type PatchKey } from './cube'
+import { waterSheetOf, type WaterSheet } from './water-sheet'
 
 /**
  * One patch of ground as typed arrays: a grid of (segments + 1)² vertices
@@ -37,6 +38,8 @@ export interface PatchData {
   readonly colours: Float32Array
   /** Whether any of the patch lies under water — sea, lake or river — so it needs water drawn over it. */
   readonly hasSea: boolean
+  /** The water drawn over it, where `hasSea` (water-sheet.ts); made here, in the worker. */
+  readonly sea: WaterSheet | undefined
   /**
    * How far from the centre the water's surface is at each vertex: the sea,
    * a lake's level, or a river running a little below its banks; past the
@@ -699,6 +702,7 @@ export function samplePatch(planet: Planet, key: PatchKey, segments: number): Pa
     ground,
     water,
     dry,
+    sea: hasSea ? waterSheetOf({ positions, coarsePositions, water, dry }) : undefined,
   }
 }
 

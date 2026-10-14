@@ -159,6 +159,15 @@ export function transferables(result: WorkResult): Transferable[] {
         result.patch.ground.buffer,
         result.patch.water.buffer,
         result.patch.dry.buffer,
+        ...(result.patch.sea === undefined
+          ? []
+          : [
+              result.patch.sea.positions.buffer,
+              result.patch.sea.normals.buffer,
+              result.patch.sea.depth.buffer,
+              result.patch.sea.coarseDepth.buffer,
+              result.patch.sea.inland.buffer,
+            ]),
       ]
   }
 }

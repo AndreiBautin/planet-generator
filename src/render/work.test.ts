@@ -29,3 +29,21 @@ describe('the hydrology job', () => {
     for (const buffer of transferables(result)) expect(transferables(again)).not.toContain(buffer)
   })
 })
+
+describe('the patch job', () => {
+  it('brings the water sheet made in the worker, sent with the rest', () => {
+    const seed = parseSeed('83tzj46')
+    if (seed === undefined) throw new Error('test seed did not parse')
+    // A coarse patch of a temperate world: sea somewhere on it.
+    const key = { face: 2, level: 2, x: 1, y: 1 } as const
+    const result = answer({ id: 3, kind: 'patch', seed, dials: DEFAULT_DIALS, key, segments: 8 })
+    if (result.kind !== 'patch') throw new Error('wrong kind')
+    const { patch } = result
+    expect(patch.hasSea).toBe(true)
+    expect(patch.sea !== undefined).toBe(patch.hasSea)
+    if (patch.sea === undefined) return
+    expect(patch.sea.positions.length).toBe(patch.positions.length)
+    expect(patch.sea.depth.length).toBe(patch.positions.length / 3)
+    expect(transferables(result)).toContain(patch.sea.depth.buffer)
+  })
+})
