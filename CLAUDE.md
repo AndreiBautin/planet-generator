@@ -2569,10 +2569,13 @@ compare a change by the part it touched, not the frame's total.
   shown, so `precompile` covers them. The ~400 ms towns frame is gone and
   the frame a world appears in compiles ~4 programs, ~40 ms.
   `recorder.stats().programs` counts programs: a jump marks a compile.
-- **Left**: the shader warm-up 2.5 s after a world appears (`warm`) makes
-  a frame of 430–510 ms on the frozen `9tcwfzj`, with no new program in
-  it; and the frame `precompile` starts in costs 105–1,000 ms on first
-  load in the dev server (its synchronous part).
+- **Left, intermittent**: a frame of 300–510 ms some seconds into the
+  frozen `9tcwfzj`, in 2 of 5 runs. Switching the warm-up off removed it
+  in the run tried; in the slow frames measured no WebGL call took over 1 ms
+  (every method of the context wrapped), `onBeforeCompile` totalled 1 ms,
+  and the heap never passed 75 MB — so it is JavaScript, not the driver or
+  a compile, and not found. The frame `precompile` starts in costs
+  105–1,000 ms on first load in the dev server.
 - **A hidden pane left for long throttles its timers to seconds**; a run
   of `await sleep` steps then crawls and `javascript_tool` times out. A
   reload does not cure it; showing the pane does.
