@@ -21,6 +21,12 @@ describe('configuration', () => {
     })
   })
 
+  it('turns the developer tools on only in development, never from a variable', () => {
+    const hopeful = { DEV: true, VITE_DEVELOPER: 'true', MODE: 'development', developer: true }
+    expect(parseConfig(hopeful, false).config.developer).toBe(false)
+    expect(parseConfig({}, true).config.developer).toBe(true)
+  })
+
   it('registers the service worker in a build and never in development', () => {
     expect(parseConfig({}, false).config.serviceWorker).toBe(true)
     expect(parseConfig({}, true).config.serviceWorker).toBe(false)
