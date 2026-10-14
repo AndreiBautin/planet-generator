@@ -32,7 +32,7 @@ const REASONED: readonly { file: string; base: string; why: string }[] = [
   { file: 'haze.ts', base: 'sunward', why: 'max(…, 0.0) on the line above' },
   { file: 'kelp.ts', base: 'vAway * kelpHazeDensity', why: 'a distance times a density' },
   { file: 'meteors.ts', base: 'hash(k + 2.0)', why: 'a fract, 0 to 1' },
-  { file: 'scene.ts', base: 'mottle', why: 'noise, 0 to 1' },
+  { file: 'starfield.ts', base: 'mottle', why: 'noise, 0 to 1' },
   { file: 'sea-light.ts', base: '1.0 - at.y', why: 'at is clamped to 0–1 above' },
   { file: 'sun-fan.ts', base: '1.0 - clamp(vAlong, 0.0, 1.0)', why: 'clamped to 1 at most' },
   { file: 'volcanic.ts', base: 'age', why: 'a fract, 0 to 1' },

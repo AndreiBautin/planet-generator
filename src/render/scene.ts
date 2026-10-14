@@ -1,10 +1,12 @@
 import * as THREE from 'three'
+import { inPlanetFrame, intoRoom, smooth, unit } from './frames'
+import { alongTheLand, coastAround, landNear } from './places'
+import { GRADE_SHADER, postTarget } from './post'
+import { buildSky, STAR_RADIUS } from './starfield'
 
 import type { Clock } from '@/app/clock'
-import { sunDeclination, surfaceAt, type Planet } from '@/generation/planet'
-import { createRng } from '@/generation/rng'
+import { sunDeclination, type Planet } from '@/generation/planet'
 import { RING_BANDS, satellitesOf } from '@/generation/satellites'
-import { galaxyBand, starField } from '@/generation/stars'
 import { logger } from '@/shared/logger'
 
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js'
@@ -24,7 +26,7 @@ import { fromPalette } from './colour'
 import { CometSky } from './comet'
 import { buildHeavens, type Heavens } from './heavens'
 import { Rain } from './rain'
-import { flowingCoverAt, updateFlow } from './winds'
+import { updateFlow } from './winds'
 import { Soundscape } from './sound'
 import { auroraFor, auroraStrength } from './aurora'
 import { VALLEY_FOG } from './valley-fog'
@@ -42,7 +44,9 @@ import { CoastRocks } from './rocks'
 import { Herds } from './herds'
 import { Kelp } from './kelp'
 import { SeaLight } from './sea-light'
-import { Rainbow, rainbowStrength } from './rainbow'
+import { Profiler } from './profiler'
+import { Rainbow } from './rainbow'
+import { bowFor, rainOver } from './eye-weather'
 import { DETAIL_SEASON, seasonStrength } from './leaves'
 import { Ships } from './ships'
 import { Bridges } from './bridges'
@@ -63,7 +67,6 @@ import { Lightning, rainShafts, SHAFT_LIGHT } from './weather'
 import {
   DETAIL_AURORA,
   DETAIL_UNDER,
-  NOISE,
   DETAIL_CITIES,
   DETAIL_CITY_LIGHT,
   DETAIL_CLOUD_LAYER_SUN,
@@ -244,143 +247,9 @@ interface Coming {
   built?: { readonly heavens: Heavens; readonly air: THREE.Mesh; readonly sky: THREE.Points }
 }
 
-/**
- * The nearest dry, raised ground to a direction that stays land for a while
- * along the heading, so a dive lands over land and the glide does not run
- * straight back out to sea over the next coast.
- */
-function landNear(planet: Planet, under: Vec3, heading: Vec3): Vec3 {
-  const dry = (d: Vec3): boolean => surfaceAt(planet, d[0], d[1], d[2]).height > 0.04
-  const solid = (d: Vec3): boolean =>
-    dry(d) &&
-    [0.04, 0.08, 0.12].every((k) =>
-      dry(unit([d[0] + heading[0] * k, d[1] + heading[1] * k, d[2] + heading[2] * k])),
-    )
-  if (solid(under)) return under
-  // A small island world may have no land that runs on ahead: then the
-  // nearest dry ground at all, rather than the open sea.
-  let nearestDry: Vec3 | undefined = dry(under) ? under : undefined
-  const polar = Math.abs(under[1]) > 0.99
-  const east = unit(polar ? [1, 0, 0] : [under[2], 0, -under[0]])
-  const north: Vec3 = [
-    under[1] * east[2] - under[2] * east[1],
-    under[2] * east[0] - under[0] * east[2],
-    under[0] * east[1] - under[1] * east[0],
-  ]
-  for (let ring = 1; ring <= 40; ring += 1) {
-    const radius = ring * 0.012
-    const steps = 6 + ring * 4
-    for (let step = 0; step < steps; step += 1) {
-      const turn = (step / steps) * Math.PI * 2
-      const candidate = unit([
-        under[0] + (east[0] * Math.cos(turn) + north[0] * Math.sin(turn)) * radius,
-        under[1] + (east[1] * Math.cos(turn) + north[1] * Math.sin(turn)) * radius,
-        under[2] + (east[2] * Math.cos(turn) + north[2] * Math.sin(turn)) * radius,
-      ])
-      if (solid(candidate)) return candidate
-      if (nearestDry === undefined && dry(candidate)) nearestDry = candidate
-    }
-  }
-  return nearestDry ?? under
-}
-
-/**
- * Which way to set off: the bearing with the longest run of land ahead,
- * out of sixteen, the one nearest the way the eye faced winning a tie. A
- * glide flies straight unless steered — it once leaned towards land on its
- * own, and that read as turning for no reason — so where it starts heading
- * decides whether the first minute is over ground or over open sea.
- */
-function alongTheLand(planet: Planet, position: Vec3, facing: Vec3): Vec3 {
-  const dry = (d: Vec3): boolean => surfaceAt(planet, d[0], d[1], d[2]).height > 0
-  const along = (v: Vec3): Vec3 => {
-    const k = v[0] * position[0] + v[1] * position[1] + v[2] * position[2]
-    return unit([v[0] - position[0] * k, v[1] - position[1] * k, v[2] - position[2] * k])
-  }
-  const ahead = along(facing)
-  const side: Vec3 = [
-    position[1] * ahead[2] - position[2] * ahead[1],
-    position[2] * ahead[0] - position[0] * ahead[2],
-    position[0] * ahead[1] - position[1] * ahead[0],
-  ]
-  let best = ahead
-  let bestRun = -1
-  for (let k = 0; k < 16; k += 1) {
-    // Out from straight ahead in both directions alternately, so a tie keeps
-    // the bearing nearest the way the eye faced.
-    const turn = (Math.ceil(k / 2) * (k % 2 === 0 ? 1 : -1) * Math.PI) / 8
-    const bearing: Vec3 = [
-      ahead[0] * Math.cos(turn) + side[0] * Math.sin(turn),
-      ahead[1] * Math.cos(turn) + side[1] * Math.sin(turn),
-      ahead[2] * Math.cos(turn) + side[2] * Math.sin(turn),
-    ]
-    let run = 0
-    while (run < 40) {
-      const t = (run + 1) * 0.006
-      const step = unit([
-        position[0] * Math.cos(t) + bearing[0] * Math.sin(t),
-        position[1] * Math.cos(t) + bearing[1] * Math.sin(t),
-        position[2] * Math.cos(t) + bearing[2] * Math.sin(t),
-      ])
-      if (!dry(step)) break
-      run += 1
-    }
-    if (run > bestRun) {
-      best = bearing
-      bestRun = run
-    }
-  }
-  return best
-}
-
-/** How far out the stars are laid, before they are scaled to the far plane. */
-const STAR_RADIUS = 60
-
 /** Frames measured before the governor judges the device. */
 const FRAME_WINDOW = 90
 
-/** The post pass's own frame: half float so bloom has highlights to find, multisampled so edges stay clean. */
-function postTarget(): THREE.WebGLRenderTarget {
-  return new THREE.WebGLRenderTarget(window.innerWidth, window.innerHeight, {
-    type: THREE.HalfFloatType,
-    samples: 4,
-  })
-}
-
-/**
- * The grade: a gentle curve, a little saturation and a vignette. There was
- * a film grain too, a fixed hash per pixel; over a moving picture it stood
- * still like dust on the screen, and was reported as grainy twice, at
- * 0.035 and again at 0.016. It is gone.
- */
-const GRADE_SHADER = {
-  uniforms: { tDiffuse: { value: null }, vignette: { value: 0.32 } },
-  vertexShader: /* glsl */ `
-    varying vec2 vUv;
-    void main() {
-      vUv = uv;
-      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-    }
-  `,
-  fragmentShader: /* glsl */ `
-    uniform sampler2D tDiffuse;
-    uniform float vignette;
-    varying vec2 vUv;
-    void main() {
-      vec4 c = texture2D(tDiffuse, vUv);
-      // After AgX, which is neutral and flat on its own: a gentle S-curve
-      // through the mid-grey and a little more saturation, the filmic
-      // contrast ACES had without its burnt highlights and orange skin.
-      c.rgb = mix(c.rgb, c.rgb * c.rgb * (3.0 - 2.0 * c.rgb), 0.22);
-      float luma = dot(c.rgb, vec3(0.2126, 0.7152, 0.0722));
-      c.rgb = mix(vec3(luma), c.rgb, 1.15);
-      vec2 d = vUv - 0.5;
-      float edge = 1.0 - smoothstep(0.35, 1.1, dot(d, d) * 2.4);
-      c.rgb *= mix(1.0 - vignette, 1.0, edge);
-      gl_FragColor = c;
-    }
-  `,
-}
 /**
  * The planet turns once every two minutes seen from orbit, which is slow
  * enough to watch and fast enough to see; and once every eight in a glide,
@@ -512,7 +381,6 @@ export function startScene(
   const sunFan = new SunFan()
   scene.add(sunFan.object)
   const awayFromSun = new THREE.Vector3()
-  const bowUp = new THREE.Vector3()
   const marineSnow = new MarineSnow()
   scene.add(marineSnow.object)
   const fish = new Fish()
@@ -1177,26 +1045,16 @@ export function startScene(
     comet.update(camera.position, camera.far * 0.86, sunDirection, starsSeen)
   }
 
-  // The frame's parts, timed when there is a profile clock: ms summed by name.
-  const profiled = new Map<string, number[]>()
-  let profiledFrames = 0
-  let markedAt = 0
+  // The frame's parts, timed when there is a profile clock (profiler.ts).
+  const profiler =
+    options.profileClock === undefined ? undefined : new Profiler(options.profileClock)
   const mark = (name: string): void => {
-    const real = options.profileClock
-    if (real === undefined) return
-    const at = real.now()
-    let times = profiled.get(name)
-    if (times === undefined) profiled.set(name, (times = []))
-    times[profiledFrames - 1] = (times[profiledFrames - 1] ?? 0) + at - markedAt
-    markedAt = at
+    profiler?.mark(name)
   }
   let shadowFrame = 0
   let shadowWasLow = false
   const tick = (): void => {
-    if (options.profileClock !== undefined) {
-      markedAt = options.profileClock.now()
-      profiledFrames += 1
-    }
+    profiler?.startFrame()
     renderer.info.reset()
     const now = clock.now()
     if (warmDue.length > 0 && now >= (warmDue[0] ?? Infinity)) {
@@ -1326,12 +1184,12 @@ export function startScene(
       mark('setup')
       shown.terrain.update(inPlanetFrame(camera.position, turn, stage.scale), viewCone(turn))
       mark('terrain')
-      const shower = rainOver(shown.clouds, turn)
+      const shower = rainOver(camera.position, shown.clouds, turn)
       rain.update(rainEye.copy(camera.position), shower, camera.near)
       rainbow.update(
         camera.position,
         awayFromSun.copy(sunDirection).negate(),
-        bowFor(shown.clouds, turn, stage.scale),
+        bowFor(camera.position, sunDirection, shown.clouds, turn, stage.scale),
         stage.scale,
         DETAIL_TIME.value,
       )
@@ -1527,8 +1385,11 @@ export function startScene(
     }
   }
 
-  /** Where the sun is on the screen and how strong its beams are, this frame. */
-  const aimBeams = (): void => {
+  /**
+   * Where the sun is on the screen (0 to 1 across and up) and how strong
+   * sunbeams from it are this frame, for the pass and the phone's fan alike.
+   */
+  const sunInView = (): { x: number; y: number; strength: number } => {
     const scale = shown === undefined ? 1 : stageOf(shown).scale
     const above = camera.position.length() / scale - 1
     camera.updateMatrixWorld()
@@ -1540,89 +1401,34 @@ export function startScene(
     const y = sunOnScreen.y * 0.5 + 0.5
     const off = ahead ? Math.hypot(x - 0.5, y - 0.5) : 2
     const elevation = meteorUp.copy(camera.position).normalize().dot(sunDirection)
+    const strength =
+      sunbeamStrength(elevation, 1 - smooth(0.05, 0.3, above), off) * (1 - DETAIL_UNDER.value)
+    return { x, y, strength }
+  }
+
+  /** Aim the sunbeams pass at the sun, at this frame's strength. */
+  const aimBeams = (): void => {
     const { sunAt, strength, tint } = beams.uniforms
     if (sunAt === undefined || strength === undefined || tint === undefined) return
-    ;(sunAt.value as THREE.Vector2).set(x, y)
-    strength.value =
-      BEAM_STRENGTH *
-      sunbeamStrength(elevation, 1 - smooth(0.05, 0.3, above), off) *
-      (1 - DETAIL_UNDER.value)
+    const sunHere = sunInView()
+    ;(sunAt.value as THREE.Vector2).set(sunHere.x, sunHere.y)
+    strength.value = BEAM_STRENGTH * sunHere.strength
     ;(tint.value as THREE.Color).copy(sun.color)
   }
 
   /**
    * On a phone with no post pass, the sunbeams as a fan of rays in the sky
-   * (sun-fan.ts), at the strength the pass would have had, a little less:
-   * nothing in the fan reads the clouds, so it is kept quieter.
+   * (sun-fan.ts), at the strength the pass would have had.
    */
   const fanBeams = (): void => {
-    const scale = shown === undefined ? 1 : stageOf(shown).scale
-    const above = camera.position.length() / scale - 1
-    camera.updateMatrixWorld()
-    sunOnScreen.copy(camera.position).addScaledVector(sunDirection, camera.far * 0.5)
-    sunOnScreen.project(camera)
-    const ahead = sunOnScreen.z < 1
-    const off = ahead ? Math.hypot(sunOnScreen.x * 0.5, sunOnScreen.y * 0.5) : 2
-    const elevation = meteorUp.copy(camera.position).normalize().dot(sunDirection)
     sunFan.update(
       camera.position,
       sunDirection,
       camera.far * 0.6,
-      sunbeamStrength(elevation, 1 - smooth(0.05, 0.3, above), off) * (1 - DETAIL_UNDER.value),
+      sunInView().strength,
       sun.color,
       DETAIL_TIME.value,
     )
-  }
-
-  /**
-   * How bright a rainbow is now: the sun's height over the eye, and the
-   * cloud over the eye and out on the far side from the sun, where the
-   * rain that makes the bow would be (rainbow.ts).
-   */
-  const bowFor = (clouds: THREE.Mesh, turn: number, scale: number): number => {
-    const height = camera.position.length() / scale - 1
-    if (height > 0.08) return 0
-    const held = cloudDataOf(clouds)
-    if (held === undefined) return 0
-    const eye = unit(inPlanetFrame(camera.position, turn * 1.15, 1))
-    const away = inPlanetFrame(awayFromSun.copy(sunDirection).negate(), turn * 1.15, 1)
-    const along = away[0] * eye[0] + away[1] * eye[1] + away[2] * eye[2]
-    const out = unit([away[0] - eye[0] * along, away[1] - eye[1] * along, away[2] - eye[2] * along])
-    const cover = (d: Vec3): number => flowingCoverAt(held.data, held.width, d, DETAIL_TIME.value)
-    let rainAway = 0
-    for (const reach of [0.015, 0.03, 0.045, 0.06]) {
-      const c = Math.cos(reach)
-      const s = Math.sin(reach)
-      rainAway = Math.max(
-        rainAway,
-        cover(unit([eye[0] * c + out[0] * s, eye[1] * c + out[1] * s, eye[2] * c + out[2] * s])),
-      )
-    }
-    return rainbowStrength({
-      sunUp: bowUp.copy(camera.position).normalize().dot(sunDirection),
-      height,
-      rainAway,
-      cloudOver: cover(eye),
-    })
-  }
-
-  /** How heavy a shower falls on the eye: the cloud over it, only low down. */
-  const rainOver = (clouds: THREE.Mesh, turn: number): number => {
-    const above = camera.position.length() - 1
-    if (above > 0.12) return 0
-    const held = cloudDataOf(clouds)
-    if (held === undefined) return 0
-    // The eye's direction in the cloud layer's own frame, which turns a
-    // little ahead of the ground.
-    const direction = inPlanetFrame(camera.position, turn * 1.15, 1)
-    const length = Math.hypot(...direction) || 1
-    const cover = flowingCoverAt(
-      held.data,
-      held.width,
-      [direction[0] / length, direction[1] / length, direction[2] / length],
-      DETAIL_TIME.value,
-    )
-    return smooth(0.5, 0.8, cover) * (1 - smooth(0.06, 0.12, above))
   }
 
   return {
@@ -1666,22 +1472,7 @@ export function startScene(
         programs: renderer.info.programs?.length ?? 0,
       }
     },
-    profile: () => {
-      const out: Record<string, { mean: number; median: number; max: number }> = {}
-      for (const [name, times] of profiled) {
-        const each = Array.from({ length: profiledFrames }, (_, k) => times[k] ?? 0).sort(
-          (a, b) => a - b,
-        )
-        out[name] = {
-          mean: each.reduce((a, b) => a + b, 0) / Math.max(1, each.length),
-          median: each[Math.floor(each.length / 2)] ?? 0,
-          max: each[each.length - 1] ?? 0,
-        }
-      }
-      profiled.clear()
-      profiledFrames = 0
-      return out
-    },
+    profile: () => profiler?.take() ?? {},
     sunInPlanet: () => inPlanetFrame(sunDirection, lastTurn, 1),
     postPasses: () => composer?.passes ?? [],
     hold: (on) => {
@@ -1723,18 +1514,6 @@ export function startScene(
   }
 }
 
-/** 0 below `from`, 1 above `to`, eased between. */
-function smooth(from: number, to: number, value: number): number {
-  const t = Math.min(1, Math.max(0, (value - from) / (to - from)))
-  return t * t * (3 - 2 * t)
-}
-
-const unit = (v: Vec3): Vec3 => {
-  const length = Math.hypot(v[0], v[1], v[2]) || 1
-  return [v[0] / length, v[1] / length, v[2] / length]
-}
-
-/** A point in the planet's own frame, carried round to where the planet has turned to. */
 /** The cloud layer's own opacity texture, for the ground to take shadows from. */
 function cloudMapOf(clouds: THREE.Mesh): THREE.Texture | null {
   const material: unknown = clouds.material
@@ -1751,30 +1530,6 @@ function gpuName(renderer: THREE.WebGLRenderer): string {
   if (typeof key !== 'number') return ''
   const name: unknown = gl.getParameter(key)
   return typeof name === 'string' ? name : ''
-}
-
-function intoRoom(point: Vec3, turn: number): [number, number, number] {
-  const cos = Math.cos(turn)
-  const sin = Math.sin(turn)
-  return [point[0] * cos + point[2] * sin, point[1], -point[0] * sin + point[2] * cos]
-}
-
-/**
- * The camera in the planet's own frame: undo the planet's turn about its
- * axis and its birth scale, so the terrain is split for where the camera is
- * relative to the ground rather than relative to the room.
- */
-function inPlanetFrame(
-  position: { readonly x: number; readonly y: number; readonly z: number },
-  turn: number,
-  scale: number,
-): Vec3 {
-  const cos = Math.cos(-turn)
-  const sin = Math.sin(-turn)
-  const x = position.x * cos + position.z * sin
-  const z = -position.x * sin + position.z * cos
-  const s = scale > 0 ? 1 / scale : 1
-  return [x * s, position.y * s, z * s]
 }
 
 /** How bright the sunbeams are at their strongest (sunbeams.ts). */
@@ -1826,37 +1581,6 @@ function treeColours(world: Planet): { conifer: THREE.Color; broadleaf: THREE.Co
   }
 }
 
-/** How much of the ground round a point is coast, 0 to 1: sea and land both within a short way. */
-function coastAround(world: Planet, eye: Vec3): number {
-  const length = Math.hypot(...eye) || 1
-  const u: Vec3 = [eye[0] / length, eye[1] / length, eye[2] / length]
-  const side: Vec3 = Math.abs(u[1]) < 0.9 ? [0, 1, 0] : [1, 0, 0]
-  const a: Vec3 = [
-    u[1] * side[2] - u[2] * side[1],
-    u[2] * side[0] - u[0] * side[2],
-    u[0] * side[1] - u[1] * side[0],
-  ]
-  const al = Math.hypot(...a) || 1
-  const e1: Vec3 = [a[0] / al, a[1] / al, a[2] / al]
-  const e2: Vec3 = [
-    u[1] * e1[2] - u[2] * e1[1],
-    u[2] * e1[0] - u[0] * e1[2],
-    u[0] * e1[1] - u[1] * e1[0],
-  ]
-  let sea = 0
-  const samples = 9
-  for (let k = 0; k < samples; k += 1) {
-    const reach = k === 0 ? 0 : 0.012
-    const angle = (k / (samples - 1)) * Math.PI * 2
-    const x = u[0] + (e1[0] * Math.cos(angle) + e2[0] * Math.sin(angle)) * reach
-    const y = u[1] + (e1[1] * Math.cos(angle) + e2[1] * Math.sin(angle)) * reach
-    const z = u[2] + (e1[2] * Math.cos(angle) + e2[2] * Math.sin(angle)) * reach
-    if (surfaceAt(world, x, y, z).height < 0) sea += 1
-  }
-  const share = sea / samples
-  return Math.min(1, share * (1 - share) * 4)
-}
-
 /** Hand the rings' bands to the ground, for the shadow they cast; none, for a world without. */
 function ringsOnGround(heavens: Heavens): void {
   DETAIL_RINGS.value.set(heavens.inner, heavens.outer)
@@ -1870,87 +1594,6 @@ function ringsOnGround(heavens: Heavens): void {
     }
     v.set(at(0), at(1), at(2), at(3))
   })
-}
-
-function buildSky(world: Planet, pixelRatio: number): THREE.Points {
-  const stars = starField(createRng(world.seed).fork('stars'), 2500, STAR_RADIUS)
-  const points = (positions: Float32Array, colours: Float32Array, size: number): THREE.Points => {
-    const geometry = new THREE.BufferGeometry()
-    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3))
-    geometry.setAttribute('color', new THREE.BufferAttribute(colours, 3))
-    return new THREE.Points(
-      geometry,
-      new THREE.PointsMaterial({
-        size: size * pixelRatio,
-        sizeAttenuation: false,
-        vertexColors: true,
-        toneMapped: false,
-        // Stars are far beyond the air and must not take the haze's colour.
-        fog: false,
-        transparent: true,
-      }),
-    )
-  }
-  const sky = points(stars.positions, stars.colours, 1.2)
-  // The galaxy's band (stars.ts): thousands of faint stars crowded along a
-  // great circle, and behind them a soft glow, mottled, so it reads as a
-  // band of light and not a stripe of dots.
-  const band = galaxyBand(createRng(world.seed).fork('galaxy'), 6000, STAR_RADIUS * 0.995)
-  sky.add(points(band.positions, band.colours, 1))
-  const glow = new THREE.Mesh(
-    new THREE.SphereGeometry(STAR_RADIUS * 0.99, 48, 24),
-    new THREE.ShaderMaterial({
-      side: THREE.BackSide,
-      transparent: true,
-      depthWrite: false,
-      blending: THREE.AdditiveBlending,
-      uniforms: {
-        bandNormal: { value: new THREE.Vector3(...band.normal) },
-        bandSeen: { value: 1 },
-      },
-      vertexShader: /* glsl */ `
-        varying vec3 vSky;
-        void main() {
-          vSky = normalize(position);
-          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-        }
-      `,
-      fragmentShader: /* glsl */ `
-        uniform vec3 bandNormal;
-        uniform float bandSeen;
-        varying vec3 vSky;
-        ${NOISE}
-        void main() {
-          float off = dot(vSky, bandNormal);
-          float mottle = detailNoise(vSky * 6.0) * 0.6 + detailNoise(vSky * 17.0) * 0.4;
-          // Its edge frayed by the same mottle, so it is not a ruled stripe.
-          float edge = off + (detailNoise(vSky * 9.0 + 4.0) - 0.5) * 0.06;
-          float band = exp(-edge * edge / 0.005);
-          // A dark lane down its middle, as dust splits the real one.
-          // Squared by hand: pow of a negative base is NaN (sea-light.ts).
-          float laneAt = (off + (mottle - 0.5) * 0.03) / 0.014;
-          float lane = 1.0 - 0.6 * exp(-laneAt * laneAt);
-          float light = band * (0.15 + 1.4 * pow(mottle, 1.6)) * lane * bandSeen;
-          // Coloured, not grey: warmer where it is brightest, as a galaxy's
-          // old stars crowd its core, bluer out at the fringes, with now
-          // and then a reddish knot where stars are forming. A flat grey
-          // band read as a smear on the lens.
-          float core = smoothstep(0.35, 0.85, mottle);
-          vec3 tint = mix(vec3(0.5, 0.58, 0.82), vec3(0.86, 0.78, 0.68), core);
-          float knots = smoothstep(0.72, 0.9, detailNoise(vSky * 23.0 + 7.0)) * band;
-          tint = mix(tint, vec3(0.95, 0.5, 0.6), knots * 0.5);
-          // And off the band, faint clouds of colour, so the sky has depth
-          // rather than being black between the stars.
-          float haze = smoothstep(0.55, 0.85, detailNoise(vSky * 2.4 + 13.0)) * (1.0 - band);
-          vec3 nebula = mix(vec3(0.25, 0.32, 0.6), vec3(0.45, 0.25, 0.5), detailNoise(vSky * 3.1));
-          gl_FragColor = vec4((tint * light * 0.085 + nebula * haze * 0.018) * bandSeen, 1.0);
-        }
-      `,
-    }),
-  )
-  glow.renderOrder = -2
-  sky.add(glow)
-  return sky
 }
 
 /**
