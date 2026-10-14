@@ -892,7 +892,14 @@ export function startScene(
       // Rendered at least once: a page opened in orbit never ran the pass,
       // every material sampled a map that did not exist, and the whole
       // day side came out in shadow — a flat teal disc.
-      renderer.shadowMap.needsUpdate = low || sun.shadow.map === null
+      // Drawn every other frame: it is a third of a glide's GPU time, and
+      // it is sampled through the matrix it was drawn with (three updates
+      // `shadow.matrix` only when it draws), so a skipped frame reads last
+      // frame's map where it lay — a frame stale, never misplaced.
+      shadowFrame += 1
+      renderer.shadowMap.needsUpdate =
+        (low && (shadowFrame % SHADOW_EVERY === 0 || !shadowWasLow)) || sun.shadow.map === null
+      shadowWasLow = low
       sun.shadow.intensity = low ? 1 : 0
       if (low) {
         // The box is stepped in size and snapped to its own texel grid, so
@@ -1113,6 +1120,8 @@ export function startScene(
     times[profiledFrames - 1] = (times[profiledFrames - 1] ?? 0) + at - markedAt
     markedAt = at
   }
+  let shadowFrame = 0
+  let shadowWasLow = false
   const tick = (): void => {
     if (options.profileClock !== undefined) {
       markedAt = options.profileClock.now()
@@ -1692,6 +1701,8 @@ const BEAM_STRENGTH = 3.2
 
 /** The renderer's exposure in ordinary daylight; an eclipse dims it. */
 const EXPOSURE = 1.15
+/** How often, in frames, the sun's shadow map is redrawn while low. */
+const SHADOW_EVERY = 2
 
 /** Apply a stage of the birth animation to a shown planet. */
 function pose(planet: Shown, stage: Birth): void {
