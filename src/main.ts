@@ -21,6 +21,7 @@ import { createRig } from '@/ui/rig'
 import { saveClip, savePicture, sendPostcard, shareLink } from '@/ui/share'
 import { clipName } from '@/ui/clip'
 import { attachClipButton } from '@/ui/clip-button'
+import { attachDiveButton } from '@/ui/dive-button'
 import { recordClip } from '@/ui/clip-recorder'
 import {
   directionOf,
@@ -391,36 +392,20 @@ function remember(world: Planet): void {
   }, 3500)
 }
 
+// Under the sea (ui/dive-button.ts): over the sea bed of whatever planet is shown.
+attachDiveButton({
+  rig,
+  floorAt: (direction) => floorRadiusAt(planet, direction),
+  tell: (message) => {
+    hud.toast(message)
+  },
+})
+
 /**
  * Flythrough clips: whatever the view does for ten seconds — a glide, a
  * dive, a stretch of the tour — with the world's name over the opening and
  * the sound if it is on, kept as a video (clip.ts).
  */
-/**
- * Under the sea: the glide flies over the sea bed instead of over the
- * surface, until the water grows too shallow or the button is pressed
- * again (rig.ts `submerge`, render/underwater.ts).
- */
-const diveButton = document.getElementById('dive')
-const showDive = (under: boolean): void => {
-  diveButton?.setAttribute('aria-pressed', String(under))
-  diveButton?.setAttribute('aria-label', under ? 'Come up for air' : 'Dive under the sea')
-}
-diveButton?.addEventListener('click', () => {
-  if (rig.submerged()) {
-    rig.submerge(undefined)
-    showDive(false)
-    return
-  }
-  const went = rig.submerge((direction) => floorRadiusAt(planet, direction))
-  showDive(went)
-  if (!went) hud.toast('Fly over open sea to dive')
-})
-rig.onSurface((shallow) => {
-  showDive(false)
-  if (shallow) hud.toast('Too shallow · surfaced')
-})
-
 attachClipButton({
   start: ({ onTick, onDone }) =>
     recordClip(

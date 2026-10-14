@@ -41,6 +41,13 @@ planet frames), `places.ts`, `starfield.ts`, `post.ts`, `eye-weather.ts`,
 `profiler.ts` — and a new per-frame feature goes in a module of its own
 with an `update(...)` that `tick` calls, as birds, ships and rain do.
 
+`main.ts` is long for the same reason: it is the one place that holds the
+seed, the dials, the system's home and the planet on screen, and most of
+its length is panels (atlas, map, system, postcard) whose handlers change
+exactly that state. A control that needs only the rig and the planet gets a
+file of its own (`ui/dive-button.ts`, `ui/clip-button.ts`); one that
+changes which world is shown stays in `main.ts`, where that state lives.
+
 ## The rules are lint errors, not prose
 
 `eslint.config.js` enforces, each with a message saying why:
