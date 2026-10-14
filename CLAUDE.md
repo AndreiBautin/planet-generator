@@ -263,6 +263,11 @@ checks nothing. The pre-push hook runs `pnpm verify`; CI runs the same.
 
 ## Traps
 
+- **The page has a CSP** (`index.html`, see `SECURITY.md`): anything new
+  loaded from another origin, or a new `blob:`/`data:` use outside images and
+  media, is blocked silently until the policy says so. The build strips the
+  dev `ws:` and fails if it cannot find it, so edit that string with care.
+
 - **Every patch geometry wraps the shared index array in its own
   attribute.** Disposing a geometry frees its index's GPU buffer, so one
   shared attribute would be freed from under every other patch.
