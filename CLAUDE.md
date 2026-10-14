@@ -2562,8 +2562,17 @@ compare a change by the part it touched, not the frame's total.
   cost ~30 ms more GPU, for reasons not found (see that commit). **The
   ground's vertex shader is at WebGL's sixteen attributes**: any new
   per-vertex attribute on the ground must replace one.
-- **Left**: a frame of ~400 ms on 83tzj46 after arrival as the towns and
-  the rest are added and compile.
+- **The towns arrive compiled, and so do a world's sky, air and
+  heavens**: the towns' objects are built into a held group and added
+  once `compileHeld` has made their programs; the heavens, air and sky
+  (and the rain shafts) are built in `buildAround` before a world is
+  shown, so `precompile` covers them. The ~400 ms towns frame is gone and
+  the frame a world appears in compiles ~4 programs, ~40 ms.
+  `recorder.stats().programs` counts programs: a jump marks a compile.
+- **Left**: the shader warm-up 2.5 s after a world appears (`warm`) makes
+  a frame of 430–510 ms on the frozen `9tcwfzj`, with no new program in
+  it; and the frame `precompile` starts in costs 105–1,000 ms on first
+  load in the dev server (its synchronous part).
 - **A hidden pane left for long throttles its timers to seconds**; a run
   of `await sleep` steps then crawls and `javascript_tool` times out. A
   reload does not cure it; showing the pane does.

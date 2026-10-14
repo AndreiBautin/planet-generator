@@ -136,6 +136,8 @@ export interface Scene {
     readonly slowFrameMs: number
     /** The GPU the browser names, when it will; for a report from a machine that is not this one. */
     readonly gpu: string
+    /** Shader programs made so far: a jump between frames is a compile in that frame. */
+    readonly programs: number
   }
   /**
    * The frame's parts, mean ms a frame since the last call, by name — empty
@@ -238,6 +240,8 @@ interface Coming {
   readonly resolve: (shown: boolean) => void
   /** Its ground's and clouds' programs: being made (false), made (true), or not asked yet. */
   compiled?: boolean
+  /** Its sky, air and heavens, built before it is shown so their programs are made too. */
+  built?: { readonly heavens: Heavens; readonly air: THREE.Mesh; readonly sky: THREE.Points }
 }
 
 /**
@@ -587,6 +591,12 @@ export function startScene(
     if (coming !== undefined) {
       coming.terrain.dispose()
       if (coming.clouds !== undefined) release(coming.clouds)
+      if (coming.built !== undefined) {
+        release(coming.built.heavens.group)
+        coming.built.heavens.bands?.dispose()
+        release(coming.built.air)
+        release(coming.built.sky)
+      }
       coming.resolve(false)
     }
     return new Promise((resolve) => {
@@ -622,25 +632,16 @@ export function startScene(
     if (keep) {
       ;({ clouds, air, sky, heavens } = previous)
     } else {
-      heavens = buildHeavens(satellitesOf(next.world))
+      const built = next.built ?? buildAround(next)
+      ;({ heavens, air, sky } = built)
       ringsOnGround(heavens)
-      // The aurora goes with the heavens: built and let go with them, and
-      // like them in the room's frame, not turning with the ground.
-      const aurora = auroraFor(next.world)
-      if (aurora !== undefined) heavens.group.add(aurora)
       DETAIL_AURORA.value = auroraStrength(next.world) * 0.07
       clouds = next.clouds ?? cloudsFromTexture(next.world, new Uint8Array(8), 2)
-      // Rain hanging from the storms, turning with the clouds they fall from.
+      // And the bolt of a strike, in the layer's frame as the strike is.
       const held = cloudDataOf(clouds)
-      if (held !== undefined && held.width > 2 && !next.world.molten) {
-        clouds.add(rainShafts(held.data, held.width))
-        // And the bolt of a strike, in the layer's frame as the strike is.
-        clouds.add(bolt.object)
-      }
+      if (held !== undefined && held.width > 2 && !next.world.molten) clouds.add(bolt.object)
       rain.snows(next.world.kind === 'frozen')
       DETAIL_CLOUDS.value = cloudMapOf(clouds)
-      air = buildAtmosphere(next.world, sun.position)
-      sky = buildSky(next.world, pixelRatio)
     }
     if (previous !== undefined) {
       scene.remove(previous.terrain.group)
@@ -715,42 +716,48 @@ export function startScene(
           if (shown?.terrain !== ground) return
           const points = cityLights(lights)
           if (points === undefined) return
-          points.userData.withGround = true
-          ground.group.add(points)
+          // Everything the towns bring is made into a holding group and its
+          // programs compiled without blocking before it is shown: added
+          // straight to the ground, their first frame compiled them all,
+          // a frame of about 400 ms some seconds after a world arrived.
+          const held = new THREE.Group()
+          const add = (object: THREE.Object3D): void => {
+            object.userData.withGround = true
+            held.add(object)
+          }
+          add(points)
           // The buildings and roads those lights belong to, seen close to (towns.ts).
           const sites = townSites(lights)
           towns = new Towns(sites, next.world)
-          towns.group.userData.withGround = true
-          ground.group.add(towns.group)
+          add(towns.group)
           // Bridges where the roads cross water (bridges.ts), and carts on
           // the roads (traffic.ts).
           const spans = new Bridges(bridges)
-          spans.group.userData.withGround = true
-          ground.group.add(spans.group)
+          add(spans.group)
           traffic = new Traffic(sites.roads)
-          traffic.group.userData.withGround = true
-          ground.group.add(traffic.group)
+          add(traffic.group)
           // Piers at the coastal towns, and ships sailing between them (ships.ts).
           ships = new Ships(harbours, (at) => SEA_RADIUS - floorRadiusAt(next.world, at))
-          ships.group.userData.withGround = true
-          ground.group.add(ships.group)
+          add(ships.group)
           // A lighthouse on the shore beside each harbour (lighthouses.ts),
           // and the ruins on the hilltops (ruins.ts).
           lighthouses = new Lighthouses(harbours, next.world)
-          lighthouses.group.userData.withGround = true
-          ground.group.add(lighthouses.group)
+          add(lighthouses.group)
           ruins = new Ruins(found, next.world)
-          ruins.group.userData.withGround = true
-          ground.group.add(ruins.group)
+          add(ruins.group)
           const map = new THREE.DataTexture(glow, CITY_GLOW_WIDTH, CITY_GLOW_WIDTH / 2)
           map.magFilter = THREE.LinearFilter
           // Mipmapped, as the clouds are: from orbit it sparkled as the planet turned.
           map.minFilter = THREE.LinearMipmapLinearFilter
           map.generateMipmaps = true
           map.needsUpdate = true
-          DETAIL_CITIES.value?.dispose()
-          DETAIL_CITIES.value = map
-          DETAIL_CITY_LIGHT.value = 0.5
+          void compileHeld(held).then(() => {
+            if (shown?.terrain !== ground) return
+            for (const object of [...held.children]) ground.group.add(object)
+            DETAIL_CITIES.value?.dispose()
+            DETAIL_CITIES.value = map
+            DETAIL_CITY_LIGHT.value = 0.5
+          })
         })
     }
     if (!keep) scene.add(clouds, air, sky, heavens.group)
@@ -780,10 +787,44 @@ export function startScene(
    * (warm.ts says why the target matters). What `arrive` builds — the air,
    * the sky, the heavens — is small and still compiles on first draw.
    */
+  /** Make a group's programs, for the frame's target and lights, without drawing it. */
+  const compileHeld = async (group: THREE.Object3D): Promise<void> => {
+    const target = renderer.getRenderTarget()
+    renderer.setRenderTarget(composer?.readBuffer ?? null)
+    const made = renderer.compileAsync(group, camera, scene)
+    renderer.setRenderTarget(target)
+    await made.catch(() => undefined)
+  }
+  /**
+   * A coming world's heavens (with its aurora), air and sky, and the rain
+   * hanging from its clouds: built before it is shown, so `precompile`
+   * makes their programs too — built in `arrive`, the frame it appeared
+   * compiled six programs, 270 to 570 ms.
+   */
+  const buildAround = (next: Coming): NonNullable<Coming['built']> => {
+    const heavens = buildHeavens(satellitesOf(next.world))
+    // The aurora goes with the heavens: built and let go with them, and
+    // like them in the room's frame, not turning with the ground.
+    const aurora = auroraFor(next.world)
+    if (aurora !== undefined) heavens.group.add(aurora)
+    // Rain hanging from the storms, turning with the clouds they fall from.
+    const held = next.clouds === undefined ? undefined : cloudDataOf(next.clouds)
+    if (next.clouds !== undefined && held !== undefined && held.width > 2 && !next.world.molten)
+      next.clouds.add(rainShafts(held.data, held.width))
+    return {
+      heavens,
+      air: buildAtmosphere(next.world, sun.position),
+      sky: buildSky(next.world, pixelRatio),
+    }
+  }
   const precompile = async (next: Coming): Promise<void> => {
     const batch = new THREE.Group()
     const parts: THREE.Object3D[] = [next.terrain.group, ...next.terrain.warmers()]
     if (next.clouds !== undefined) parts.push(next.clouds)
+    if (!next.keepClouds || shown === undefined) {
+      next.built = buildAround(next)
+      parts.push(next.built.heavens.group, next.built.air, next.built.sky)
+    }
     const parents = parts.map((part) => part.parent)
     for (const part of parts) batch.add(part)
     const held = renderer.getRenderTarget()
@@ -1622,6 +1663,7 @@ export function startScene(
         frameMs: recent[Math.floor(recent.length / 2)] ?? 0,
         slowFrameMs: recent[Math.floor(recent.length * 0.95)] ?? 0,
         gpu: gpuName(renderer),
+        programs: renderer.info.programs?.length ?? 0,
       }
     },
     profile: () => {
