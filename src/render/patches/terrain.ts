@@ -70,12 +70,12 @@ interface Entry {
 
 export class Terrain {
   readonly group = new THREE.Group()
-  private readonly entries = new Map<string, Entry>()
+  private readonly entries = new Map<number, Entry>()
   private readonly index: Uint16Array
   private waiting = 0
   private frame = 0
   private disposed = false
-  private lastShown: ReadonlySet<string> = new Set<string>()
+  private lastShown: ReadonlySet<number> = new Set<number>()
   private readonly sliding = new Set<Entry>()
   private lastCamera: Vec3 | undefined
   /** How much looser than asked the detail threshold is right now, 1 and up. */
@@ -178,7 +178,7 @@ export class Terrain {
     // finest ground arrived all at once, and a step at a time sharpens the
     // view on the way down. Nearest first: the ground under the camera is
     // what somebody is looking at.
-    const wanted = new Map<string, { readonly key: PatchKey; readonly distance: number }>()
+    const wanted = new Map<number, { readonly key: PatchKey; readonly distance: number }>()
     const ask = (leaf: PatchKey, later: number): void => {
       let drawn = -1
       for (let level = leaf.level; level >= 0; level -= 1) {
@@ -222,7 +222,7 @@ export class Terrain {
     // over the gap. Drawing a stand-in whole hid every finer patch under it
     // that was already in, so one patch still on its way turned whole faces
     // of the planet coarse for a moment: the ground changing as you flew.
-    const internal = new Set<string>()
+    const internal = new Set<number>()
     for (const leaf of leaves) {
       for (let above = parentOf(leaf); above !== undefined; above = parentOf(above)) {
         const name = keyOf(above)
@@ -231,7 +231,7 @@ export class Terrain {
       }
     }
     const loaded = (key: PatchKey): boolean => this.entries.get(keyOf(key))?.node !== undefined
-    const cover = (key: PatchKey, out: Map<string, number>): boolean => {
+    const cover = (key: PatchKey, out: Map<number, number>): boolean => {
       const name = keyOf(key)
       if (!internal.has(name)) {
         if (loaded(key)) {
@@ -246,7 +246,7 @@ export class Terrain {
         }
         return false
       }
-      const found = new Map<string, number>()
+      const found = new Map<number, number>()
       let gaps = 0
       childrenOf(key).forEach((child, quarter) => {
         if (!cover(child, found)) gaps |= 1 << quarter
@@ -258,7 +258,7 @@ export class Terrain {
       for (const [inside, quarters] of found) out.set(inside, quarters)
       return true
     }
-    const drawn = new Map<string, number>()
+    const drawn = new Map<number, number>()
     for (const root of ROOTS) cover(root, drawn)
     // For the recorder: how many of the leaves wanted are drawn coarser than
     // asked, and how near the nearest is, so lateness is measured, not guessed.
@@ -267,11 +267,7 @@ export class Terrain {
     for (const leaf of leaves) {
       if (this.entries.get(keyOf(leaf))?.node !== undefined) continue
       standIns += 1
-      const c = centreOf(leaf)
-      const gap =
-        Math.hypot(camera[0] - c[0], camera[1] - c[1], camera[2] - c[2]) -
-        patchAngle(leaf.level) * 0.75
-      nearest = Math.min(nearest, Math.max(0, gap))
+      nearest = Math.min(nearest, gapTo(leaf, camera))
     }
     TERRAIN_STATS.standIns = standIns
     TERRAIN_STATS.nearestStandIn = nearest
@@ -311,7 +307,7 @@ export class Terrain {
     // The trees: each drawn patch's own between the coarsest level that
     // carries them and `TREE_LEVEL`, and for finer ground its ancestor's at
     // `TREE_LEVEL`, whose vertices are among its own.
-    const wooded = new Set<string>()
+    const wooded = new Set<number>()
     for (const name of drawn.keys()) {
       const key = this.entries.get(name)?.key
       if (key === undefined || key.level < TREE_COARSEST) continue
@@ -319,7 +315,14 @@ export class Terrain {
     }
     for (const [name, entry] of this.entries) {
       const on = wooded.has(name)
-      for (const mesh of entry.trees) mesh.visible = on
+      // Only the woods near the eye cast: the shadow box is a fifth of a
+      // radius across, and every tree in it went through the shadow pass
+      // too — 40% of a glide's triangles — for shadows a few pixels long.
+      const casts = on && entry.trees.length > 0 && gapTo(entry.key, camera) < TREE_SHADOW_REACH
+      for (const mesh of entry.trees) {
+        mesh.visible = on
+        mesh.castShadow = casts
+      }
     }
     this.lastShown = shown
     for (const entry of this.sliding) {
@@ -341,7 +344,7 @@ export class Terrain {
    * showed as a pale curtain wherever the ground stepped down — sharpest
    * along a snowline.
    */
-  private stitch(drawn: ReadonlyMap<string, number>): void {
+  private stitch(drawn: ReadonlyMap<number, number>): void {
     const coarser = (key: PatchKey): boolean => {
       if (drawn.has(keyOf(key))) return false
       let below = key
@@ -671,7 +674,7 @@ export class Terrain {
   }
 
   /** Let go of the least recently drawn patches once there are too many. */
-  private evict(shown: ReadonlySet<string>): void {
+  private evict(shown: ReadonlySet<number>): void {
     const held = [...this.entries.values()].filter((entry) => entry.node !== undefined)
     if (held.length <= this.options.cached) return
     const spare = held
@@ -698,6 +701,17 @@ export const TERRAIN_STATS = {
   nearestStandIn: Number.POSITIVE_INFINITY,
   pending: 0,
   coarsen: 1,
+}
+
+/** How near the eye a patch's trees must be to cast a shadow, in radii. */
+const TREE_SHADOW_REACH = 0.04
+
+/** Roughly how far the eye is from the nearest part of a patch, in radii; nought inside it. */
+function gapTo(key: PatchKey, camera: Vec3): number {
+  const c = centreOf(key)
+  const gap =
+    Math.hypot(camera[0] - c[0], camera[1] - c[1], camera[2] - c[2]) - patchAngle(key.level) * 0.75
+  return Math.max(0, gap)
 }
 
 /** How far ahead the ground is asked for, in frames at the eye's present pace (about 1.5 s at 30 fps). */
