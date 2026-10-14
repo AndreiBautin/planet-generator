@@ -25,6 +25,7 @@ import {
 } from './forest'
 import { patchIndex, quarterIndex, type PatchData } from './patch-data'
 import { DETAIL_TIME, TERRAIN_MORPH } from '../detail'
+import { VisibleGroup } from './visible-group'
 
 /**
  * A planet's ground, streamed: asks the builder for the patches the camera
@@ -69,7 +70,7 @@ interface Entry {
 }
 
 export class Terrain {
-  readonly group = new THREE.Group()
+  readonly group = new VisibleGroup()
   private readonly entries = new Map<number, Entry>()
   private readonly index: Uint16Array
   private waiting = 0
@@ -90,7 +91,7 @@ export class Terrain {
   private readonly materials: TerrainMaterials
   private readonly treeMaterial: THREE.Material
   private readonly treeDepth: THREE.Material
-  private readonly forest = new THREE.Group()
+  private readonly forest = new VisibleGroup()
   /** How far a coarser edge bends the vertices in from it, by rows from the edge (see `stitch`). */
   private readonly stitchFalloff: Float32Array
 
@@ -503,7 +504,7 @@ export class Terrain {
     whole: THREE.Object3D[],
     quarters: THREE.Object3D[][],
   ): THREE.Group {
-    const node = new THREE.Group()
+    const node = new VisibleGroup()
     const ground = new THREE.BufferGeometry()
     ground.setAttribute('position', new THREE.BufferAttribute(patch.positions, 3))
     ground.setAttribute('normal', new THREE.BufferAttribute(patch.normals, 3))
@@ -675,6 +676,8 @@ export class Terrain {
 
   /** Let go of the least recently drawn patches once there are too many. */
   private evict(shown: ReadonlySet<number>): void {
+    // Most frames hold fewer than the cache's worth: nothing to copy or sort.
+    if (this.entries.size <= this.options.cached) return
     const held = [...this.entries.values()].filter((entry) => entry.node !== undefined)
     if (held.length <= this.options.cached) return
     const spare = held
