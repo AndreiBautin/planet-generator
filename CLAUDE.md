@@ -2491,3 +2491,34 @@ on water and snow, and everything on a phone (`docs/PHONE_CHECKLIST.md`).
   thins faster with height when seen from outside, and the terminator's
   warm band is in the ground and cloud shaders — the air's shader cannot
   paint on the disc, the planet's depth hides the shell's far side there.
+
+## Performance round (2026-10-13)
+
+**Measure with `recorder.bench(frames)` and `recorder.profile()`** (record
+mode only): a fixed seed stepped at real pace, medians and p95 of script
+ms, GPU ms (timer queries, collected when ready), calls and triangles,
+and the frame split by part (`mark` in scene.ts's tick). **Read medians**:
+the mean put the warm-up's 480 ms and collections into whichever part was
+running, and named the flight as 8 ms when it is 0.3. Tour numbers vary
+run to run with what streams in (24–32 ms script after, same build);
+compare a change by the part it touched, not the frame's total.
+
+- **The terrain group held ~10,400 objects, 1,555 shown**, and three's
+  `updateMatrixWorld` walks hidden children, twice a frame: 8 ms each.
+  `VisibleGroup` (patches/visible-group.ts) skips hidden children and
+  marks them stale. Anything else that parks thousands of hidden objects
+  in the graph has the same cost.
+- **Only woods within `TREE_SHADOW_REACH` (0.04) cast**: the shadow box
+  is 0.23 across, and its trees were 40% of a glide's triangles.
+- **The page adopts its drainage map from a worker** (`adoptHydrology`,
+  the `hydrology` job): building it on the page was a 909 ms frame on the
+  first press of Fly.
+- **Looked at and left**: the post passes (no CPU cost found; GPU per pass
+  unmeasured), the orbit's layers (no single one above the run's own
+  2–4 ms drift), six workers instead of three (finer ground, but 10 ms
+  more script drawing it), byte-packed patch attributes (the upload is
+  small, and packing the pattern could move trees), and the per-frame
+  updates of the models on the ground (about 1 ms together).
+- **A record-mode screenshot can show the splash long after the planet
+  is up**: draw `canvas.toDataURL()` into an overlay `<img>` to see the
+  frame.
