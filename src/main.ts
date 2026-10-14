@@ -1,5 +1,4 @@
 import type { Vec3 } from '@/generation/cube'
-import { summarise, type BenchFrame } from '@/app/bench'
 import { fixedClock, systemClock } from '@/app/clock'
 import { readConfig } from '@/app/config'
 import { linkFor, parseLink, type Shot } from '@/app/link'
@@ -14,9 +13,9 @@ import { startScene } from '@/render/scene'
 import { logger, setLogLevel } from '@/shared/logger'
 import { attachGestures } from '@/ui/controls'
 import { attachHud } from '@/ui/hud'
+import { keyAction } from '@/ui/keys'
 import { attachIdle } from '@/ui/idle'
 import { attachSliders } from '@/ui/sliders'
-import { TERRAIN_STATS } from '@/render/patches/terrain'
 import { tourOrder } from '@/generation/landmarks'
 import { createRig } from '@/ui/rig'
 import { saveClip, savePicture, sendPostcard, shareLink } from '@/ui/share'
@@ -551,58 +550,54 @@ function takePicture(): void {
     })
 }
 
-// Arrow keys steer a glide on a keyboard, and Escape lands. P takes a
-// picture whether flying or not; making a postcard, P sends it and Escape
-// puts it away.
+// What each key does is decided in ui/keys.ts, purely; this only carries it out.
 window.addEventListener('keydown', (event) => {
-  if (mapPanel.isOpen()) {
-    if (event.key === 'Escape' || event.key === 'm' || event.key === 'M') mapPanel.hide()
-    return
-  }
-  if (atlasPanel.isOpen()) {
-    if (event.key === 'Escape') atlasPanel.hide()
-    return
-  }
-  if (systemPanel.isOpen()) {
-    if (event.key === 'Escape' && !journeying) systemPanel.hide()
-    return
-  }
-  if (postcard.isOpen()) {
-    if (event.key === 'Escape') closePostcard()
-    else if (
-      (event.key === 'p' || event.key === 'P') &&
-      !(event.target instanceof HTMLInputElement)
-    )
+  const action = keyAction(event.key, {
+    open: mapPanel.isOpen()
+      ? 'map'
+      : atlasPanel.isOpen()
+        ? 'atlas'
+        : systemPanel.isOpen()
+          ? 'system'
+          : postcard.isOpen()
+            ? 'postcard'
+            : 'none',
+    typing: event.target instanceof HTMLInputElement,
+    flying: rig.flying(),
+    journeying,
+  })
+  switch (action.kind) {
+    case 'none':
+      return
+    case 'close-map':
+      mapPanel.hide()
+      return
+    case 'close-atlas':
+      atlasPanel.hide()
+      return
+    case 'close-system':
+      systemPanel.hide()
+      return
+    case 'close-postcard':
+      closePostcard()
+      return
+    case 'send-postcard':
       sendCard()
-    return
-  }
-  if (event.target instanceof HTMLInputElement) return
-  if (event.key === 'p' || event.key === 'P') {
-    takePicture()
-    return
-  }
-  if (event.key === 'm' || event.key === 'M') {
-    openMap()
-    return
-  }
-  if (!rig.flying()) return
-  const steps: Record<string, readonly [number, number]> = {
-    ArrowLeft: [-0.04, 0],
-    ArrowRight: [0.04, 0],
-    ArrowUp: [0, -0.06],
-    ArrowDown: [0, 0.06],
-    a: [-0.04, 0],
-    d: [0.04, 0],
-    w: [0, -0.06],
-    s: [0, 0.06],
-  }
-  const step = steps[event.key]
-  if (step !== undefined) {
-    event.preventDefault()
-    rig.nudge(step[0], step[1])
-  } else if (event.key === 'Escape') {
-    rig.land(scene.orbitOver)
-    hud.flying(false)
+      return
+    case 'picture':
+      takePicture()
+      return
+    case 'map':
+      openMap()
+      return
+    case 'nudge':
+      event.preventDefault()
+      rig.nudge(action.turn, action.climb)
+      return
+    case 'land':
+      rig.land(scene.orbitOver)
+      hud.flying(false)
+      return
   }
 })
 
@@ -641,92 +636,7 @@ if (showStats && buildLabel !== null) {
 }
 
 if (recording) {
-  Object.assign(window, {
-    recorder: {
-      /** Move time on by `ms` and draw one frame. */
-      step: (ms: number) => {
-        recordClock.advance(ms)
-        scene.step()
-      },
-      /** Turn and climb as the keyboard does. */
-      nudge: (turn: number, climb: number) => {
-        rig.nudge(turn, climb)
-      },
-      /** The three.js scene, to inspect what is drawn. */
-      root: scene.root,
-      /** What the last frame drew, across every pass. */
-      stats: () => scene.stats(),
-      /** Mean ms a frame by part of the frame, since the last call. */
-      profile: () => scene.profile(),
-      sun: () => scene.sunInPlanet(),
-      /** The post pipeline's passes, each with `enabled`. */
-      postPasses: () => scene.postPasses(),
-      /** The terrain's last selection: stand-ins, the nearest, patches pending. */
-      terrain: () => ({ ...TERRAIN_STATS }),
-      /** Where Fly would start the glide now. */
-      diveFrom: () => scene.diveFrom(),
-      /** Start the glide from a point of the planet, heading this way (its own frame). */
-      glideFrom: (position: Vec3, heading: Vec3) => {
-        rig.fly({ position, heading })
-      },
-      canvas,
-      /**
-       * The benchmark: `frames` frames at real-time pace (a 33 ms sleep per
-       * 33 ms step, so the workers are not starved), summarised. Open a fixed
-       * seed with `?record`, then call it once in orbit and once after `tour`.
-       */
-      bench: async (frames = 300) => {
-        const gl = canvas.getContext('webgl2')
-        const timer = gl?.getExtension('EXT_disjoint_timer_query_webgl2') as {
-          TIME_ELAPSED_EXT: number
-        } | null
-        const taken: { -readonly [K in keyof BenchFrame]: BenchFrame[K] }[] = []
-        // A query's answer comes frames later, if ever (a hidden pane may
-        // never finish one): each is read whenever it is ready, and a frame
-        // whose answer never came stays unmeasured.
-        const waiting: { readonly query: WebGLQuery; readonly frame: number }[] = []
-        const collect = (): void => {
-          if (gl === null) return
-          for (let k = waiting.length - 1; k >= 0; k -= 1) {
-            const item = waiting[k]
-            if (item === undefined) continue
-            if (gl.getQueryParameter(item.query, gl.QUERY_RESULT_AVAILABLE) !== true) continue
-            const frame = taken[item.frame]
-            if (frame !== undefined)
-              frame.gpuMs = Number(gl.getQueryParameter(item.query, gl.QUERY_RESULT)) / 1e6
-            gl.deleteQuery(item.query)
-            waiting.splice(k, 1)
-          }
-        }
-        scene.profile()
-        for (let i = 0; i < frames; i += 1) {
-          const query = gl !== null && timer !== null ? gl.createQuery() : null
-          if (gl !== null && timer !== null && query !== null)
-            gl.beginQuery(timer.TIME_ELAPSED_EXT, query)
-          const start = systemClock.now()
-          recordClock.advance(33)
-          scene.step()
-          const scriptMs = systemClock.now() - start
-          if (gl !== null && timer !== null && query !== null) {
-            gl.endQuery(timer.TIME_ELAPSED_EXT)
-            waiting.push({ query, frame: i })
-          }
-          const s = scene.stats()
-          taken.push({ scriptMs, gpuMs: Number.NaN, calls: s.calls, triangles: s.triangles })
-          await new Promise((resolve) => window.setTimeout(resolve, 33))
-          collect()
-        }
-        for (let tries = 0; tries < 10 && waiting.length > 0; tries += 1) {
-          await new Promise((resolve) => window.setTimeout(resolve, 50))
-          collect()
-        }
-        for (const item of waiting) gl?.deleteQuery(item.query)
-        return { ...summarise(taken), parts: scene.profile() }
-      },
-      /** Start the guided tour, as the Tour button does. */
-      tour: () => {
-        document.querySelector<HTMLButtonElement>('#tour')?.click()
-      },
-    },
+  void import('./recorder').then(({ installRecorder }) => {
+    installRecorder({ scene, rig, recordClock, canvas })
   })
 }
