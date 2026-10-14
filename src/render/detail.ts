@@ -315,6 +315,9 @@ const CLOUD_SHADOW = /* glsl */ `
  */
 export const TERRAIN_MORPH = { value: new THREE.Vector2(32, 0.01) }
 
+/** The batched ground's state per patch (patches/ground-batch.ts), set by the terrain each frame. */
+export const TERRAIN_PATCHES: { value: THREE.DataTexture | null } = { value: null }
+
 const MORPH_DECLARE = /* glsl */ `
 uniform vec2 terrainMorphLod;
 attribute vec4 coarsePosition;
@@ -322,12 +325,49 @@ attribute vec4 coarsePosition;
 // 1 to 0 (terrain.ts): on a phone a finer patch often lands late, while its
 // coarse stand-in is on screen close up, and swapped in at once the ground
 // and the shallows changed in one frame. It starts as the parent and slides.
-attribute float arrival;
 // 1 along an edge this patch shares with a coarser one: there it takes the
 // coarser edge's shape exactly, so the two meet with no step for a skirt to
 // show through (terrain.ts).
+// Both are per patch when batched (below), and the ground is already at
+// WebGL's sixteen attributes: declared there, they would not link.
+#ifndef USE_BATCHING
+attribute float arrival;
 attribute float stitch;
+#endif
 attribute vec3 coarseNormal;
+#ifdef USE_BATCHING
+// Batched (patches/ground-batch.ts): the arrival, the stitch and which
+// quarters show are per patch, two texels of state; a vertex knows its
+// quarter, its grid column and row and its skirt's edge.
+uniform highp sampler2D terrainPatches;
+attribute vec4 patchCell;
+vec4 terrainPatchTexel(int k) {
+  int size = textureSize(terrainPatches, 0).x;
+  int i = int(getIndirectIndex(gl_DrawID)) * 2 + k;
+  return texelFetch(terrainPatches, ivec2(i % size, i / size), 0);
+}
+// The stitch band, as terrain.ts's stitchFalloff: full at an edge, gone a
+// quarter of the way in. Edges are bottom, top, left, right.
+float terrainFall(float rows) {
+  return 1.0 - smoothstep(0.0, max(2.0, terrainMorphLod.x / 4.0), rows);
+}
+float terrainStitchAt(vec4 edges) {
+  if (patchCell.w > -0.5) {
+    int e = int(patchCell.w + 0.5);
+    return e == 0 ? edges.x : (e == 1 ? edges.y : (e == 2 ? edges.z : edges.w));
+  }
+  float n = terrainMorphLod.x;
+  float rows = max(edges.x * terrainFall(patchCell.z), edges.y * terrainFall(n - patchCell.z));
+  return max(rows, max(edges.z * terrainFall(patchCell.y), edges.w * terrainFall(n - patchCell.y)));
+}
+bool terrainHiddenNow() {
+  int mask = int(terrainPatchTexel(1).x + 0.5);
+  int quarter = int(patchCell.x + 0.5);
+  return ((mask >> quarter) & 1) == 0;
+}
+#else
+bool terrainHiddenNow() { return false; }
+#endif
 float terrainMorphAt(vec3 local) {
   float level = coarsePosition.w;
   if (level < 0.5) return 0.0;
@@ -335,7 +375,14 @@ float terrainMorphAt(vec3 local) {
   float parentSpan = 1.5707963 / exp2(level - 1.0);
   float splits = parentSpan / terrainMorphLod.x / terrainMorphLod.y;
   float away = distance((modelMatrix * vec4(local, 1.0)).xyz, cameraPosition);
-  return max(max(smoothstep(0.5 * splits, 0.85 * splits, away), arrival), stitch);
+#ifdef USE_BATCHING
+  float slide = terrainPatchTexel(1).y;
+  float stitched = terrainStitchAt(terrainPatchTexel(0));
+#else
+  float slide = arrival;
+  float stitched = stitch;
+#endif
+  return max(max(smoothstep(0.5 * splits, 0.85 * splits, away), slide), stitched);
 }
 `
 
@@ -345,10 +392,18 @@ function withTerrainMorph(
   normals: boolean,
 ): void {
   shader.uniforms.terrainMorphLod = TERRAIN_MORPH
-  let vertex = (MORPH_DECLARE + shader.vertexShader).replace(
-    'void main() {',
-    'void main() {\n  float terrainMorph = terrainMorphAt(position);',
-  )
+  shader.uniforms.terrainPatches = TERRAIN_PATCHES
+  // After three's batching declarations, which the batched path reads.
+  let vertex = shader.vertexShader
+    .replace('#include <batching_pars_vertex>', '#include <batching_pars_vertex>\n' + MORPH_DECLARE)
+    .replace(
+      'void main() {',
+      'void main() {\n  float terrainMorph = terrainMorphAt(position);\n  bool terrainHidden = terrainHiddenNow();',
+    )
+    .replace(
+      '#include <project_vertex>',
+      '#include <project_vertex>\n  if (terrainHidden) gl_Position = vec4(0.0, 0.0, -2.0, 1.0);',
+    )
   if (normals) {
     vertex = vertex.replace(
       '#include <beginnormal_vertex>',

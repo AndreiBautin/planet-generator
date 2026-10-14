@@ -134,6 +134,8 @@ const builder = createBuilder(navigator.hardwareConcurrency)
 const scene = startScene(canvas, clock, rig.view, {
   manual: recording,
   ...(recording ? { profileClock: systemClock } : {}),
+  // Development only while it is a prototype: the ground in one batch.
+  batchedGround: config.developer && new URLSearchParams(window.location.search).has('batch'),
   quality,
   builder,
   reducedMotion: window.matchMedia('(prefers-reduced-motion: reduce)').matches,

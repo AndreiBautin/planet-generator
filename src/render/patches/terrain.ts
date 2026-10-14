@@ -1,6 +1,7 @@
 import * as THREE from 'three'
 
 import type { Planet } from '@/generation/planet'
+import { logger } from '@/shared/logger'
 
 import type { Builder } from '../builder'
 import {
@@ -28,6 +29,7 @@ import {
 import { patchIndex, quarterIndex, type PatchData } from './patch-data'
 import { DETAIL_TIME, TERRAIN_MORPH } from '../detail'
 import { VisibleGroup } from './visible-group'
+import { GroundBatch } from './ground-batch'
 
 /**
  * A planet's ground, streamed: asks the builder for the patches the camera
@@ -42,6 +44,8 @@ export interface TerrainOptions extends LodParams {
   readonly inFlight: number
   /** Patches kept after they stop being drawn, for flying back over them. */
   readonly cached: number
+  /** Draw the ground of every patch in one batch (ground-batch.ts): a prototype, `?batch`. */
+  readonly batched?: boolean
 }
 
 export interface TerrainMaterials {
@@ -67,6 +71,10 @@ interface Entry {
   /** Its trees (forest.ts), shown by what ground is drawn rather than with its own node. */
   trees: THREE.Mesh[]
   shownAt: number | undefined
+  /** Its ground's place in the batch, when batched; its quarters shown and its arrival there. */
+  slot?: { readonly geometry: number; readonly instance: number } | undefined
+  mask: number
+  slide: number
   requested: boolean
   usedAt: number
 }
@@ -101,6 +109,8 @@ export class Terrain {
   private readonly forest = new VisibleGroup()
   /** How far a coarser edge bends the vertices in from it, by rows from the edge (see `stitch`). */
   private readonly stitchFalloff: Float32Array
+  /** Every patch's ground in one draw, when batched (ground-batch.ts). */
+  private readonly batch: GroundBatch | undefined
 
   constructor(
     world: Planet,
@@ -126,7 +136,50 @@ export class Terrain {
       const t = Math.min(1, k / band)
       return 1 - t * t * (3 - 2 * t)
     })
+    this.batch = options.batched
+      ? new GroundBatch(
+          options.segments,
+          options.cached + options.inFlight + 200,
+          materials.ground,
+          materials.groundDepth,
+        )
+      : undefined
+    if (this.batch !== undefined) {
+      this.batch.mesh.frustumCulled = false
+      this.group.add(this.batch.mesh)
+    }
     for (const root of ROOTS) this.request(root)
+  }
+
+  /** A patch's ground into the batch, with the arrays its own geometry would carry. */
+  private batchGround(patch: PatchData): { geometry: number; instance: number } | undefined {
+    const batch = this.batch
+    if (batch === undefined) return undefined
+    if (batch.full) {
+      logger.warn('terrain.batch-full')
+      return undefined
+    }
+    const sphere = new THREE.Box3()
+      .setFromBufferAttribute(new THREE.BufferAttribute(patch.positions, 3))
+      .getBoundingSphere(new THREE.Sphere())
+    return batch.add(
+      {
+        position: { array: patch.positions, size: 3 },
+        normal: { array: patch.normals, size: 3 },
+        color: { array: patch.colours, size: 3 },
+        pattern: { array: patch.pattern, size: 4 },
+        mistTop: { array: patch.mist, size: 1 },
+        reef: { array: patch.reef, size: 1 },
+        farm: { array: patch.farm, size: 1 },
+        coarsePosition: { array: patch.coarsePositions, size: 4 },
+        coarseNormal: { array: patch.coarseNormals, size: 3 },
+        coarseColour: { array: patch.coarseColours, size: 3 },
+        coarsePattern: { array: patch.coarsePattern, size: 4 },
+        ground: { array: patch.ground, size: 4, stride: 8, offset: 0 },
+        coarseGround: { array: patch.ground, size: 4, stride: 8, offset: 4 },
+      },
+      sphere,
+    )
   }
 
   /**
@@ -315,6 +368,14 @@ export class Terrain {
         this.sliding.add(entry)
       }
       entry.node.visible = visible
+      if (entry.slot !== undefined && this.batch !== undefined) {
+        this.batch.show(entry.slot, visible)
+        const mask = quarters === WHOLE ? 15 : quarters
+        if (mask !== entry.mask) {
+          entry.mask = mask
+          this.writeState(entry)
+        }
+      }
       for (const part of entry.whole) part.visible = quarters === WHOLE
       entry.quarters.forEach((parts, quarter) => {
         const on = quarters !== WHOLE && (quarters & (1 << quarter)) !== 0
@@ -353,6 +414,10 @@ export class Terrain {
     this.lastWooded = wooded
     for (const entry of this.sliding) {
       const weight = entry.shownAt === undefined ? 0 : arrivalAt(entry.shownAt, DETAIL_TIME.value)
+      if (entry.slot !== undefined) {
+        entry.slide = weight
+        this.writeState(entry)
+      }
       for (const attribute of entry.arrival) {
         ;(attribute.array as Float32Array).fill(weight)
         attribute.needsUpdate = true
@@ -360,6 +425,13 @@ export class Terrain {
       if (weight <= 0) this.sliding.delete(entry)
     }
     this.evict(new Set([...shown, ...wooded]))
+    this.batch?.frame()
+  }
+
+  /** The batch's state for a patch: its quarters, its edges' stitch, its arrival. */
+  private writeState(entry: Entry): void {
+    if (entry.slot === undefined || this.batch === undefined) return
+    this.batch.state(entry.slot.instance, entry.mask, entry.edges, entry.slide)
   }
 
   /**
@@ -411,7 +483,7 @@ export class Terrain {
     this.stitchedAt = now
     for (const name of drawn.keys()) {
       const entry = this.entries.get(name)
-      if (entry?.stitch === undefined) continue
+      if (entry === undefined || (entry.stitch === undefined && entry.slot === undefined)) continue
       // A patch's neighbours never change; found once, not every frame.
       entry.neighbours ??= neighboursOf(entry.key)
       const goals = entry.neighbours.map((neighbour) => (coarser(neighbour) ? 1 : 0))
@@ -425,6 +497,11 @@ export class Terrain {
       if (edges.every((weight, edge) => weight === entry.edges[edge])) continue
       settled = false
       entry.edges = edges
+      // Batched, the shader works the band out from the four edges.
+      if (entry.slot !== undefined || entry.stitch === undefined) {
+        this.writeState(entry)
+        continue
+      }
       const values = entry.stitch.array as Float32Array
       const side = this.options.segments + 1
       const grid = side * side
@@ -489,6 +566,7 @@ export class Terrain {
       if (entry.node !== undefined) free(entry.node)
       for (const mesh of entry.trees) disposeTrees(mesh)
     }
+    this.batch?.dispose()
     this.entries.clear()
     this.materials.ground.dispose()
     this.materials.groundDepth.dispose()
@@ -511,6 +589,8 @@ export class Terrain {
       stitch: undefined,
       trees: [],
       shownAt: undefined,
+      mask: 0,
+      slide: 0,
       requested: true,
       usedAt: this.frame,
     }
@@ -524,6 +604,7 @@ export class Terrain {
         // A planet replaced while its patches were being made: drop them.
         if (this.disposed || this.entries.get(name) !== entry) return
         entry.node = this.nodeFor(patch, entry.arrival, entry.whole, entry.quarters)
+        if (this.batch !== undefined) entry.slot = this.batchGround(patch)
         if (this.options.trees !== undefined) {
           entry.trees = forestFor(
             patch,
@@ -585,10 +666,12 @@ export class Terrain {
       node.add(land)
       return land
     }
-    whole.push(landOf(ground))
-    quarterGeometries(ground, this.options.segments).forEach((geometry, quarter) => {
-      quarters[quarter]?.push(landOf(geometry))
-    })
+    if (this.batch === undefined) {
+      whole.push(landOf(ground))
+      quarterGeometries(ground, this.options.segments).forEach((geometry, quarter) => {
+        quarters[quarter]?.push(landOf(geometry))
+      })
+    }
 
     if (patch.sea !== undefined) {
       // The sheet itself is made in the worker (water-sheet.ts).
@@ -641,6 +724,7 @@ export class Terrain {
         this.group.remove(entry.node)
         free(entry.node)
       }
+      if (entry.slot !== undefined) this.batch?.remove(entry.slot)
       for (const mesh of entry.trees) {
         this.forest.remove(mesh)
         disposeTrees(mesh)

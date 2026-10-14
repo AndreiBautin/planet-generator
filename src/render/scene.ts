@@ -203,6 +203,8 @@ export interface SceneOptions {
   readonly reducedMotion: boolean
   /** Where `public/` is served from, for the ground's photographs. */
   readonly assetBase: string
+  /** The ground of every patch in one draw (patches/ground-batch.ts): a prototype, `?batch`. */
+  readonly batchedGround?: boolean
   /** A real clock to time the frame's parts by, for the recorder's profile; none in the app. */
   readonly profileClock?: Clock
   /**
@@ -556,6 +558,7 @@ export function startScene(
         peak: world.relief * 1.1 + 0.005,
         inFlight: quality.inFlight,
         cached: quality.patchCache,
+        batched: options.batchedGround === true,
         trees: world.molten ? undefined : treeColours(world),
       },
       {
