@@ -9,6 +9,7 @@ import { DETAIL_TIME } from './detail'
 import { NearCells } from './near-cells'
 import { floorRadiusAt } from './patches/patch-data'
 import { SEA_RADIUS } from './water'
+import { liveInstanceCount } from './instances'
 
 /** The most forests drawn at once. */
 const MOST_FORESTS = 48
@@ -38,6 +39,7 @@ export class Kelp {
   readonly object: THREE.Mesh
   private readonly bases: THREE.InstancedBufferAttribute
   private readonly stalks: THREE.InstancedBufferAttribute
+  private readonly shape: THREE.InstancedBufferGeometry
   private readonly seen = { value: SEEN }
   private readonly haze = { value: new THREE.Color() }
   private readonly hazeDensity = { value: 0 }
@@ -71,7 +73,8 @@ export class Kelp {
     this.stalks.setUsage(THREE.DynamicDrawUsage)
     shape.setAttribute('kelpBase', this.bases)
     shape.setAttribute('kelpOf', this.stalks)
-    shape.instanceCount = count
+    shape.instanceCount = 0
+    this.shape = shape
     const material = new THREE.ShaderMaterial({
       side: THREE.DoubleSide,
       uniforms: {
@@ -161,6 +164,7 @@ export class Kelp {
     this.near.reset()
     this.stalks.array.fill(0)
     this.stalks.needsUpdate = true
+    this.shape.instanceCount = 0
   }
 
   /** Follow the eye, as the fish do (fish.ts). */
@@ -182,6 +186,7 @@ export class Kelp {
     if (!this.near.near(cellOf(eye))) return
     this.bases.needsUpdate = true
     this.stalks.needsUpdate = true
+    this.shape.instanceCount = liveInstanceCount(this.stalks, 2)
   }
 
   private fill(slot: number, cell: number, forest: Forest): void {

@@ -32,3 +32,16 @@ export function drawOnlyLive(mesh: THREE.InstancedMesh): void {
   }
   mesh.count = last + 1
 }
+
+/**
+ * The same trim for an instanced geometry whose empty slots are hidden in
+ * the vertex shader by a flag rather than parked at a scale of nought (the
+ * fish, kelp and birds): one past the last slot whose `flag` component of
+ * `live` is not nought. Same rule — slots before it still draw, unpacked.
+ */
+export function liveInstanceCount(live: THREE.InstancedBufferAttribute, flag: number): number {
+  const values = live.array
+  const size = live.itemSize
+  for (let k = live.count - 1; k >= 0; k -= 1) if (values[k * size + flag] !== 0) return k + 1
+  return 0
+}

@@ -10,6 +10,7 @@ import { NearCells } from './near-cells'
 import { groundRadiusAt } from './patches/patch-data'
 import { VALLEY_FOG } from './valley-fog'
 import { SEA_RADIUS } from './water'
+import { liveInstanceCount } from './instances'
 
 /** The most flocks drawn at once: the rings of cells round the eye hold fewer than this (measured: 25 at most). */
 const MOST_FLOCKS = 32
@@ -34,6 +35,7 @@ export class Birds {
   readonly object: THREE.Mesh
   private readonly flocks: THREE.InstancedBufferAttribute
   private readonly birds: THREE.InstancedBufferAttribute
+  private readonly shape: THREE.InstancedBufferGeometry
   private readonly seen = { value: SEEN }
   private readonly near = new NearCells<Flock>(
     MOST_FLOCKS,
@@ -74,7 +76,8 @@ export class Birds {
     this.birds.setUsage(THREE.DynamicDrawUsage)
     shape.setAttribute('flockAt', this.flocks)
     shape.setAttribute('bird', this.birds)
-    shape.instanceCount = count
+    shape.instanceCount = 0
+    this.shape = shape
     const material = new THREE.ShaderMaterial({
       transparent: true,
       depthWrite: false,
@@ -168,6 +171,7 @@ export class Birds {
     this.near.reset()
     this.birds.array.fill(0)
     this.birds.needsUpdate = true
+    this.shape.instanceCount = 0
   }
 
   /**
@@ -184,6 +188,7 @@ export class Birds {
     if (!this.near.near(cellOf(eye))) return
     this.flocks.needsUpdate = true
     this.birds.needsUpdate = true
+    this.shape.instanceCount = liveInstanceCount(this.birds, 3)
   }
 
   private fill(slot: number, cell: number, flock: Flock): void {

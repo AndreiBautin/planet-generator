@@ -9,6 +9,7 @@ import { DETAIL_TIME } from './detail'
 import { NearCells } from './near-cells'
 import { floorRadiusAt } from './patches/patch-data'
 import { SEA_RADIUS } from './water'
+import { liveInstanceCount } from './instances'
 
 /** The most schools drawn at once. */
 const MOST_SCHOOLS = 48
@@ -28,6 +29,7 @@ export class Fish {
   readonly object: THREE.Mesh
   private readonly schools: THREE.InstancedBufferAttribute
   private readonly fish: THREE.InstancedBufferAttribute
+  private readonly shape: THREE.InstancedBufferGeometry
   private readonly seen = { value: SEEN }
   private readonly haze = { value: new THREE.Color() }
   private readonly hazeDensity = { value: 0 }
@@ -69,7 +71,8 @@ export class Fish {
     this.fish.setUsage(THREE.DynamicDrawUsage)
     shape.setAttribute('schoolAt', this.schools)
     shape.setAttribute('fishOf', this.fish)
-    shape.instanceCount = count
+    shape.instanceCount = 0
+    this.shape = shape
     const material = new THREE.ShaderMaterial({
       side: THREE.DoubleSide,
       uniforms: {
@@ -150,6 +153,7 @@ export class Fish {
     this.near.reset()
     this.fish.array.fill(0)
     this.fish.needsUpdate = true
+    this.shape.instanceCount = 0
   }
 
   /**
@@ -175,6 +179,7 @@ export class Fish {
     if (!this.near.near(cellOf(eye))) return
     this.schools.needsUpdate = true
     this.fish.needsUpdate = true
+    this.shape.instanceCount = liveInstanceCount(this.fish, 3)
   }
 
   private fill(slot: number, cell: number, school: School): void {

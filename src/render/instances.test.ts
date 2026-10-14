@@ -1,7 +1,7 @@
 import * as THREE from 'three'
 import { describe, expect, it } from 'vitest'
 
-import { drawOnlyLive } from './instances'
+import { drawOnlyLive, liveInstanceCount } from './instances'
 
 describe('drawOnlyLive', () => {
   it('draws up to the last live instance, and grows back when a later one lives', () => {
@@ -24,5 +24,18 @@ describe('drawOnlyLive', () => {
     mesh.setMatrixAt(9, new THREE.Matrix4().makeScale(1e-6, 1e-6, 1e-6))
     drawOnlyLive(mesh)
     expect(mesh.count).toBe(10)
+  })
+})
+
+describe('liveInstanceCount', () => {
+  it('counts to the last slot whose flag is set, holes included', () => {
+    const live = new THREE.InstancedBufferAttribute(new Float32Array(6 * 4), 4)
+    expect(liveInstanceCount(live, 3)).toBe(0)
+    live.array[1 * 4 + 3] = 1
+    live.array[3 * 4 + 3] = 0.5
+    // Another component set does not make a slot live.
+    live.array[5 * 4 + 2] = 1
+    expect(liveInstanceCount(live, 3)).toBe(4)
+    expect(liveInstanceCount(live, 2)).toBe(6)
   })
 })
