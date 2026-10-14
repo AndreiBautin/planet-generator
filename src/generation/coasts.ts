@@ -14,7 +14,7 @@ import { surfaceAt, type Planet } from './planet'
  * the page as the birds and fish do: a point near the cell's middle on land
  * that stands high, and open water within a short way of it.
  */
-export interface Stack {
+interface Stack {
   /** Where it stands, a unit direction over the water. */
   readonly at: Vec3
   /** How high it stands over the sea, and how wide it is at the water, in radii. */

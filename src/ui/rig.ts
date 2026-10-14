@@ -110,16 +110,16 @@ export interface Rig {
   readonly onBeyond: (listener: () => void) => void
 }
 
-export type Hold = 'frame' | 'still'
+type Hold = 'frame' | 'still'
 
-export interface CameraHeight {
+interface CameraHeight {
   readonly kind: 'glide' | 'orbit'
   readonly value: number
   readonly low: number
   readonly high: number
 }
 
-export type Spot =
+type Spot =
   | {
       readonly kind: 'glide'
       readonly position: Vec3

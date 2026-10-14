@@ -11,7 +11,7 @@ import { settlementsOf, type Town } from './settlements'
  * open water all along it; a harbour with no lane keeps a loop of its own
  * offshore, so every harbour has ships. Ships sail them (render/ships.ts).
  */
-export interface Harbour {
+interface Harbour {
   /** Where the pier leaves the land, a unit direction on the shore. */
   readonly shore: Vec3
   /** Which way is out to sea from there, a unit vector along the ground. */

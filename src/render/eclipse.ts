@@ -18,7 +18,7 @@ export const DETAIL_MOONS = { value: [new THREE.Vector4(), new THREE.Vector4()] 
 export const DETAIL_CLOUD_MOONS = { value: [new THREE.Vector4(), new THREE.Vector4()] }
 
 /** How much wider the soft edge grows, per radius of distance behind the moon, each way. */
-export const SUN_SPREAD = 0.03
+const SUN_SPREAD = 0.03
 /** How much of the sun is left in the core of the shadow. */
 export const ECLIPSE_FLOOR = 0.06
 

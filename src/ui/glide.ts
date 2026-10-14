@@ -45,7 +45,7 @@ export interface Glide {
 
 export const MIN_ALTITUDE = 0.004
 export const MAX_ALTITUDE = 0.12
-export const START_ALTITUDE = 0.016
+const START_ALTITUDE = 0.016
 /** However the eye is easing, it never comes closer to the ground than this. */
 const CLEARANCE = 0.0025
 /** How far to either side of its line the flight looks for rising ground and trees, in radians. */
@@ -55,7 +55,7 @@ const LOOK_AHEAD_SECONDS = 1.6
 /** How quickly the eye settles onto its height: by e every 1/RATE seconds. */
 const SETTLE_RATE = 2.6
 /** The eye looks this far below the horizon, in radians, when level. */
-export const LOOK_DOWN = 0.22
+const LOOK_DOWN = 0.22
 /**
  * A drag the full height of the screen adds this much turn rate, in radians
  * a second: with the decay below, about half a turn. It was a quarter, and
@@ -68,7 +68,7 @@ const YAW_PER_SCREEN = 9
  * read as the aircraft turning by itself.
  */
 const YAW_DECAY = 2.6
-export const MAX_YAW_RATE = 3.6
+const MAX_YAW_RATE = 3.6
 /** A drag the full height of the screen asks for this much pitch. */
 const PITCH_PER_SCREEN = 1.6
 export const MAX_PITCH_UP = 0.55
@@ -82,10 +82,10 @@ const CLIMB_SHARE = 1.6
 /** How fast a full dive gains rush, per second, and how quickly it bleeds away level. */
 const RUSH_GAIN = 1.1
 const RUSH_DECAY = 0.45
-export const MAX_RUSH = 1.0
+const MAX_RUSH = 1.0
 /** Bank per radian a second of turn, and how quickly the wings follow. */
 const BANK_PER_YAW = 0.32
-export const MAX_ROLL = 0.6
+const MAX_ROLL = 0.6
 const ROLL_FOLLOW = 4
 
 const dot = (a: Vec3, b: Vec3): number => a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
@@ -123,7 +123,7 @@ function flatten(heading: Vec3, position: Vec3): Vec3 {
  * ground passes at a steady pace, and quicker again with the rush of a
  * dive.
  */
-export const speedOf = (glide: Glide): number => (0.006 + glide.altitude * 1.4) * (1 + glide.rush)
+const speedOf = (glide: Glide): number => (0.006 + glide.altitude * 1.4) * (1 + glide.rush)
 
 export function startGlide(position: Vec3, heading: Vec3, ground: Ground): Glide {
   const at = unit(position)

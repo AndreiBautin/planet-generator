@@ -7,7 +7,7 @@
  * over the same two seconds however the frames fall, and Land pressed in
  * the middle of a dive rises from wherever the dive had got to.
  */
-export type FlightMode = 'orbit' | 'diving' | 'gliding' | 'rising'
+type FlightMode = 'orbit' | 'diving' | 'gliding' | 'rising'
 
 export interface Flight {
   readonly mode: FlightMode

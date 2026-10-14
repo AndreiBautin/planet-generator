@@ -57,7 +57,7 @@ export interface Quality {
  * screen's line, dropping frames in stretches — and at 0.75 it is under
  * two million. The style is pixel art already.
  */
-export const PIXEL_RATIOS = [2, 1.5, 1.25, 1, 0.75] as const
+const PIXEL_RATIOS = [2, 1.5, 1.25, 1, 0.75] as const
 
 export function pickQuality(device: Device): Quality {
   const phone = Math.min(device.width, device.height) < 700
@@ -96,7 +96,7 @@ export function typicalFrame(samples: readonly number[]): number {
 /** Slower than this, a frame is dropped on a 60 Hz screen often enough to see. */
 export const SLOW_FRAME_MS = 24
 /** A frame longer than this is one the screen skipped a refresh for (a 60 Hz drop is about 33 ms). */
-export const DROPPED_FRAME_MS = 26
+const DROPPED_FRAME_MS = 26
 /** Dropping more than this share of frames reads as stutter, though the typical frame is still on time. */
 export const DROPPED_SHARE = 0.03
 

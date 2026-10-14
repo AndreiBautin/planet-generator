@@ -29,7 +29,7 @@ import { bakeGroundTile, GROUND_KINDS, TILE, type GroundKind } from './ground-at
  * the tone map's shoulder, where the grain flattened to nothing. The
  * baked tiles and the normal maps are linear and stay so.
  */
-export interface GroundLayer {
+interface GroundLayer {
   readonly color: { value: THREE.Texture }
   /** The normal map, GL convention; null until the photograph arrives. */
   readonly normal: { value: THREE.Texture | null }

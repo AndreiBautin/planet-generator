@@ -12,7 +12,7 @@ import { createRng } from './rng'
  * Found on the drainage map's grid (hydrology.ts), so a lake is the lake
  * the ground draws and a river runs where the water does.
  */
-export type LandmarkKind = 'peak' | 'lake' | 'river'
+type LandmarkKind = 'peak' | 'lake' | 'river'
 
 export interface Landmark {
   readonly kind: LandmarkKind

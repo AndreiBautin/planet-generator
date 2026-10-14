@@ -18,7 +18,7 @@ export interface PostcardHandlers {
   readonly onClose: () => void
 }
 
-export interface PostcardOpening {
+interface PostcardOpening {
   readonly hour: number
   /** 0 to 1 along the height's range. */
   readonly height: number

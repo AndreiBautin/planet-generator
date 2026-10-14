@@ -20,7 +20,7 @@ export interface Waterfall {
 /** The most falls a world sprays from. */
 export const MOST_FALLS = 20
 /** How far a river must fall from one cell of the drainage map to the next to throw spray, in surface units. */
-export const FALL_DROP = 0.05
+const FALL_DROP = 0.05
 /** The nearest two may be, as the cosine of the angle between them (about 0.03 radians). */
 const APART = Math.cos(0.03)
 /** How far above freezing a fall must be to run: past where the water starts to ice (features.ts). */

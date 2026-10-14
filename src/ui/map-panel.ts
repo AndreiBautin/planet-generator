@@ -14,7 +14,7 @@ export interface MapHandlers {
   readonly onGo: (direction: Vec3) => void
 }
 
-export interface Eye {
+interface Eye {
   readonly under: Vec3
   /** Which way it looks, or absent in orbit. */
   readonly facing: Vec3 | undefined

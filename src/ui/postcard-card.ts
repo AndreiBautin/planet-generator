@@ -68,7 +68,7 @@ export interface Card {
 }
 
 /** How dark the vignette's corners go; the preview's CSS uses the same. */
-export const VIGNETTE = 0.38
+const VIGNETTE = 0.38
 
 /** Cut, grain and caption a picture of the whole view into a postcard. */
 export async function composePostcard(picture: Blob, card: Card): Promise<Blob | null> {

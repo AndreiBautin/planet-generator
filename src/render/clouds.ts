@@ -37,7 +37,7 @@ import {
  * for anything that wants to ask how heavy the cloud is over a point.
  */
 export const CLOUD_RADIUS = 1.035
-export const CLOUD_OPACITY = 0.8
+const CLOUD_OPACITY = 0.8
 
 /**
  * The layers drawn from one baked map. A single shell is a printed sheet

@@ -8,7 +8,7 @@ import { LOG_LEVELS, type LogLevel } from '@/shared/logger'
  * Vite exposes only `VITE_`-prefixed variables to the browser, and
  * everything it exposes is public: nothing here may hold a credential.
  */
-export interface Config {
+interface Config {
   readonly logLevel: LogLevel
   /**
    * Register the service worker. Off in development: a worker caching the
@@ -28,7 +28,7 @@ export interface ConfigResult {
   readonly warnings: readonly string[]
 }
 
-export const DEFAULT_CONFIG: Config = {
+const DEFAULT_CONFIG: Config = {
   logLevel: 'warn',
   serviceWorker: true,
   assetBase: '/',

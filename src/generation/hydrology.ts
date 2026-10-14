@@ -18,7 +18,7 @@ import { surfaceAt, type Planet } from './planet'
  * every patch agrees, and a river is part of the ground from the first
  * patch that holds it: nothing about it arrives late.
  */
-export const HYDRO_LEVEL = 7
+const HYDRO_LEVEL = 7
 const SIDE = 2 ** HYDRO_LEVEL
 const CELLS = 6 * SIDE * SIDE
 
@@ -47,7 +47,7 @@ export interface Hydrology {
 
 const NONE = Number.NEGATIVE_INFINITY
 
-export const cellIndex = (face: Face, x: number, y: number): number => (face * SIDE + y) * SIDE + x
+const cellIndex = (face: Face, x: number, y: number): number => (face * SIDE + y) * SIDE + x
 
 /** The cell holding a direction. */
 export function cellOf(direction: Vec3): number {

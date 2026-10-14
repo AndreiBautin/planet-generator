@@ -1,0 +1,6 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "entry": ["src/render/build.worker.ts", "scripts/*.mjs", "scripts/sw.js"],
+  "project": ["src/**/*.ts", "scripts/**/*.{js,mjs}"],
+  "ignoreExportsUsedInFile": false
+}

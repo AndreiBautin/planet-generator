@@ -91,12 +91,7 @@ function unseen(key: PatchKey, camera: Vec3, view: ViewCone): boolean {
   return off > view.halfAngle + looks + 0.15
 }
 
-export function shouldSplit(
-  key: PatchKey,
-  camera: Vec3,
-  params: LodParams,
-  view?: ViewCone,
-): boolean {
+function shouldSplit(key: PatchKey, camera: Vec3, params: LodParams, view?: ViewCone): boolean {
   if (key.level >= params.maxLevel) return false
   const distance = Math.hypot(camera[0], camera[1], camera[2])
   if (hidden(key, camera, distance, params.peak)) return false

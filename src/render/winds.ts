@@ -21,7 +21,7 @@ import * as THREE from 'three'
 /** Seconds a copy of the cloud field is carried before it is reborn. */
 export const FLOW_PERIOD = 300
 /** How much cover a copy loses at rebirth: all of it, so nothing pops; its edges go first, its cores last. */
-export const ERODE = 1
+const ERODE = 1
 /** Strongest wind, in turns of the cloud map per second. */
 const WIND = 0.00025
 

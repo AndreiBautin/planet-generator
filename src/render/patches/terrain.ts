@@ -681,7 +681,7 @@ const GOVERN_EVERY = 0.5
 const LATE = 0.5
 const CAUGHT_UP = 0.15
 /** The loosest the threshold goes: three steps coarser, about one and a half levels. */
-export const COARSEST = 3
+const COARSEST = 3
 
 /** Every quarter of a patch drawn: the patch whole. */
 const WHOLE = 0b1111
@@ -706,7 +706,7 @@ function quarterGeometries(whole: THREE.BufferGeometry, segments: number): THREE
 const ARRIVAL_SECONDS = 0.6
 
 /** The arrival weight a patch shown at `at` carries at `now`: 1 as it appears, easing to 0. */
-export function arrivalAt(at: number, now: number): number {
+function arrivalAt(at: number, now: number): number {
   const k = Math.min(1, Math.max(0, (now - at) / ARRIVAL_SECONDS))
   return 1 - k * k * (3 - 2 * k)
 }

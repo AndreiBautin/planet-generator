@@ -18,7 +18,7 @@ import * as THREE from 'three'
 export const MOON_LIGHT = { value: new THREE.Vector4(0, 1, 0, 0) }
 
 /** Moonlight's colour: the sun's light off grey rock, read as cool silver against the warm town lights. */
-export const MOON_COLOUR: readonly [number, number, number] = [0.6, 0.72, 1.0]
+const MOON_COLOUR: readonly [number, number, number] = [0.6, 0.72, 1.0]
 
 /**
  * The strongest moonlight, against the sun's 3.2: a full, big moon high

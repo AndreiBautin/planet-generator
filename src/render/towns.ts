@@ -26,7 +26,7 @@ import { weather } from './weathered'
  */
 
 /** Lights at least this bright are a town's (0.45 up, settlements.ts); roads are 0.42 at most. Below 0.45 itself, since a light stored as a float32 can come back a hair under it. */
-export { TOWN_LIGHT } from '@/generation/settlements'
+
 /** How near, in radii, houses start to grow up, and how near they are whole. */
 const HOUSES_FROM = 0.05
 const HOUSES_WHOLE = 0.032

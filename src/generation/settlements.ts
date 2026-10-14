@@ -44,7 +44,7 @@ export interface Settlements {
 }
 
 /** A bridge's two ends, unit directions on either bank. */
-export interface Bridge {
+interface Bridge {
   readonly from: Vec3
   readonly to: Vec3
 }

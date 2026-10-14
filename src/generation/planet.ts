@@ -61,7 +61,7 @@ export interface Planet {
 }
 
 /** What the ground is, which decides its colour and later its material. */
-export type Biome = 'deep' | 'shallow' | 'sea-ice' | 'shore' | 'land' | 'highland' | 'snow'
+type Biome = 'deep' | 'shallow' | 'sea-ice' | 'shore' | 'land' | 'highland' | 'snow'
 
 export interface Surface {
   /** Elevation relative to sea level: negative is sea floor, positive is land. */
@@ -118,7 +118,7 @@ export function createPlanet(seed: Seed, dials: Dials = DEFAULT_DIALS): Planet {
  * The raw elevation at a point on the unit sphere, before the sea: broad
  * continents, mountain ranges that rise only inland, and fine detail.
  */
-export function elevationAt(planet: Planet, x: number, y: number, z: number): number {
+function elevationAt(planet: Planet, x: number, y: number, z: number): number {
   const [ox, oy, oz] = planet.offset
   const px = x + ox
   const py = y + oy

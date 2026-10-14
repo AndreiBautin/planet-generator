@@ -34,7 +34,7 @@ interface FaceFrame {
  * u × v is the normal: a grid walked along u then v then winds
  * anticlockwise seen from outside, which is the side Three draws.
  */
-export const FACES: readonly FaceFrame[] = [
+const FACES: readonly FaceFrame[] = [
   { normal: [1, 0, 0], u: [0, 0, -1], v: [0, 1, 0] },
   { normal: [-1, 0, 0], u: [0, 0, 1], v: [0, 1, 0] },
   { normal: [0, 1, 0], u: [1, 0, 0], v: [0, 0, -1] },

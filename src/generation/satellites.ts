@@ -14,7 +14,7 @@ import { createRng } from './rng'
  * on purpose: a moon a degree across from the ground is a dot, and these
  * are there to be looked at.
  */
-export interface Moon {
+interface Moon {
   /** Its radius, as a share of the planet's. */
   readonly radius: number
   /** Distance from the planet's centre. */
@@ -33,7 +33,7 @@ export interface Moon {
   readonly surface: Float32Array
 }
 
-export interface Rings {
+interface Rings {
   /** Inner and outer edge, in planet radii. They lie in the equatorial plane. */
   readonly inner: number
   readonly outer: number

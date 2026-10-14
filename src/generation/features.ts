@@ -35,7 +35,7 @@ export const FEATURES = [
   'cone',
   'floe',
 ] as const
-export type Feature = (typeof FEATURES)[number]
+type Feature = (typeof FEATURES)[number]
 
 /** The chance of each feature at a candidate spot, 0 to 1 each; their sum is the chance anything is there. */
 export type Growth = Readonly<Record<Feature, number>>
@@ -45,7 +45,7 @@ const smooth = (from: number, to: number, value: number): number => {
   return t * t * (3 - 2 * t)
 }
 
-export const NOTHING: Growth = {
+const NOTHING: Growth = {
   broadleaf: 0,
   conifer: 0,
   shrub: 0,
