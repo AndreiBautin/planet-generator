@@ -109,7 +109,7 @@ export function attachHud(handlers: HudHandlers): Hud {
       }
       kind.textContent = KINDS[planet.kind].label
       seed.textContent = planet.seed
-      document.title = `${planet.name} · TERRA`
+      document.title = 'TERRA | Procedural Planet Explorer'
       dials.water.value = String(Math.round(planet.dials.water * 100))
       dials.temperature.value = String(Math.round(planet.dials.temperature * 100))
       dials.roughness.value = String(Math.round(planet.dials.roughness * 100))
