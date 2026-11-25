@@ -1,7 +1,7 @@
 {
-  "name": "Planet Generator",
-  "short_name": "Planets",
-  "description": "A planet generated from a seed: terrain, seas, clouds and air. Every link is a world.",
+  "name": "TERRA — Procedural Planet Explorer",
+  "short_name": "TERRA",
+  "description": "Procedural planet explorer. Generate a world from a seed and fly from orbit to its surface.",
   "id": "./",
   "start_url": "./",
   "scope": "./",

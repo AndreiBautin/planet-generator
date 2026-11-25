@@ -1,4 +1,6 @@
-# Planet Generator
+# TERRA
+
+Procedural planet explorer.
 
 Press **New planet** and a world is born — continents, seas, ice caps,
 clouds and a glowing rim of air — that you can spin with a finger, dive

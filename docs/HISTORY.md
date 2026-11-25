@@ -1,5 +1,12 @@
 # History
 
+## 2026-11-25 — TERRA display identity
+
+Renamed the visible application, splash, document title and installable app to
+TERRA, with the descriptor "Procedural planet explorer". Kept the existing
+planet-generator URL, cache namespace, manifest id, storage and deterministic
+seed format. This is a presentation change; no world generation values moved.
+
 How Planet Generator got to where it is, round by round: what was reported,
 what was tried, what turned out to be the cause, and what was checked on
 screen. Moved here from `CLAUDE.md` on 2026-10-14, unedited, when that

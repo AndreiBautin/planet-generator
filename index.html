@@ -11,16 +11,16 @@
     <meta name="theme-color" content="#05060a" />
     <meta
       name="description"
-      content="A planet generated from a seed: terrain, seas, clouds and air. Every link is a world."
+      content="Procedural planet explorer. Generate a world from a seed and fly from orbit to its surface."
     />
-    <title>Planet Generator</title>
+    <title>TERRA — Procedural Planet Explorer</title>
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png" />
     <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <meta name="apple-mobile-web-app-title" content="Planets" />
+    <meta name="apple-mobile-web-app-title" content="TERRA" />
     <style>
       :root {
         --ink: #eef1f7;
@@ -137,6 +137,18 @@
         margin: 0 0.5em;
         opacity: 0.5;
       }
+      .terra-brand {
+        font: 500 12px/1.8 var(--mono);
+        letter-spacing: 0.14em;
+        color: var(--ink);
+        margin: 0 0 12px;
+      }
+      .terra-brand span {
+        display: block;
+        font: 400 10px/1.6 var(--display);
+        letter-spacing: 0.02em;
+        color: var(--dim);
+      }
       @media (prefers-reduced-motion: reduce) {
         .title h1.arrived {
           animation: none;
@@ -182,6 +194,18 @@
         letter-spacing: 0.14em;
         text-transform: uppercase;
       }
+      .terra-brand {
+        font: 500 12px/1.8 var(--mono);
+        letter-spacing: 0.14em;
+        color: var(--ink);
+        margin: 0 0 12px;
+      }
+      .terra-brand span {
+        display: block;
+        font: 400 10px/1.6 var(--display);
+        letter-spacing: 0.02em;
+        color: var(--dim);
+      }
       @media (prefers-reduced-motion: reduce) {
         .caption {
           transform: none;
@@ -217,6 +241,18 @@
         to {
           opacity: 0;
         }
+      }
+      .terra-brand {
+        font: 500 12px/1.8 var(--mono);
+        letter-spacing: 0.14em;
+        color: var(--ink);
+        margin: 0 0 12px;
+      }
+      .terra-brand span {
+        display: block;
+        font: 400 10px/1.6 var(--display);
+        letter-spacing: 0.02em;
+        color: var(--dim);
       }
       @media (prefers-reduced-motion: reduce) {
         .flash.shot {
@@ -598,6 +634,18 @@
           opacity: 0;
           transform: translateY(10px);
         }
+      }
+      .terra-brand {
+        font: 500 12px/1.8 var(--mono);
+        letter-spacing: 0.14em;
+        color: var(--ink);
+        margin: 0 0 12px;
+      }
+      .terra-brand span {
+        display: block;
+        font: 400 10px/1.6 var(--display);
+        letter-spacing: 0.02em;
+        color: var(--dim);
       }
       @media (prefers-reduced-motion: reduce) {
         .atlas,
@@ -1196,6 +1244,18 @@
         font-weight: 600;
         line-height: 1;
       }
+      .terra-brand {
+        font: 500 12px/1.8 var(--mono);
+        letter-spacing: 0.14em;
+        color: var(--ink);
+        margin: 0 0 12px;
+      }
+      .terra-brand span {
+        display: block;
+        font: 400 10px/1.6 var(--display);
+        letter-spacing: 0.02em;
+        color: var(--dim);
+      }
       @media (prefers-reduced-motion: reduce) {
         .arrival.shown {
           animation: none;
@@ -1290,6 +1350,18 @@
           opacity: 1;
         }
       }
+      .terra-brand {
+        font: 500 12px/1.8 var(--mono);
+        letter-spacing: 0.14em;
+        color: var(--ink);
+        margin: 0 0 12px;
+      }
+      .terra-brand span {
+        display: block;
+        font: 400 10px/1.6 var(--display);
+        letter-spacing: 0.02em;
+        color: var(--dim);
+      }
       @media (prefers-reduced-motion: reduce) {
         .flying .hint {
           animation: none;
@@ -1368,6 +1440,18 @@
       .rail {
         transition: opacity 900ms var(--ease);
       }
+      .terra-brand {
+        font: 500 12px/1.8 var(--mono);
+        letter-spacing: 0.14em;
+        color: var(--ink);
+        margin: 0 0 12px;
+      }
+      .terra-brand span {
+        display: block;
+        font: 400 10px/1.6 var(--display);
+        letter-spacing: 0.02em;
+        color: var(--dim);
+      }
       @media (prefers-reduced-motion: reduce) {
         .splash-line,
         .title::after {
@@ -1388,6 +1472,18 @@
           opacity: 0.45;
         }
       }
+      .terra-brand {
+        font: 500 12px/1.8 var(--mono);
+        letter-spacing: 0.14em;
+        color: var(--ink);
+        margin: 0 0 12px;
+      }
+      .terra-brand span {
+        display: block;
+        font: 400 10px/1.6 var(--display);
+        letter-spacing: 0.02em;
+        color: var(--dim);
+      }
       @media (prefers-reduced-motion: reduce) {
         .forming .title h1 {
           animation: none;
@@ -1397,10 +1493,11 @@
   </head>
   <body class="booting">
     <div class="splash" aria-hidden="true">
-      <p class="splash-word">Planet Generator</p>
+      <p class="splash-word">TERRA</p>
       <span class="splash-line"></span>
     </div>
     <header class="title">
+      <p class="terra-brand">TERRA <span>Procedural planet explorer</span></p>
       <h1 id="name">&nbsp;</h1>
       <p><span id="kind"></span><span class="dot">·</span><span class="seed" id="seed"></span></p>
       <p class="build" id="build" hidden></p>
